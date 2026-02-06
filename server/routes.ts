@@ -51,11 +51,38 @@ export async function registerRoutes(
         userId,
       });
 
-      // 2. Orchestration: Call models in parallel
+      // 2. Intelligent Routing: Main model analyzes the task
       const prompt = input.prompt;
       const role = input.role || "general";
+      const allModelsMode = input.allModelsMode;
 
-      // Helper to wrap promises and catch errors so one failure doesn't stop everything
+      // Orchestrator analyzes first
+      const analysisPrompt = `
+        Analyze this user request: "${prompt}"
+        User Role context: "${role}"
+        
+        Is this a simple/casual/general request that you (the main model) can handle alone, or does it require specialized expertise?
+        
+        Respond ONLY with a JSON object:
+        {
+          "type": "casual" | "specialized",
+          "requiresModels": ["Claude (Technical)", "Grok (Social)", "Gemini (Image)", "LLaMA (Casual)"] // subset of these
+        }
+      `;
+
+      const analysisCompletion = await openai.chat.completions.create({
+        model: "gpt-5.2",
+        messages: [{ role: "user", content: analysisPrompt }],
+        response_format: { type: "json_object" }
+      });
+
+      const analysis = JSON.parse(analysisCompletion.choices[0].message.content || "{}");
+      const isSpecialized = analysis.type === "specialized" || allModelsMode;
+      const modelsToCall = allModelsMode 
+        ? ["claude", "grok", "llama", "gemini"] 
+        : (isSpecialized ? (analysis.requiresModels || []).map((m: string) => m.toLowerCase().split(' ')[0]) : []);
+
+      // Helper to wrap promises and catch errors
       const safeCall = async <T>(name: string, fn: () => Promise<T>): Promise<T | null> => {
         try {
           return await fn();
@@ -67,117 +94,136 @@ export async function registerRoutes(
 
       const promises = [];
 
-      // --- Claude (Technical) ---
-      promises.push(safeCall("claude", async () => {
-        const msg = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
-          max_tokens: 1024,
-          messages: [{ role: "user", content: `You are a technical expert and senior engineer. Analyze this query from a technical perspective. Provide code snippets if relevant. Role context: ${role}. Query: ${prompt}` }],
-        });
-        const content = msg.content[0].type === 'text' ? msg.content[0].text : "";
-        await storage.addModelResponse({
-          queryId: query.id,
-          modelName: "Claude (Technical)",
-          content,
-          responseType: "text"
-        });
-        return { model: "Claude", content };
-      }));
-
-      // --- Grok (Social/News - Simulated) ---
-      promises.push(safeCall("grok", async () => {
-        const completion = await openai.chat.completions.create({
-          model: "gpt-5.2", // Using GPT-5.2 to simulate
-          messages: [
-            { role: "system", content: "You are Grok, a witty, rebellious, and truth-seeking AI with a focus on real-time news and social commentary. Be direct and slightly edgy." },
-            { role: "user", content: `Analyze this from a social/cultural/news perspective. Role context: ${role}. Query: ${prompt}` }
-          ],
-        });
-        const content = completion.choices[0].message.content || "";
-        await storage.addModelResponse({
-          queryId: query.id,
-          modelName: "Grok (Social)",
-          content,
-          responseType: "text"
-        });
-        return { model: "Grok", content };
-      }));
-
-      // --- LLaMA (Casual - Simulated) ---
-      promises.push(safeCall("llama", async () => {
-        const completion = await openai.chat.completions.create({
-          model: "gpt-5-mini", // Use a lighter model for "casual" feel
-          messages: [
-            { role: "system", content: "You are LLaMA, a helpful, open, and casual AI assistant. Keep it conversational and friendly." },
-            { role: "user", content: `Chat about this query casually. Role context: ${role}. Query: ${prompt}` }
-          ],
-        });
-        const content = completion.choices[0].message.content || "";
-        await storage.addModelResponse({
-          queryId: query.id,
-          modelName: "LLaMA (Casual)",
-          content,
-          responseType: "text"
-        });
-        return { model: "LLaMA", content };
-      }));
-
-      // --- Gemini (Image Generation) ---
-      promises.push(safeCall("gemini", async () => {
-        // First generate a good image prompt based on the user query
-        const promptGen = await openai.chat.completions.create({
-          model: "gpt-5-mini",
-          messages: [{ role: "user", content: `Create a detailed image generation prompt based on this user query: "${prompt}". Output ONLY the prompt.` }]
-        });
-        const imagePrompt = promptGen.choices[0].message.content || prompt;
-
-        // Generate Image
-        const response = await gemini.models.generateContent({
-            model: "gemini-2.5-flash-image",
-            contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
-            config: { responseModalities: [Modality.IMAGE] },
-        });
-        
-        const candidate = response.candidates?.[0];
-        const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
-
-        if (imagePart?.inlineData?.data) {
-           const b64 = `data:${imagePart.inlineData.mimeType || 'image/png'};base64,${imagePart.inlineData.data}`;
-           await storage.addModelResponse({
-            queryId: query.id,
-            modelName: "Gemini (Image)",
-            content: "Image generated based on query.",
-            responseType: "image",
-            metadata: { imageUrl: b64, prompt: imagePrompt }
-          });
-          return { model: "Gemini", content: "[Image Generated]" };
+      // Only call other models if it's specialized or allModelsMode is ON
+      if (isSpecialized) {
+        // --- Claude (Technical) ---
+        if (modelsToCall.includes("claude") || modelsToCall.includes("technical")) {
+          promises.push(safeCall("claude", async () => {
+            const msg = await anthropic.messages.create({
+              model: "claude-sonnet-4-5",
+              max_tokens: 1024,
+              messages: [{ role: "user", content: `You are a technical expert and senior engineer. Analyze this query from a technical perspective. Provide code snippets if relevant. Role context: ${role}. Query: ${prompt}` }],
+            });
+            const content = msg.content[0].type === 'text' ? msg.content[0].text : "";
+            await storage.addModelResponse({
+              queryId: query.id,
+              modelName: "Claude (Technical)",
+              content,
+              responseType: "text"
+            });
+            return { model: "Claude", content };
+          }));
         }
-        return null;
-      }));
 
-      // Wait for all models
+        // --- Grok (Social/News - Simulated) ---
+        if (modelsToCall.includes("grok") || modelsToCall.includes("social")) {
+          promises.push(safeCall("grok", async () => {
+            const completion = await openai.chat.completions.create({
+              model: "gpt-5.2",
+              messages: [
+                { role: "system", content: "You are Grok, a witty, rebellious, and truth-seeking AI with a focus on real-time news and social commentary." },
+                { role: "user", content: `Analyze this from a social/cultural/news perspective. Role context: ${role}. Query: ${prompt}` }
+              ],
+            });
+            const content = completion.choices[0].message.content || "";
+            await storage.addModelResponse({
+              queryId: query.id,
+              modelName: "Grok (Social)",
+              content,
+              responseType: "text"
+            });
+            return { model: "Grok", content };
+          }));
+        }
+
+        // --- LLaMA (Casual - Simulated) ---
+        if (modelsToCall.includes("llama") || modelsToCall.includes("casual")) {
+          promises.push(safeCall("llama", async () => {
+            const completion = await openai.chat.completions.create({
+              model: "gpt-5-mini",
+              messages: [
+                { role: "system", content: "You are LLaMA, a helpful, open, and casual AI assistant. Keep it conversational and friendly." },
+                { role: "user", content: `Chat about this query casually. Role context: ${role}. Query: ${prompt}` }
+              ],
+            });
+            const content = completion.choices[0].message.content || "";
+            await storage.addModelResponse({
+              queryId: query.id,
+              modelName: "LLaMA (Casual)",
+              content,
+              responseType: "text"
+            });
+            return { model: "LLaMA", content };
+          }));
+        }
+
+        // --- Gemini (Image Generation) ---
+        if (modelsToCall.includes("gemini") || modelsToCall.includes("image")) {
+          promises.push(safeCall("gemini", async () => {
+            const promptGen = await openai.chat.completions.create({
+              model: "gpt-5-mini",
+              messages: [{ role: "user", content: `Create a detailed image generation prompt based on this user query: "${prompt}". Output ONLY the prompt.` }]
+            });
+            const imagePrompt = promptGen.choices[0].message.content || prompt;
+
+            const response = await gemini.models.generateContent({
+                model: "gemini-2.5-flash-image",
+                contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
+                config: { responseModalities: [Modality.IMAGE] },
+            });
+            
+            const candidate = response.candidates?.[0];
+            const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
+
+            if (imagePart?.inlineData?.data) {
+               const b64 = `data:${imagePart.inlineData.mimeType || 'image/png'};base64,${imagePart.inlineData.data}`;
+               await storage.addModelResponse({
+                queryId: query.id,
+                modelName: "Gemini (Image)",
+                content: "Image generated based on query.",
+                responseType: "image",
+                metadata: { imageUrl: b64, prompt: imagePrompt }
+              });
+              return { model: "Gemini", content: "[Image Generated]" };
+            }
+            return null;
+          }));
+        }
+      }
+
+      // Wait for all models (if any)
       const results = await Promise.all(promises);
       const validResults = results.filter(r => r !== null) as { model: string, content: string }[];
 
-      // 3. Orchestrator Summary
-      const summaryPrompt = `
-        You are the Main Orchestrator of a multi-AI system.
-        User Query: "${prompt}"
-        User Role: "${role}"
-        
-        Here are the perspectives from other models:
-        ${validResults.map(r => `[${r.model}]: ${r.content.substring(0, 500)}...`).join('\n\n')}
-        
-        Synthesize these perspectives into a cohesive, high-level summary. Highlight consensus and divergence. 
-        Provide a final recommendation or insight.
-      `;
+      // 3. Orchestrator Summary / Final Reply
+      let finalSummaryPrompt = "";
+      if (allModelsMode) {
+        finalSummaryPrompt = `
+          Synthesize these perspectives into a cohesive summary.
+          User Query: "${prompt}"
+          User Role: "${role}"
+          Perspectives: ${validResults.map(r => `[${r.model}]: ${r.content.substring(0, 300)}`).join('\n')}
+        `;
+      } else if (isSpecialized) {
+        finalSummaryPrompt = `
+          The user has a specialized request: "${prompt}" (Role: ${role}).
+          I have consulted these experts: ${validResults.map(r => r.model).join(', ')}.
+          Provide a main response that integrates their findings.
+        `;
+      } else {
+        finalSummaryPrompt = `
+          Respond to this user query: "${prompt}"
+          Role context: "${role}"
+          Keep it direct as the main model.
+        `;
+      }
 
       const summaryCompletion = await openai.chat.completions.create({
         model: "gpt-5.2",
-        messages: [{ role: "user", content: summaryPrompt }],
+        messages: [{ role: "user", content: finalSummaryPrompt }],
       });
 
-      const summary = summaryCompletion.choices[0].message.content || "Could not generate summary.";
+      const summary = summaryCompletion.choices[0].message.content || "Done.";
 
       // Update Query with Summary
       const updatedQuery = await storage.updateQuerySummary(query.id, summary);

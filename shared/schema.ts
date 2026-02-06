@@ -16,6 +16,7 @@ export const queries = pgTable("queries", {
   prompt: text("prompt").notNull(),
   role: text("role").default("general").notNull(), // trader, developer, creative, general
   orchestratorSummary: text("orchestrator_summary"), // The final summary from GPT
+  allModelsMode: boolean("all_models_mode").default(false).notNull(), // New toggle
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -41,10 +42,10 @@ export const modelResponsesRelations = relations(modelResponses, ({ one }) => ({
 }));
 
 // === Zod Schemas ===
-export const insertQuerySchema = createInsertSchema(queries).omit({ 
-  id: true, 
-  createdAt: true, 
-  orchestratorSummary: true 
+export const insertQuerySchema = z.object({
+  prompt: z.string().min(1),
+  role: z.string().default("general"),
+  allModelsMode: z.boolean().default(false),
 });
 
 export const insertModelResponseSchema = createInsertSchema(modelResponses).omit({ 

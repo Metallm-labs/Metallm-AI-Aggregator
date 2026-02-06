@@ -3,6 +3,8 @@ import { useSubmitQuery } from "@/hooks/use-metallm";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Sparkles, Send, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +16,7 @@ interface QueryInputProps {
 export function QueryInput({ onSuccess }: QueryInputProps) {
   const [prompt, setPrompt] = useState("");
   const [role, setRole] = useState("general");
+  const [allModelsMode, setAllModelsMode] = useState(false);
   const { mutate: submit, isPending } = useSubmitQuery();
   const { toast } = useToast();
 
@@ -22,13 +25,15 @@ export function QueryInput({ onSuccess }: QueryInputProps) {
     if (!prompt.trim()) return;
 
     submit(
-      { prompt, role, userId: "current" }, // userId handled by backend/auth context
+      { prompt, role, allModelsMode }, 
       {
         onSuccess: (data) => {
           setPrompt("");
           toast({
             title: "Query Dispatched",
-            description: "Orchestrating AI models for analysis...",
+            description: allModelsMode 
+              ? "Orchestrating ALL AI models for analysis..." 
+              : "Analyzing with primary orchestrator...",
           });
           onSuccess?.(data.id);
         },
@@ -67,7 +72,7 @@ export function QueryInput({ onSuccess }: QueryInputProps) {
           />
           
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-4">
               <Select value={role} onValueChange={setRole}>
                 <SelectTrigger className="w-[140px] bg-white/5 border-white/10 h-9">
                   <SelectValue placeholder="Select Role" />
@@ -79,6 +84,18 @@ export function QueryInput({ onSuccess }: QueryInputProps) {
                   <SelectItem value="creative">Creative</SelectItem>
                 </SelectContent>
               </Select>
+
+              <div className="flex items-center space-x-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+                <Switch 
+                  id="all-models" 
+                  checked={allModelsMode} 
+                  onCheckedChange={setAllModelsMode}
+                />
+                <Label htmlFor="all-models" className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
+                  All Models Mode
+                </Label>
+              </div>
+              
               <span className="text-xs text-muted-foreground hidden sm:inline-block">
                 ⌘ + Enter to send
               </span>
