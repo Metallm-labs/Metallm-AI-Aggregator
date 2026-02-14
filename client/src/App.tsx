@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import History from "@/pages/History";
 import QueryDetail from "@/pages/QueryDetail";
@@ -47,6 +48,11 @@ function Router() {
       {/* Public Landing Page */}
       <Route path="/">
         {user ? <Redirect to="/dashboard" /> : <Landing />}
+      </Route>
+
+      {/* Login Page */}
+      <Route path="/login">
+        {user ? <Redirect to="/dashboard" /> : <Login />}
       </Route>
 
       {/* Protected App Routes */}

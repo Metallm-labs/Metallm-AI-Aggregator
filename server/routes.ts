@@ -1,31 +1,34 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./integrations/auth";
 import { api } from "@shared/routes";
+import { sendMessageSchema } from "@shared/schema";
 import { z } from "zod";
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenAI, Modality } from "@google/genai";
+import {
+  DEFAULT_MODELS,
+  DEFAULT_MAIN_MODEL_ID,
+  callModel,
+  callModelStream,
+  callGemini,
+  analyzeAndRoute,
+  type ModelConfig,
+} from "./openrouter";
 
-// Initialize AI Clients
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+// In-memory model config store
+let currentModels: ModelConfig[] = [...DEFAULT_MODELS];
+let currentMainModelId: string = DEFAULT_MAIN_MODEL_ID;
 
-const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-});
+// Helper: get main model config
+function getMainModel(): ModelConfig {
+  return currentModels.find(m => m.id === currentMainModelId) || currentModels[0];
+}
 
-const gemini = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
-});
+// SSE Helper
+function sendSSE(res: Response, event: string, data: any) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -35,210 +38,497 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
-  // === Metallm API ===
+  // =============================================
+  // === Model Configuration API ===
+  // =============================================
 
-  // Submit Query & Process
-  app.post(api.metallm.submit.path, isAuthenticated, async (req, res) => {
+  // Get available models with their roles
+  app.get("/api/models", isAuthenticated, async (_req, res) => {
+    res.json({
+      models: currentModels,
+      mainModelId: currentMainModelId,
+    });
+  });
+
+  // Update model roles/configs
+  app.put("/api/models", isAuthenticated, async (req, res) => {
+    try {
+      const { models, mainModelId } = req.body;
+      if (models && Array.isArray(models)) {
+        currentModels = models;
+      }
+      if (mainModelId && typeof mainModelId === "string") {
+        currentMainModelId = mainModelId;
+      }
+      res.json({ models: currentModels, mainModelId: currentMainModelId });
+    } catch (err) {
+      res.status(400).json({ message: "Invalid model configuration" });
+    }
+  });
+
+  // =============================================
+  // === Chat Conversations API ===
+  // =============================================
+
+  // List conversations
+  app.get("/api/chat/conversations", isAuthenticated, async (req, res) => {
     try {
       const user = req.user as any;
-      const userId = user.claims.sub; // Replit Auth ID
+      const userId = user.id || user.claims?.sub;
+      const conversations = await storage.getConversations(userId);
+      res.json(conversations);
+    } catch (err) {
+      console.error("Error fetching conversations:", err);
+      res.status(500).json({ message: "Failed to fetch conversations" });
+    }
+  });
 
-      const input = api.metallm.submit.input.parse(req.body);
+  // Create new conversation
+  app.post("/api/chat/conversations", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userId = user.id || user.claims?.sub;
+      const { title } = req.body;
+      const conversation = await storage.createConversation({ userId, title: title || "New Chat" });
+      res.status(201).json(conversation);
+    } catch (err) {
+      console.error("Error creating conversation:", err);
+      res.status(500).json({ message: "Failed to create conversation" });
+    }
+  });
 
-      // 1. Create Query Record
-      const query = await storage.createQuery({
-        ...input,
-        userId,
-      });
+  // Delete conversation
+  app.delete("/api/chat/conversations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userId = user.id || user.claims?.sub;
+      const conversationId = Number(req.params.id);
 
-      // 2. Intelligent Routing: Main model analyzes the task
-      const prompt = input.prompt;
-      const role = input.role || "general";
-      const allModelsMode = input.allModelsMode;
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
 
-      // Orchestrator analyzes first
-      const analysisPrompt = `
-        Analyze this user request: "${prompt}"
-        User Role context: "${role}"
-        
-        Is this a simple/casual/general request that you (the main model) can handle alone, or does it require specialized expertise?
-        
-        Respond ONLY with a JSON object:
-        {
-          "type": "casual" | "specialized",
-          "requiresModels": ["Claude (Technical)", "Grok (Social)", "Gemini (Image)", "LLaMA (Casual)"] // subset of these
-        }
-      `;
+      await storage.deleteConversation(conversationId);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error deleting conversation:", err);
+      res.status(500).json({ message: "Failed to delete conversation" });
+    }
+  });
 
-      const analysisCompletion = await openai.chat.completions.create({
-        model: "gpt-5.2",
-        messages: [{ role: "user", content: analysisPrompt }],
-        response_format: { type: "json_object" }
-      });
+  // Get conversation with messages
+  app.get("/api/chat/conversations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userId = user.id || user.claims?.sub;
+      const conversationId = Number(req.params.id);
 
-      const analysis = JSON.parse(analysisCompletion.choices[0].message.content || "{}");
-      const isSpecialized = analysis.type === "specialized" || allModelsMode;
-      const modelsToCall = allModelsMode 
-        ? ["claude", "grok", "llama", "gemini"] 
-        : (isSpecialized ? (analysis.requiresModels || []).map((m: string) => m.toLowerCase().split(' ')[0]) : []);
+      const conversation = await storage.getConversationWithMessages(conversationId);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
 
-      // Helper to wrap promises and catch errors
-      const safeCall = async <T>(name: string, fn: () => Promise<T>): Promise<T | null> => {
+      res.json(conversation);
+    } catch (err) {
+      console.error("Error fetching conversation:", err);
+      res.status(500).json({ message: "Failed to fetch conversation" });
+    }
+  });
+
+  // Delete messages after a specific message (edit functionality)
+  app.delete("/api/chat/conversations/:id/messages/:messageId/after", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userId = user.id || user.claims?.sub;
+      const conversationId = Number(req.params.id);
+      const messageId = Number(req.params.messageId);
+
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
+
+      await storage.deleteMessagesAfter(conversationId, messageId);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error deleting messages:", err);
+      res.status(500).json({ message: "Failed to delete messages" });
+    }
+  });
+
+  // =============================================
+  // === ROUTING ENDPOINT (Step 1: Analyze + Enhanced Prompt) ===
+  // =============================================
+  app.post("/api/chat/conversations/:id/route", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userId = user.id || user.claims?.sub;
+      const conversationId = Number(req.params.id);
+
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const { content, mode } = req.body;
+      if (!content || typeof content !== "string") {
+        return res.status(400).json({ message: "Content is required" });
+      }
+
+      if (mode === "single") {
+        // Analyze and route using Gemini
+        const routing = await analyzeAndRoute(content, currentModels);
+
+        res.json({
+          routingType: routing.type,
+          targetModel: routing.targetModel ? {
+            id: routing.targetModel.id,
+            displayName: routing.targetModel.displayName,
+            role: routing.targetModel.role,
+            icon: routing.targetModel.icon,
+            provider: routing.targetModel.provider,
+          } : null,
+          reason: routing.reason,
+          enhancedPrompt: routing.enhancedPrompt,
+          originalPrompt: content,
+        });
+      } else if (mode === "multi") {
+        // For multi-mode: enhance the prompt for all models
+        const enhancePrompt = `You are a prompt engineer. Improve this user prompt to be clearer, more specific, and better structured. Keep the same intent but add clarity.
+
+User prompt: "${content}"
+
+Return ONLY the enhanced prompt text, nothing else.`;
+
+        let enhancedPrompt = content;
         try {
-          return await fn();
+          enhancedPrompt = await callGemini("gemini-3-flash-preview", [
+            { role: "user", content: enhancePrompt }
+          ], { maxTokens: 300, temperature: 0.3 });
+          // Clean up any quotes
+          enhancedPrompt = enhancedPrompt.replace(/^["']|["']$/g, "").trim();
         } catch (e) {
-          console.error(`Error in model ${name}:`, e);
-          return null;
-        }
-      };
-
-      const promises = [];
-
-      // Only call other models if it's specialized or allModelsMode is ON
-      if (isSpecialized) {
-        // --- Claude (Technical) ---
-        if (modelsToCall.includes("claude") || modelsToCall.includes("technical")) {
-          promises.push(safeCall("claude", async () => {
-            const msg = await anthropic.messages.create({
-              model: "claude-sonnet-4-5",
-              max_tokens: 1024,
-              messages: [{ role: "user", content: `You are a technical expert and senior engineer. Analyze this query from a technical perspective. Provide code snippets if relevant. Role context: ${role}. Query: ${prompt}` }],
-            });
-            const content = msg.content[0].type === 'text' ? msg.content[0].text : "";
-            await storage.addModelResponse({
-              queryId: query.id,
-              modelName: "Claude (Technical)",
-              content,
-              responseType: "text"
-            });
-            return { model: "Claude", content };
-          }));
+          console.error("Prompt enhancement failed:", e);
         }
 
-        // --- Grok (Social/News - Simulated) ---
-        if (modelsToCall.includes("grok") || modelsToCall.includes("social")) {
-          promises.push(safeCall("grok", async () => {
-            const completion = await openai.chat.completions.create({
-              model: "gpt-5.2",
-              messages: [
-                { role: "system", content: "You are Grok, a witty, rebellious, and truth-seeking AI with a focus on real-time news and social commentary." },
-                { role: "user", content: `Analyze this from a social/cultural/news perspective. Role context: ${role}. Query: ${prompt}` }
-              ],
-            });
-            const content = completion.choices[0].message.content || "";
-            await storage.addModelResponse({
-              queryId: query.id,
-              modelName: "Grok (Social)",
-              content,
-              responseType: "text"
-            });
-            return { model: "Grok", content };
-          }));
-        }
-
-        // --- LLaMA (Casual - Simulated) ---
-        if (modelsToCall.includes("llama") || modelsToCall.includes("casual")) {
-          promises.push(safeCall("llama", async () => {
-            const completion = await openai.chat.completions.create({
-              model: "gpt-5-mini",
-              messages: [
-                { role: "system", content: "You are LLaMA, a helpful, open, and casual AI assistant. Keep it conversational and friendly." },
-                { role: "user", content: `Chat about this query casually. Role context: ${role}. Query: ${prompt}` }
-              ],
-            });
-            const content = completion.choices[0].message.content || "";
-            await storage.addModelResponse({
-              queryId: query.id,
-              modelName: "LLaMA (Casual)",
-              content,
-              responseType: "text"
-            });
-            return { model: "LLaMA", content };
-          }));
-        }
-
-        // --- Gemini (Image Generation) ---
-        if (modelsToCall.includes("gemini") || modelsToCall.includes("image")) {
-          promises.push(safeCall("gemini", async () => {
-            const promptGen = await openai.chat.completions.create({
-              model: "gpt-5-mini",
-              messages: [{ role: "user", content: `Create a detailed image generation prompt based on this user query: "${prompt}". Output ONLY the prompt.` }]
-            });
-            const imagePrompt = promptGen.choices[0].message.content || prompt;
-
-            const response = await gemini.models.generateContent({
-                model: "gemini-2.5-flash-image",
-                contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
-                config: { responseModalities: [Modality.IMAGE] },
-            });
-            
-            const candidate = response.candidates?.[0];
-            const imagePart = candidate?.content?.parts?.find((part: any) => part.inlineData);
-
-            if (imagePart?.inlineData?.data) {
-               const b64 = `data:${imagePart.inlineData.mimeType || 'image/png'};base64,${imagePart.inlineData.data}`;
-               await storage.addModelResponse({
-                queryId: query.id,
-                modelName: "Gemini (Image)",
-                content: "Image generated based on query.",
-                responseType: "image",
-                metadata: { imageUrl: b64, prompt: imagePrompt }
-              });
-              return { model: "Gemini", content: "[Image Generated]" };
-            }
-            return null;
-          }));
-        }
-      }
-
-      // Wait for all models (if any)
-      const results = await Promise.all(promises);
-      const validResults = results.filter(r => r !== null) as { model: string, content: string }[];
-
-      // 3. Orchestrator Summary / Final Reply
-      let finalSummaryPrompt = "";
-      if (allModelsMode) {
-        finalSummaryPrompt = `
-          Synthesize these perspectives into a cohesive summary.
-          User Query: "${prompt}"
-          User Role: "${role}"
-          Perspectives: ${validResults.map(r => `[${r.model}]: ${r.content.substring(0, 300)}`).join('\n')}
-        `;
-      } else if (isSpecialized) {
-        finalSummaryPrompt = `
-          The user has a specialized request: "${prompt}" (Role: ${role}).
-          I have consulted these experts: ${validResults.map(r => r.model).join(', ')}.
-          Provide a main response that integrates their findings.
-        `;
+        res.json({
+          routingType: "multi",
+          models: currentModels.map(m => ({
+            id: m.id,
+            displayName: m.displayName,
+            role: m.role,
+            icon: m.icon,
+            provider: m.provider,
+          })),
+          enhancedPrompt,
+          originalPrompt: content,
+        });
       } else {
-        finalSummaryPrompt = `
-          Respond to this user query: "${prompt}"
-          Role context: "${role}"
-          Keep it direct as the main model.
-        `;
-      }
+        // Debate mode - just enhance
+        let enhancedPrompt = content;
+        try {
+          const result = await callGemini("gemini-3-flash-preview", [
+            { role: "user", content: `Rephrase this as a clear debate topic: "${content}". Return ONLY the topic, nothing else.` }
+          ], { maxTokens: 100, temperature: 0.3 });
+          enhancedPrompt = result.replace(/^["']|["']$/g, "").trim() || content;
+        } catch (e) {
+          console.error("Debate topic enhancement failed:", e);
+        }
 
-      const summaryCompletion = await openai.chat.completions.create({
-        model: "gpt-5.2",
-        messages: [{ role: "user", content: finalSummaryPrompt }],
+        res.json({
+          routingType: "debate",
+          enhancedPrompt,
+          originalPrompt: content,
+        });
+      }
+    } catch (err) {
+      console.error("Routing error:", err);
+      res.status(500).json({ message: "Routing analysis failed" });
+    }
+  });
+
+  // =============================================
+  // === SEND MESSAGE (Step 2: With approved prompt) ===
+  // =============================================
+  app.post("/api/chat/conversations/:id/messages", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userId = user.id || user.claims?.sub;
+      const conversationId = Number(req.params.id);
+
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const { content, mode, enhancedPrompt, targetModelId } = req.body;
+      if (!content) return res.status(400).json({ message: "Content is required" });
+
+      // The prompt to actually send to the model (user-approved enhanced prompt)
+      const promptToSend = enhancedPrompt || content;
+
+      // Save user message (always save the original content the user sees)
+      const userMessage = await storage.addMessage({
+        conversationId,
+        role: "user",
+        content,
+        modelName: null,
       });
 
-      const summary = summaryCompletion.choices[0].message.content || "Done.";
+      // Setup SSE
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders();
 
-      // Update Query with Summary
-      const updatedQuery = await storage.updateQuerySummary(query.id, summary);
-      
-      // Get full object to return
-      const fullQuery = await storage.getQueryWithResponses(updatedQuery.id);
-      
-      res.status(201).json(fullQuery);
+      sendSSE(res, "user_message", userMessage);
+
+      // Get conversation history for context
+      const history = await storage.getMessages(conversationId);
+      const contextMessages = history.slice(-10).map(m => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: `${m.modelName ? `[${m.modelName}]: ` : ""}${m.content}`
+      }));
+
+      // ===========================================
+      // === SINGLE MODE ===
+      // ===========================================
+      if (mode === "single") {
+        // Find target model
+        let targetModel: ModelConfig;
+        if (targetModelId) {
+          targetModel = currentModels.find(m => m.id === targetModelId) || getMainModel();
+        } else {
+          targetModel = getMainModel();
+        }
+
+        const modelName = targetModel.displayName;
+        sendSSE(res, "model_start", { modelName, role: targetModel.role, provider: targetModel.provider });
+
+        let fullContent = "";
+        try {
+          fullContent = await callModelStream(
+            targetModel,
+            [...contextMessages, { role: "user", content: promptToSend }],
+            (chunk) => {
+              sendSSE(res, "chunk", { modelName, content: chunk });
+            },
+            {
+              systemPrompt: targetModel.systemPrompt,
+              maxTokens: 2048,
+            }
+          );
+        } catch (e) {
+          console.error(`${modelName} error:`, e);
+          fullContent = `Sorry, I encountered an error processing your request. Error: ${(e as Error).message}`;
+          sendSSE(res, "chunk", { modelName, content: fullContent });
+        }
+
+        const assistantMessage = await storage.addMessage({
+          conversationId,
+          role: "assistant",
+          content: fullContent,
+          modelName,
+          metadata: {
+            modelId: targetModel.id,
+            role: targetModel.role,
+            provider: targetModel.provider,
+            enhancedPrompt: promptToSend !== content ? promptToSend : undefined,
+          },
+        });
+        sendSSE(res, "model_complete", { modelName, message: assistantMessage });
+
+        // ===========================================
+        // === MULTI MODE ===
+        // ===========================================
+      } else if (mode === "multi") {
+        const modelResponses: { modelName: string; content: string; role: string }[] = [];
+
+        // Send to ALL models
+        for (const model of currentModels) {
+          sendSSE(res, "model_start", { modelName: model.displayName, role: model.role, provider: model.provider });
+
+          let fullContent = "";
+          try {
+            fullContent = await callModelStream(
+              model,
+              [{ role: "user", content: promptToSend }],
+              (chunk) => {
+                sendSSE(res, "chunk", { modelName: model.displayName, content: chunk });
+              },
+              {
+                systemPrompt: model.systemPrompt,
+                maxTokens: 1024,
+              }
+            );
+          } catch (e) {
+            console.error(`${model.displayName} error:`, e);
+            fullContent = `[${model.displayName}] Error: ${(e as Error).message}`;
+            sendSSE(res, "chunk", { modelName: model.displayName, content: fullContent });
+          }
+
+          modelResponses.push({
+            modelName: model.displayName,
+            content: fullContent,
+            role: model.role,
+          });
+
+          const assistantMessage = await storage.addMessage({
+            conversationId,
+            role: "assistant",
+            content: fullContent,
+            modelName: model.displayName,
+            metadata: {
+              modelId: model.id,
+              role: model.role,
+              provider: model.provider,
+              isMultiModelResponse: true,
+            },
+          });
+          sendSSE(res, "model_complete", { modelName: model.displayName, message: assistantMessage });
+        }
+
+        // Main model (Gemini) summarizes all responses
+        const summaryModelName = "✨ Summary";
+        sendSSE(res, "model_start", { modelName: summaryModelName, isSummary: true });
+
+        const summaryPrompt = `You are MetallmAI, an advanced AI orchestrator. Multiple AI models have analyzed the following user query. Review all their responses and provide:
+
+1. **Unified Answer**: A comprehensive, synthesized answer combining the best insights
+2. **Key Insights**: Highlight the most important points from each model
+3. **Conclusion**: A final, actionable conclusion
+
+User Query: "${content}"
+
+Model Responses:
+${modelResponses.map(r => `\n--- ${r.modelName} (${r.role}) ---\n${r.content.substring(0, 800)}`).join("\n")}
+
+Provide a well-structured summary. Do NOT just repeat - synthesize and add value.`;
+
+        let summaryContent = "";
+        try {
+          const mainModel = getMainModel();
+          summaryContent = await callModelStream(
+            mainModel,
+            [{ role: "user", content: summaryPrompt }],
+            (chunk) => {
+              sendSSE(res, "chunk", { modelName: summaryModelName, content: chunk });
+            },
+            { maxTokens: 2048 }
+          );
+        } catch (e) {
+          console.error("Summary error:", e);
+          summaryContent = "Failed to generate summary. Please review individual model responses above.";
+          sendSSE(res, "chunk", { modelName: summaryModelName, content: summaryContent });
+        }
+
+        const summaryMessage = await storage.addMessage({
+          conversationId,
+          role: "assistant",
+          content: summaryContent,
+          modelName: summaryModelName,
+          metadata: { isSummary: true, modelCount: modelResponses.length },
+        });
+        sendSSE(res, "model_complete", { modelName: summaryModelName, message: summaryMessage, isSummary: true });
+
+        // ===========================================
+        // === DEBATE MODE ===
+        // ===========================================
+      } else if (mode === "debate") {
+        const debateRounds = 2;
+        const debaters = currentModels.slice(0, 3);
+        let debateContext = `Topic: ${promptToSend}\n\n`;
+
+        for (let round = 0; round < debateRounds; round++) {
+          for (const debater of debaters) {
+            sendSSE(res, "model_start", { modelName: debater.displayName, round: round + 1 });
+
+            const debatePrompt = `You are ${debater.displayName} (${debater.role}) in a friendly intellectual debate.
+              Topic: ${promptToSend}
+              Previous discussion: ${debateContext}
+              Round ${round + 1}: Provide your unique perspective (2-3 paragraphs).
+              ${round > 0 ? "Respond to or build upon points made by other participants." : ""}`;
+
+            let fullContent = "";
+            try {
+              fullContent = await callModelStream(
+                debater,
+                [{ role: "user", content: debatePrompt }],
+                (chunk) => {
+                  sendSSE(res, "chunk", { modelName: debater.displayName, content: chunk });
+                },
+                { systemPrompt: debater.systemPrompt, maxTokens: 512 }
+              );
+            } catch (e) {
+              console.error(`${debater.displayName} debate error:`, e);
+              fullContent = `[${debater.displayName}] Error in debate round.`;
+              sendSSE(res, "chunk", { modelName: debater.displayName, content: fullContent });
+            }
+
+            debateContext += `\n[${debater.displayName}]: ${fullContent}\n`;
+
+            const assistantMessage = await storage.addMessage({
+              conversationId,
+              role: "assistant",
+              content: fullContent,
+              modelName: debater.displayName,
+              metadata: { modelId: debater.id, role: debater.role, debateRound: round + 1 },
+            });
+            sendSSE(res, "model_complete", { modelName: debater.displayName, message: assistantMessage });
+          }
+        }
+      }
+
+      // Auto-generate title for first message
+      if (history.length <= 1) {
+        try {
+          const title = await callGemini("gemini-3-flash-preview", [
+            { role: "user", content: `Generate a very short title (3-5 words) for a conversation starting with: "${content}". Return ONLY the title.` }
+          ], { maxTokens: 30, temperature: 0.3 });
+          let cleanTitle = title.replace(/[".\n]/g, "").trim().slice(0, 50);
+          if (cleanTitle) {
+            await storage.updateConversationTitle(conversationId, cleanTitle);
+            sendSSE(res, "title_update", { title: cleanTitle });
+          }
+        } catch (e) {
+          console.error("Title generation error:", e);
+        }
+      }
+
+      sendSSE(res, "done", {});
+      res.end();
 
     } catch (err) {
       if (err instanceof z.ZodError) {
         res.status(400).json({
           message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
+          field: err.errors[0].path.join("."),
         });
+      } else {
+        console.error("Chat error:", err);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    }
+  });
+
+  // =============================================
+  // === Legacy Metallm API ===
+  // =============================================
+
+  app.post(api.metallm.submit.path, isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userId = user.id || user.claims?.sub;
+      const input = api.metallm.submit.input.parse(req.body);
+      const query = await storage.createQuery({ ...input, userId });
+
+      const mainModel = getMainModel();
+      const result = await callModel(mainModel, [
+        { role: "user", content: `Respond to: "${input.prompt}"` }
+      ]);
+
+      const updatedQuery = await storage.updateQuerySummary(query.id, result);
+      const fullQuery = await storage.getQueryWithResponses(updatedQuery.id);
+      res.status(201).json(fullQuery);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
       } else {
         console.error("Processing error:", err);
         res.status(500).json({ message: "Internal server error" });
@@ -246,26 +536,19 @@ export async function registerRoutes(
     }
   });
 
-  // Get History
   app.get(api.metallm.list.path, isAuthenticated, async (req, res) => {
     const user = req.user as any;
-    const userId = user.claims.sub;
+    const userId = user.id || user.claims?.sub;
     const queries = await storage.getQueries(userId);
     res.json(queries);
   });
 
-  // Get Single Query
   app.get(api.metallm.get.path, isAuthenticated, async (req, res) => {
     const user = req.user as any;
-    // Optional: check if query belongs to user
+    const userId = user.id || user.claims?.sub;
     const query = await storage.getQueryWithResponses(Number(req.params.id));
-    if (!query) {
-      return res.status(404).json({ message: "Query not found" });
-    }
-    // Simplistic ownership check
-    if (query.userId !== user.claims.sub) {
-       return res.status(401).json({ message: "Unauthorized" });
-    }
+    if (!query) return res.status(404).json({ message: "Query not found" });
+    if (query.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
     res.json(query);
   });
 

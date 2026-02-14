@@ -32,10 +32,10 @@ export default function Landing() {
             <span className="text-xl font-bold font-display tracking-tight">Metallm</span>
           </div>
           <div className="flex items-center gap-4">
-            <a href="/api/login">
+            <a href="/login">
               <Button variant="ghost" className="hidden sm:inline-flex hover:text-white">Sign In</Button>
             </a>
-            <a href="/api/login">
+            <a href="/login">
               <Button className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/25">
                 Get Started
               </Button>
@@ -66,7 +66,7 @@ export default function Landing() {
               Stop switching tabs. Metallm orchestrates the world's leading AI models to give you a comprehensive, multi-faceted analysis of any problem.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <a href="/api/login">
+              <a href="/login">
                 <Button size="lg" className="w-full sm:w-auto h-12 px-8 text-lg bg-white text-black hover:bg-white/90">
                   Start Analyzing
                 </Button>

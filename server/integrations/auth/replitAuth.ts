@@ -61,6 +61,12 @@ async function upsertUser(claims: any) {
 }
 
 export async function setupAuth(app: Express) {
+  // Skip Replit auth setup if not running on Replit
+  if (!process.env.REPL_ID) {
+    console.log('⚠️  Running in local mode without Replit authentication');
+    return;
+  }
+
   app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());
@@ -131,6 +137,13 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  // Skip auth check if not running on Replit
+  if (!process.env.REPL_ID) {
+    // Create a mock user for local development
+    (req as any).user = { claims: { sub: 'local-dev-user' } };
+    return next();
+  }
+
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user.expires_at) {
