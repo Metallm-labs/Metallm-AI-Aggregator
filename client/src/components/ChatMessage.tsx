@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Bot, Sparkles, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, Zap } from "lucide-react";
+import { User, Bot, Sparkles, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, Zap, Globe, ExternalLink } from "lucide-react";
 import { MarkdownRenderer } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -116,7 +116,7 @@ export function ChatMessage({
             )}>
                 {/* Model Name Badge with role */}
                 {!isUser && modelName && (
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className={cn("text-xs font-medium", config.color)}>
                             {modelName}
                         </span>
@@ -128,6 +128,11 @@ export function ChatMessage({
                         {isSummary && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 flex items-center gap-1">
                                 <Zap className="w-2.5 h-2.5" /> Final Summary
+                            </span>
+                        )}
+                        {metadata?.webSearch && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center gap-1">
+                                <Globe className="w-2.5 h-2.5" /> Web Search
                             </span>
                         )}
                         {isCollapsible && (
@@ -248,6 +253,34 @@ export function ChatMessage({
                         onClick={() => setIsExpanded(true)}
                     >
                         Click to expand response...
+                    </motion.div>
+                )}
+
+                {/* Web Search Sources */}
+                {!isUser && isExpanded && metadata?.sources?.length > 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-2 pt-2 border-t border-blue-500/10"
+                    >
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                            <Globe className="w-3 h-3 text-blue-400" />
+                            <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">Sources</span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            {metadata.sources.map((source: { title: string; url: string }, i: number) => (
+                                <a
+                                    key={i}
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-start gap-1.5 text-[11px] text-blue-400/70 hover:text-blue-300 transition-colors group"
+                                >
+                                    <ExternalLink className="w-2.5 h-2.5 mt-0.5 flex-shrink-0 group-hover:text-blue-300" />
+                                    <span className="truncate hover:underline">{source.title}</span>
+                                </a>
+                            ))}
+                        </div>
                     </motion.div>
                 )}
 

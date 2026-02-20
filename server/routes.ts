@@ -13,6 +13,7 @@ import {
   callGemini,
   analyzeAndRoute,
   type ModelConfig,
+  type WebSource,
 } from "./openrouter";
 
 // In-memory model config store
@@ -263,6 +264,7 @@ Return ONLY the enhanced prompt text, nothing else.`;
       // The prompt to actually send to the model (user-approved enhanced prompt)
       const promptToSend = enhancedPrompt || content;
 
+
       // Check message count BEFORE saving the user message (so 0 = first ever message)
       const existingMessages = await storage.getMessages(conversationId);
       const isFirstMessage = existingMessages.length === 0;
@@ -325,8 +327,9 @@ Return ONLY the enhanced prompt text, nothing else.`;
         sendSSE(res, "model_start", { modelName, role: targetModel.role, provider: targetModel.provider });
 
         let fullContent = "";
+        let modelSources: WebSource[] = [];
         try {
-          fullContent = await callModelStream(
+          const result = await callModelStream(
             targetModel,
             [...contextMessages, { role: "user", content: promptToSend }],
             (chunk) => {
@@ -337,6 +340,12 @@ Return ONLY the enhanced prompt text, nothing else.`;
               maxTokens: 2048,
             }
           );
+          fullContent = result.content;
+          modelSources = result.sources;
+          // Stream any sources to client immediately so UI can show them
+          if (modelSources.length > 0) {
+            sendSSE(res, "web_sources", { modelName, sources: modelSources });
+          }
         } catch (e) {
           console.error(`${modelName} error:`, e);
           fullContent = `Sorry, I encountered an error processing your request. Error: ${(e as Error).message}`;
@@ -353,6 +362,8 @@ Return ONLY the enhanced prompt text, nothing else.`;
             role: targetModel.role,
             provider: targetModel.provider,
             enhancedPrompt: promptToSend !== content ? promptToSend : undefined,
+            webSearch: modelSources.length > 0,
+            sources: modelSources.length > 0 ? modelSources : undefined,
           },
         });
         sendSSE(res, "model_complete", { modelName, message: assistantMessage });
@@ -369,8 +380,9 @@ Return ONLY the enhanced prompt text, nothing else.`;
           sendSSE(res, "model_start", { modelName: model.displayName, role: model.role, provider: model.provider });
 
           let fullContent = "";
+          let multiSources: WebSource[] = [];
           try {
-            fullContent = await callModelStream(
+            const result = await callModelStream(
               model,
               [{ role: "user", content: promptToSend }],
               (chunk) => {
@@ -381,6 +393,11 @@ Return ONLY the enhanced prompt text, nothing else.`;
                 maxTokens: 4096,
               }
             );
+            fullContent = result.content;
+            multiSources = result.sources;
+            if (multiSources.length > 0) {
+              sendSSE(res, "web_sources", { modelName: model.displayName, sources: multiSources });
+            }
           } catch (e) {
             console.error(`${model.displayName} error:`, e);
             fullContent = `[${model.displayName}] Error: ${(e as Error).message}`;
@@ -392,7 +409,6 @@ Return ONLY the enhanced prompt text, nothing else.`;
             content: fullContent,
             role: model.role,
           });
-
           const assistantMessage = await storage.addMessage({
             conversationId,
             role: "assistant",
@@ -403,6 +419,8 @@ Return ONLY the enhanced prompt text, nothing else.`;
               role: model.role,
               provider: model.provider,
               isMultiModelResponse: true,
+              webSearch: multiSources.length > 0,
+              sources: multiSources.length > 0 ? multiSources : undefined,
             },
           });
           sendSSE(res, "model_complete", { modelName: model.displayName, message: assistantMessage });
@@ -430,14 +448,14 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
         let summaryContent = "";
         try {
           const mainModel = getMainModel();
-          summaryContent = await callModelStream(
+          summaryContent = (await callModelStream(
             mainModel,
             [{ role: "user", content: summaryPrompt }],
             (chunk) => {
               sendSSE(res, "chunk", { modelName: summaryModelName, content: chunk });
             },
             { maxTokens: 4096 }
-          );
+          )).content;
         } catch (e) {
           console.error("Summary error:", e);
           summaryContent = "Failed to generate summary. Please review individual model responses above.";
@@ -473,7 +491,7 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
 
             let fullContent = "";
             try {
-              fullContent = await callModelStream(
+              const debateResult = await callModelStream(
                 debater,
                 [{ role: "user", content: debatePrompt }],
                 (chunk) => {
@@ -481,6 +499,7 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
                 },
                 { systemPrompt: debater.systemPrompt, maxTokens: 512 }
               );
+              fullContent = debateResult.content;
             } catch (e) {
               console.error(`${debater.displayName} debate error:`, e);
               fullContent = `[${debater.displayName}] Error in debate round.`;

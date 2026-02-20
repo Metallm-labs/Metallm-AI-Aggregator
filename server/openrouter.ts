@@ -1,6 +1,37 @@
 // OpenRouter + Gemini API integration for multi-model AI aggregation
 import { GoogleGenAI } from "@google/genai";
 
+// ================================
+// === Web Search Types ===
+// ================================
+export interface WebSource {
+    title: string;
+    url: string;
+}
+
+// ================================
+// === Web Search Need Detection ===
+// ================================
+export function needsWebSearch(prompt: string): boolean {
+    const lower = prompt.trim().toLowerCase();
+    const patterns: RegExp[] = [
+        // Explicit date/time references
+        /\b(today|tonight|right now|at the moment|as of (today|now))\b/,
+        /\bthis (morning|afternoon|evening|week|month|year)\b/,
+        /\b(yesterday|last (week|month|year|night|monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/,
+        // Current events signals
+        /\b(latest|recent|newest|most recent|current|currently|live|breaking|real.?time)\b.{0,60}\b(news|update|version|release|event|story|score|result|match|game|election|war|price|rate|deal|launch)\b/,
+        /\b(news|headlines|trending|viral|happening)\b/,
+        /\bwhat('?s| is) (happening|going on|the (news|weather|score|result|price|rate)|trending)\b/,
+        // Specific current-world questions
+        /\b(who (is|won|leads?|has)) .{0,40}(now|today|currently|in \d{4})\b/,
+        /\b(stock|crypto|bitcoin|price|rate|weather|temperature|forecast) (of|for|in|at|today)\b/,
+        // Year-anchored searches
+        /\b(2025|2026).{0,80}\b(news|update|election|champion|winner|president|prime minister|ceo|discovered|released|launched|happened|died|arrested)\b/,
+    ];
+    return patterns.some(p => p.test(lower));
+}
+
 // Initialize Gemini client
 const gemini = new GoogleGenAI({
     apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "",
@@ -238,7 +269,7 @@ async function callGeminiStream(
         temperature?: number;
         systemPrompt?: string;
     }
-): Promise<string> {
+): Promise<{ content: string; sources: WebSource[] }> {
     const contents = messages.map(m => ({
         role: m.role === "user" ? "user" : "model",
         parts: [{ text: m.content }],
@@ -252,6 +283,10 @@ async function callGeminiStream(
         ? { parts: [{ text: options.systemPrompt }] }
         : undefined;
 
+    // Always provide Google Search grounding — Gemini decides when to invoke it,
+    // exactly like Google AI Studio / Gemini.google.com behave.
+    const tools = [{ googleSearch: {} }];
+
     const safetySettings = [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
         { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -260,10 +295,14 @@ async function callGeminiStream(
     ];
 
     let fullContent = "";
+    const sources: WebSource[] = [];
+    const seenUrls = new Set<string>();
+
     const result = await gemini.models.generateContentStream({
         model: modelId,
         contents,
         config,
+        tools,
         safetySettings,
         ...(systemInstruction ? { systemInstruction } : {}),
     } as any);
@@ -274,9 +313,17 @@ async function callGeminiStream(
             onChunk(text);
             fullContent += text;
         }
+        // Extract Google Search grounding sources when model chose to search
+        const groundingChunks: any[] = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        for (const gc of groundingChunks) {
+            if (gc.web?.uri && !seenUrls.has(gc.web.uri)) {
+                seenUrls.add(gc.web.uri);
+                sources.push({ title: gc.web.title || gc.web.uri, url: gc.web.uri });
+            }
+        }
     }
 
-    return fullContent;
+    return { content: fullContent, sources };
 }
 
 // ================================
@@ -290,8 +337,9 @@ async function callOpenRouterStream(
         maxTokens?: number;
         temperature?: number;
         systemPrompt?: string;
+        webSearch?: boolean;
     }
-): Promise<string> {
+): Promise<{ content: string; sources: WebSource[] }> {
     const apiKey = process.env["AI-INTEGRATIONS-OPEN-ROUTER-API-KEY"];
     if (!apiKey) throw new Error("OpenRouter API key not configured");
 
@@ -303,6 +351,8 @@ async function callOpenRouterStream(
         max_tokens: options?.maxTokens || 4096,
         temperature: options?.temperature ?? 0.7,
         stream: true,
+        // Use OpenRouter's built-in web search plugin when needed
+        ...(options?.webSearch ? { plugins: [{ id: "web", max_results: 5 }] } : {}),
     };
 
     const response = await fetch(OPENROUTER_API_URL, {
@@ -327,6 +377,8 @@ async function callOpenRouterStream(
     const decoder = new TextDecoder();
     let buffer = "";
     let fullContent = "";
+    const sources: WebSource[] = [];
+    const seenUrls = new Set<string>();
 
     while (true) {
         const { done, value } = await reader.read();
@@ -348,13 +400,24 @@ async function callOpenRouterStream(
                     onChunk(text);
                     fullContent += text;
                 }
+                // Extract URL citations from OpenRouter web plugin annotations
+                const annotations: any[] = data.choices?.[0]?.delta?.annotations || [];
+                for (const ann of annotations) {
+                    if (ann.type === "url_citation" && ann.url_citation?.url) {
+                        const url: string = ann.url_citation.url;
+                        if (!seenUrls.has(url)) {
+                            seenUrls.add(url);
+                            sources.push({ title: ann.url_citation.title || url, url });
+                        }
+                    }
+                }
             } catch {
                 // skip malformed lines
             }
         }
     }
 
-    return fullContent;
+    return { content: fullContent, sources };
 }
 
 // ================================
@@ -369,11 +432,17 @@ export async function callModelStream(
         temperature?: number;
         systemPrompt?: string;
     }
-): Promise<string> {
+): Promise<{ content: string; sources: WebSource[] }> {
     if (model.provider === "gemini") {
+        // Gemini: googleSearch tool is always enabled inside callGeminiStream;
+        // the model itself decides when to invoke it.
         return callGeminiStream(model.id, messages, onChunk, options);
     } else {
-        return callOpenRouterStream(model.id, messages, onChunk, options);
+        // OpenRouter: use keyword detection so the web plugin is only activated
+        // when the query is clearly about real-time / current-world data.
+        const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content ?? "";
+        const useWeb = needsWebSearch(lastUserMsg);
+        return callOpenRouterStream(model.id, messages, onChunk, { ...options, webSearch: useWeb });
     }
 }
 

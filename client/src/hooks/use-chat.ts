@@ -199,6 +199,10 @@ export function useSendMessage() {
                             case "model_complete":
                                 onModelComplete(data.modelName, data.message);
                                 break;
+                            case "web_sources":
+                                // Sources are already stored in model_complete message metadata;
+                                // this event is informational — safe to ignore client-side
+                                break;
                             case "title_update":
                                 onTitleUpdate?.(data.title);
                                 patchConversationTitle(queryClient, conversationId, data.title);
