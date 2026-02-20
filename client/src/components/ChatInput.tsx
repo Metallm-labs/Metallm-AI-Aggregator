@@ -2,14 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Paperclip, Send, Loader2, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square } from "lucide-react";
+import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 type ChatMode = "single" | "multi" | "debate";
 
 interface ChatInputProps {
-    onSend: (content: string, mode: ChatMode) => void;
+    onSend: (content: string, mode: ChatMode, enhancerEnabled: boolean) => void;
     onStop?: () => void;
     isLoading?: boolean;
     disabled?: boolean;
@@ -36,6 +36,7 @@ const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; descr
 export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProps) {
     const [content, setContent] = useState("");
     const [mode, setMode] = useState<ChatMode>("single");
+    const [enhancerEnabled, setEnhancerEnabled] = useState(true);
     const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,9 +58,9 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
         if (attachedFiles.length > 0) {
             const fileNames = attachedFiles.map(f => f.name).join(", ");
             const contentWithFiles = `${content.trim()}\n\n[Attached files: ${fileNames}]`;
-            onSend(contentWithFiles, mode);
+            onSend(contentWithFiles, mode, enhancerEnabled);
         } else {
-            onSend(content.trim(), mode);
+            onSend(content.trim(), mode, enhancerEnabled);
         }
 
         setContent("");
@@ -191,6 +192,22 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
                                 <span className="text-xs text-muted-foreground/50 hidden sm:inline">
                                     Enter to send
                                 </span>
+
+                                {/* Prompt Enhancer toggle */}
+                                <button
+                                    type="button"
+                                    onClick={() => setEnhancerEnabled(v => !v)}
+                                    title={enhancerEnabled ? "Prompt Enhancer ON — click to disable" : "Prompt Enhancer OFF — click to enable"}
+                                    className={cn(
+                                        "flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-medium border transition-all",
+                                        enhancerEnabled
+                                            ? "bg-primary/15 border-primary/40 text-primary hover:bg-primary/25"
+                                            : "bg-white/5 border-white/10 text-muted-foreground hover:text-white hover:bg-white/10"
+                                    )}
+                                >
+                                    <Sparkles className={cn("w-3 h-3", enhancerEnabled && "animate-pulse")} />
+                                    <span className="hidden sm:inline">{enhancerEnabled ? "Enhancer On" : "Enhancer Off"}</span>
+                                </button>
                             </div>
 
                             {/* Send / Stop button */}

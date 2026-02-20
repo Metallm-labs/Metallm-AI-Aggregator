@@ -291,23 +291,20 @@ Return ONLY the enhanced prompt text, nothing else.`;
       }));
 
       // =============================================
-      // === TITLE: fire concurrently on 1st message ===
+      // === TITLE: instant — first 3-4 words of user message ===
       // =============================================
       let titlePromise: Promise<void> = Promise.resolve();
       if (isFirstMessage) {
         titlePromise = (async () => {
           try {
-            const rawTitle = await callModel(getMainModel(), [
-              { role: "user", content: `Generate a very short title (3-5 words max) for a conversation that starts with this message: "${content}". Return ONLY the title text, no quotes, no punctuation at the end.` }
-            ], { maxTokens: 30, temperature: 0.3 });
-            const cleanTitle = rawTitle.replace(/["'.!\n?]/g, "").trim().slice(0, 50);
-            console.log(`[Title] Generated: "${cleanTitle}" for conv ${conversationId}`);
-            if (cleanTitle) {
-              await storage.updateConversationTitle(conversationId, cleanTitle);
-              sendSSE(res, "title_update", { title: cleanTitle });
+            const words = content.trim().split(/\s+/).slice(0, 4);
+            const title = words.join(" ").replace(/[^\w\s'\-]/g, "").trim().slice(0, 60);
+            if (title) {
+              await storage.updateConversationTitle(conversationId, title);
+              sendSSE(res, "title_update", { title });
             }
           } catch (e) {
-            console.error("Title generation error:", e);
+            console.error("Title update error:", e);
           }
         })();
       }

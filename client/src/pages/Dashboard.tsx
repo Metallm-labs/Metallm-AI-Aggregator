@@ -150,22 +150,30 @@ export default function Dashboard() {
   // ============================================
   // === Step 1: Route prompt ===
   // ============================================
-  const handleSend = async (content: string, mode: "single" | "multi" | "debate") => {
+  const handleSend = async (content: string, mode: "single" | "multi" | "debate", enhancerEnabled = true) => {
     setPendingContent(content);
     setPendingMode(mode);
-    setIsRouting(true);
     setRoutingResult(null);
 
-    try {
-      // Create conversation if needed
-      let convId = activeConversationId;
-      if (!convId) {
-        const newConv = await createConversation.mutateAsync(undefined);
-        convId = newConv.id;
-        setActiveConversationId(convId);
-        activeConvIdRef.current = convId;
-      }
+    // Create conversation if needed (shared by both paths)
+    let convId = activeConversationId;
+    if (!convId) {
+      const newConv = await createConversation.mutateAsync(undefined);
+      convId = newConv.id;
+      setActiveConversationId(convId);
+      activeConvIdRef.current = convId;
+    }
 
+    // ── Enhancer OFF: skip routing, send directly ──────────────────────────
+    if (!enhancerEnabled) {
+      handleApproveAndSend(content, mode, content, undefined, convId);
+      return;
+    }
+
+    // ── Enhancer ON: normal routing flow ──────────────────────────────────
+    setIsRouting(true);
+
+    try {
       if (mode === "single") {
         const result = await routePrompt(convId, content, mode);
         setIsRouting(false);
