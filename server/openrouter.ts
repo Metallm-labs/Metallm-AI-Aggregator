@@ -110,7 +110,7 @@ export const DEFAULT_MODELS: ModelConfig[] = [
     },
 ];
 
-// The main orchestrator model - Gemini Flash Preview (native API, NOT OpenRouter)
+// The default main orchestrator model (can be changed in settings)
 export const DEFAULT_MAIN_MODEL_ID = "gemini-3-flash-preview";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -141,12 +141,21 @@ export async function callGemini(
         ? { parts: [{ text: options.systemPrompt }] }
         : undefined;
 
+    // Configure safety settings to be permissive
+    const safetySettings = [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+    ];
+
     const result = await gemini.models.generateContent({
         model: modelId,
         contents,
         config,
+        safetySettings,
         ...(systemInstruction ? { systemInstruction } : {}),
-    });
+    } as any);
 
     return result.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
@@ -173,7 +182,7 @@ export async function callOpenRouter(
         messages: options?.systemPrompt
             ? [{ role: "system", content: options.systemPrompt }, ...messages]
             : messages,
-        max_tokens: options?.maxTokens || 2048,
+        max_tokens: options?.maxTokens || 4096,
         temperature: options?.temperature ?? 0.7,
     };
 
@@ -218,7 +227,138 @@ export async function callModel(
 }
 
 // ================================
-// === Stream word-by-word (SSE simulation) ===
+// === Gemini Native Streaming ===
+// ================================
+async function callGeminiStream(
+    modelId: string,
+    messages: { role: string; content: string }[],
+    onChunk: (chunk: string) => void,
+    options?: {
+        maxTokens?: number;
+        temperature?: number;
+        systemPrompt?: string;
+    }
+): Promise<string> {
+    const contents = messages.map(m => ({
+        role: m.role === "user" ? "user" : "model",
+        parts: [{ text: m.content }],
+    }));
+
+    const config: any = {};
+    if (options?.maxTokens) config.maxOutputTokens = options.maxTokens;
+    if (options?.temperature !== undefined) config.temperature = options.temperature;
+
+    const systemInstruction = options?.systemPrompt
+        ? { parts: [{ text: options.systemPrompt }] }
+        : undefined;
+
+    const safetySettings = [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+    ];
+
+    let fullContent = "";
+    const result = await gemini.models.generateContentStream({
+        model: modelId,
+        contents,
+        config,
+        safetySettings,
+        ...(systemInstruction ? { systemInstruction } : {}),
+    } as any);
+
+    for await (const chunk of result) {
+        const text: string = chunk.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        if (text) {
+            onChunk(text);
+            fullContent += text;
+        }
+    }
+
+    return fullContent;
+}
+
+// ================================
+// === OpenRouter Streaming ===
+// ================================
+async function callOpenRouterStream(
+    modelId: string,
+    messages: { role: string; content: string }[],
+    onChunk: (chunk: string) => void,
+    options?: {
+        maxTokens?: number;
+        temperature?: number;
+        systemPrompt?: string;
+    }
+): Promise<string> {
+    const apiKey = process.env["AI-INTEGRATIONS-OPEN-ROUTER-API-KEY"];
+    if (!apiKey) throw new Error("OpenRouter API key not configured");
+
+    const body: any = {
+        model: modelId,
+        messages: options?.systemPrompt
+            ? [{ role: "system", content: options.systemPrompt }, ...messages]
+            : messages,
+        max_tokens: options?.maxTokens || 4096,
+        temperature: options?.temperature ?? 0.7,
+        stream: true,
+    };
+
+    const response = await fetch(OPENROUTER_API_URL, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost:3000",
+            "X-Title": "Metallm AI Aggregator",
+        },
+        body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("No response body for streaming");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullContent = "";
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === "data: [DONE]") continue;
+            if (!trimmed.startsWith("data: ")) continue;
+
+            try {
+                const data = JSON.parse(trimmed.slice(6));
+                const text: string = data.choices?.[0]?.delta?.content || "";
+                if (text) {
+                    onChunk(text);
+                    fullContent += text;
+                }
+            } catch {
+                // skip malformed lines
+            }
+        }
+    }
+
+    return fullContent;
+}
+
+// ================================
+// === Unified Streaming (auto-picks provider) ===
 // ================================
 export async function callModelStream(
     model: ModelConfig,
@@ -230,17 +370,11 @@ export async function callModelStream(
         systemPrompt?: string;
     }
 ): Promise<string> {
-    const fullContent = await callModel(model, messages, options);
-
-    // Stream word by word for smooth display
-    const words = fullContent.split(/\s+/);
-    for (let i = 0; i < words.length; i++) {
-        const chunk = i === words.length - 1 ? words[i] : words[i] + " ";
-        onChunk(chunk);
-        await new Promise(r => setTimeout(r, 30));
+    if (model.provider === "gemini") {
+        return callGeminiStream(model.id, messages, onChunk, options);
+    } else {
+        return callOpenRouterStream(model.id, messages, onChunk, options);
     }
-
-    return fullContent;
 }
 
 // ================================
@@ -279,32 +413,30 @@ function isObviouslyCasual(prompt: string): boolean {
 // === Robust JSON Extraction ===
 // ================================
 function extractJSON(text: string): any {
-    // Attempt 1: Direct parse after cleanup
-    let cleaned = text.trim();
-    cleaned = cleaned.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-
-    try {
-        return JSON.parse(cleaned);
-    } catch { /* continue */ }
-
-    // Attempt 2: Find JSON object in response
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    // Attempt 1: Try finding JSON object in markdown blocks
+    const jsonMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
     if (jsonMatch) {
         try {
-            // Fix common issues: single quotes → double quotes, trailing commas
-            let fixed = jsonMatch[0];
-            fixed = fixed.replace(/'/g, '"');
-            fixed = fixed.replace(/,\s*}/g, '}');
-            fixed = fixed.replace(/,\s*]/g, ']');
-            return JSON.parse(fixed);
-        } catch { /* continue */ }
+            return JSON.parse(jsonMatch[1]);
+        } catch (e) { /* continue */ }
     }
 
-    // Attempt 3: Extract fields with regex
-    const typeMatch = cleaned.match(/"type"\s*:\s*"(casual|specialized)"/);
+    // Attempt 2: Try finding brace-enclosed object
+    const braceMatch = text.match(/(\{[\s\S]*\})/);
+    if (braceMatch) {
+        try {
+            return JSON.parse(braceMatch[1]);
+        } catch (e) { /* continue */ }
+    }
+
+    // Attempt 3: Extract fields with regex (robust to truncation and newlines)
+    const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const typeMatch = cleaned.match(/"type"\s*:\s*"(casual|specialized|multi|debate)"/);
     const indexMatch = cleaned.match(/"modelIndex"\s*:\s*(\d+)/);
-    const reasonMatch = cleaned.match(/"reason"\s*:\s*"([^"]*?)"/);
-    const promptMatch = cleaned.match(/"enhancedPrompt"\s*:\s*"([\s\S]*?)(?:"\s*[,}])/);
+    // Use [\s\S] to match newlines, and (?:"|$) to handle truncation
+    const reasonMatch = cleaned.match(/"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    const promptMatch = cleaned.match(/"enhancedPrompt"\s*:\s*"((?:[^"\\]|\\.|[\r\n])*?)(?:"|$)/);
 
     if (typeMatch) {
         return {
@@ -324,6 +456,7 @@ function extractJSON(text: string): any {
 export async function analyzeAndRoute(
     prompt: string,
     models: ModelConfig[],
+    mainModel: ModelConfig
 ): Promise<{ type: "casual" | "specialized"; targetModel: ModelConfig | null; reason: string; enhancedPrompt: string }> {
 
     // ⚡ INSTANT casual detection — no API call needed
@@ -331,43 +464,46 @@ export async function analyzeAndRoute(
         console.log(`[Router] Instant casual detection: "${prompt.substring(0, 50)}"`);
         return {
             type: "casual",
-            targetModel: models[0], // Gemini Flash
-            reason: "Casual/greeting — Gemini Flash answers directly",
+            targetModel: mainModel, // User-selected model
+            reason: `Casual/greeting — ${mainModel.displayName} answers directly`,
             enhancedPrompt: prompt, // No enhancement needed for casual
         };
     }
 
     // For non-trivial prompts, use Gemini to analyze
-    const routingPrompt = `You are an AI router. Analyze this user request and decide which specialist model should handle it.
+    const routingPrompt = `
+You are an advanced AI routing system for a multi-model chat application.
+Your goal is to analyze the user's prompt and determine the best strategy:
+1. "casual": For simple greetings, small talk, or general questions (e.g., "Hi", "How are you?", "What is AI?"). Use the main model directly.
+2. "specialized": For complex tasks requiring deep reasoning, coding, math, creative writing, or specific domain knowledge. Route to a specialized model.
+3. "multi": For subjective topics, controversial questions, or requests for diverse perspectives (e.g., "Is AI good?", "Compare React and Vue"). Route to ALL models.
+4. "debate": For requests explicitly asking for a debate or argument between viewpoints.
 
-Available models:
-${models.map((m, i) => `${i + 1}. "${m.displayName}" - ${m.role}`).join("\n")}
+You must also improve the user's prompt ("enhancedPrompt") to be clearer, more detailed, and optimized for LLMs.
+For "casual" prompts, keeping the original prompt is usually fine, but you can fix grammar.
+For "specialized"/"multi"/"debate", SIGNIFICANTLY enhance the prompt to include context, persona, and specific constraints.
 
-User request: "${prompt}"
+Analyze the following user prompt:
+"${prompt}"
 
-Respond with ONLY valid JSON, no other text:
-{"type":"casual","modelIndex":1,"reason":"reason here","enhancedPrompt":"improved prompt here"}
-OR
-{"type":"specialized","modelIndex":NUMBER,"reason":"reason here","enhancedPrompt":"improved prompt here"}
+Available Models for "specialized" routing:
+${models.map((m, i) => `${i + 1}. ${m.displayName} (${m.role})`).join("\n")}
 
-Rules:
-- Greetings/casual chat/simple questions → type "casual", modelIndex 1
-- Coding/development → route to Code & Development model
-- Math/data/statistics → Data & Math model
-- Creative writing/content → Creative & Writing model
-- Deep analysis/complex reasoning → Deep Reasoning model
-- Business/strategy → Business & Strategy model
-- Technical/scientific → Technical & Scientific model
-- Educational/research → Research & Education model
-- General knowledge → General Knowledge model
-- enhancedPrompt must be an improved version of the original prompt`;
+Return a JSON object with this EXACT structure (no markdown):
+{
+  "type": "casual" | "specialized" | "multi" | "debate",
+  "modelIndex": number (1-based index of the best model, only for "specialized"),
+  "reason": "Very concise reason (max 1 sentence) for your choice.",
+  "enhancedPrompt": "The fully optimized and detailed version of the user's prompt."
+}
+`;
 
     try {
-        const response = await callGemini("gemini-3-flash-preview", [
+        const response = await callModel(mainModel, [
             { role: "user", content: routingPrompt }
-        ], { maxTokens: 500, temperature: 0.1 });
+        ], { maxTokens: 4096, temperature: 0.1 });
 
-        console.log(`[Router] Gemini raw response: ${response.substring(0, 300)}`);
+        console.log(`[Router] Model raw response: ${response.substring(0, 300)} `);
 
         const analysis = extractJSON(response);
 
@@ -382,7 +518,7 @@ Rules:
 
         return {
             type: "casual",
-            targetModel: models[0],
+            targetModel: mainModel,
             reason: analysis.reason || "General/casual query",
             enhancedPrompt: prompt, // No enhancement for casual
         };
@@ -390,8 +526,8 @@ Rules:
         console.error("Routing analysis failed:", e);
         return {
             type: "casual",
-            targetModel: models[0],
-            reason: "Routing failed, using default Gemini Flash",
+            targetModel: mainModel,
+            reason: `Routing failed, using default ${mainModel.displayName}`,
             enhancedPrompt: prompt,
         };
     }

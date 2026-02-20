@@ -16,6 +16,7 @@ interface ModelConfig {
 
 interface ModelSettingsProps {
     onClose: () => void;
+    onSave?: () => void;
 }
 
 const colorOptions = [
@@ -29,7 +30,7 @@ const colorOptions = [
     { value: "teal", label: "Teal", class: "bg-teal-500" },
 ];
 
-export function ModelSettings({ onClose }: ModelSettingsProps) {
+export function ModelSettings({ onClose, onSave }: ModelSettingsProps) {
     const [models, setModels] = useState<ModelConfig[]>([]);
     const [mainModelId, setMainModelId] = useState("");
     const [expandedModel, setExpandedModel] = useState<string | null>(null);
@@ -68,6 +69,7 @@ export function ModelSettings({ onClose }: ModelSettingsProps) {
             });
             if (res.ok) {
                 toast({ description: "✅ Model settings saved!" });
+                onSave?.();
             } else {
                 toast({ description: "Failed to save settings", variant: "destructive" });
             }
@@ -91,6 +93,7 @@ export function ModelSettings({ onClose }: ModelSettingsProps) {
             if (res.ok) {
                 await fetchModels();
                 toast({ description: "♻️ Reset to default settings" });
+                onSave?.();
             }
         } catch (e) {
             console.error("Reset failed:", e);

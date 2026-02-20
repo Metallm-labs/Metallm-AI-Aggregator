@@ -2,10 +2,75 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useEffect, useRef, useState } from "react";
 
 interface MarkdownRendererProps {
     content: string;
 }
+
+// ── Mermaid block ────────────────────────────────────────────────────────────
+function MermaidBlock({ chart }: { chart: string }) {
+    const [svg, setSvg] = useState<string>("");
+    const [error, setError] = useState<string>("");
+    const idRef = useRef(`mermaid-${Math.random().toString(36).slice(2)}`);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const mermaid = (await import("mermaid")).default;
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: "dark",
+                    themeVariables: {
+                        darkMode: true,
+                        background: "transparent",
+                        primaryColor: "#6366f1",
+                        primaryTextColor: "#e2e8f0",
+                        primaryBorderColor: "#4f46e5",
+                        lineColor: "#94a3b8",
+                        secondaryColor: "#1e293b",
+                        tertiaryColor: "#0f172a",
+                        edgeLabelBackground: "#1e293b",
+                        fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                    },
+                    flowchart: { useMaxWidth: true, htmlLabels: true },
+                });
+                const { svg: rendered } = await mermaid.render(idRef.current, chart.trim());
+                if (!cancelled) setSvg(rendered);
+            } catch (e: any) {
+                if (!cancelled) setError(e?.message || "Diagram render failed");
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [chart]);
+
+    if (error) {
+        return (
+            <div className="my-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs">
+                <p className="text-red-400 font-medium mb-1">Diagram error: {error}</p>
+                <pre className="text-red-300/60 whitespace-pre-wrap overflow-x-auto">{chart}</pre>
+            </div>
+        );
+    }
+
+    if (!svg) {
+        return (
+            <div className="my-3 p-3 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground flex items-center gap-2">
+                <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block" />
+                Rendering diagram…
+            </div>
+        );
+    }
+
+    return (
+        <div
+            className="my-4 p-4 rounded-xl bg-white/[0.03] border border-white/10 overflow-x-auto [&_svg]:max-w-full [&_svg]:h-auto"
+            dangerouslySetInnerHTML={{ __html: svg }}
+        />
+    );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
     return (
@@ -14,10 +79,17 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             components={{
                 code({ node, inline, className, children, ...props }: any) {
                     const match = /language-(\w+)/.exec(className || "");
-                    return !inline && match ? (
+                    const lang = match?.[1];
+
+                    // Mermaid diagrams
+                    if (!inline && lang === "mermaid") {
+                        return <MermaidBlock chart={String(children).replace(/\n$/, "")} />;
+                    }
+
+                    return !inline && lang ? (
                         <SyntaxHighlighter
                             style={oneDark}
-                            language={match[1]}
+                            language={lang}
                             PreTag="div"
                             className="rounded-lg !bg-black/40 !my-3"
                             {...props}

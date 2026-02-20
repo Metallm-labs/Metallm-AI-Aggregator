@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Paperclip, Send, Loader2, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon } from "lucide-react";
+import { Paperclip, Send, Loader2, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ type ChatMode = "single" | "multi" | "debate";
 
 interface ChatInputProps {
     onSend: (content: string, mode: ChatMode) => void;
+    onStop?: () => void;
     isLoading?: boolean;
     disabled?: boolean;
 }
@@ -32,7 +33,7 @@ const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; descr
     },
 };
 
-export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProps) {
     const [content, setContent] = useState("");
     const [mode, setMode] = useState<ChatMode>("single");
     const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -192,26 +193,33 @@ export function ChatInput({ onSend, isLoading, disabled }: ChatInputProps) {
                                 </span>
                             </div>
 
-                            {/* Send button */}
-                            <Button
-                                type="submit"
-                                size="icon"
-                                disabled={!content.trim() || isLoading || disabled}
-                                className={cn(
-                                    "h-9 w-9 rounded-full text-white transition-all",
-                                    content.trim() && !isLoading
-                                        ? "bg-primary hover:bg-primary/90"
-                                        : "bg-transparent hover:bg-white/5",
-                                    isLoading && "opacity-70"
-                                )}
-                                variant="ghost"
-                            >
-                                {isLoading ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
+                            {/* Send / Stop button */}
+                            {isLoading ? (
+                                <Button
+                                    type="button"
+                                    size="icon"
+                                    onClick={onStop}
+                                    className="h-9 w-9 rounded-full bg-red-500 hover:bg-red-600 text-white transition-all"
+                                    title="Stop generating"
+                                >
+                                    <Square className="w-3.5 h-3.5 fill-white" />
+                                </Button>
+                            ) : (
+                                <Button
+                                    type="submit"
+                                    size="icon"
+                                    disabled={!content.trim() || disabled}
+                                    className={cn(
+                                        "h-9 w-9 rounded-full text-white transition-all",
+                                        content.trim()
+                                            ? "bg-primary hover:bg-primary/90"
+                                            : "bg-transparent hover:bg-white/5"
+                                    )}
+                                    variant="ghost"
+                                >
                                     <Send className="w-4 h-4" />
-                                )}
-                            </Button>
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>

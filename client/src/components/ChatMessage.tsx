@@ -148,7 +148,7 @@ export function ChatMessage({
                             initial={isCollapsible ? { height: 0, opacity: 0 } : false}
                             animate={{ height: "auto", opacity: 1 }}
                             exit={isCollapsible ? { height: 0, opacity: 0 } : undefined}
-                            className="relative overflow-hidden"
+                            className={cn("relative", isCollapsible && "overflow-hidden")}
                         >
                             <div className={cn(
                                 "rounded-2xl px-4 py-3",
@@ -195,49 +195,49 @@ export function ChatMessage({
                                     </div>
                                 )}
                             </div>
-
-                            {/* Action buttons */}
-                            {!isStreaming && !isEditing && (
-                                <div className={cn(
-                                    "absolute -bottom-8 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity",
-                                    isUser ? "right-0" : "left-0"
-                                )}>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7 bg-card hover:bg-card/80 border border-white/10"
-                                        onClick={handleCopy}
-                                        title="Copy"
-                                    >
-                                        <Copy className="h-3.5 w-3.5" />
-                                    </Button>
-                                    {!isUser && onRetry && (
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 bg-card hover:bg-card/80 border border-white/10"
-                                            onClick={onRetry}
-                                            title="Try again"
-                                        >
-                                            <RotateCcw className="h-3.5 w-3.5" />
-                                        </Button>
-                                    )}
-                                    {isUser && onEdit && (
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 bg-card hover:bg-card/80 border border-white/10"
-                                            onClick={() => setIsEditing(true)}
-                                            title="Edit"
-                                        >
-                                            <Edit className="h-3.5 w-3.5" />
-                                        </Button>
-                                    )}
-                                </div>
-                            )}
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {/* Action buttons - outside overflow container so they are never clipped */}
+                {!isStreaming && !isEditing && isExpanded && (
+                    <div className={cn(
+                        "flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+                        isUser ? "justify-end" : "justify-start"
+                    )}>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 bg-card hover:bg-card/80 border border-white/10"
+                            onClick={handleCopy}
+                            title="Copy"
+                        >
+                            <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        {!isUser && onRetry && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 bg-card hover:bg-card/80 border border-white/10"
+                                onClick={onRetry}
+                                title="Try again"
+                            >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                            </Button>
+                        )}
+                        {isUser && onEdit && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 bg-card hover:bg-card/80 border border-white/10"
+                                onClick={() => setIsEditing(true)}
+                                title="Edit"
+                            >
+                                <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                        )}
+                    </div>
+                )}
 
                 {/* Collapsed preview */}
                 {!isExpanded && isCollapsible && (

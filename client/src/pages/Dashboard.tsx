@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatMessage, TypingIndicator } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { ModelSettings } from "@/components/ModelSettings";
+import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversation, useCreateConversation, useSendMessage, routePrompt, type RoutingResult } from "@/hooks/use-chat";
 import { Loader2, MessageSquare, Settings, Zap, Edit3, Send, X, Sparkles, ChevronDown } from "lucide-react";
@@ -39,14 +40,29 @@ export default function Dashboard() {
   const [pendingMode, setPendingMode] = useState<"single" | "multi" | "debate">("single");
   const [pendingContent, setPendingContent] = useState("");
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [mainModelId, setMainModelId] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+  const scrollRAFRef = useRef<number>(0);
+  const activeConvIdRef = useRef<number | null>(activeConversationId);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const { data: conversationData, isLoading: convLoading } = useConversation(activeConversationId);
   const createConversation = useCreateConversation();
   const { sendMessage } = useSendMessage();
+
+  // Keep ref in sync & clear state on switch
+  useEffect(() => {
+    activeConvIdRef.current = activeConversationId;
+    setStreamingMessages(new Map());
+    setIsStreaming(false);
+    setTypingModel(null);
+    setRoutingResult(null);
+    setIsRouting(false);
+  }, [activeConversationId]);
 
   // Fetch available models on mount
   useEffect(() => {
@@ -59,6 +75,7 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json();
         setAvailableModels(data.models);
+        setMainModelId(data.mainModelId);
       }
     } catch (e) {
       console.error("Failed to fetch models:", e);
@@ -84,14 +101,43 @@ export default function Dashboard() {
     }
   }, [conversationData]);
 
-  // Auto-scroll
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // Track whether the user is near the bottom so we know whether to auto-scroll
+  const handleScrollAreaScroll = useCallback(() => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   }, []);
 
+  // Scroll to bottom — immediate (no smooth, avoids animation fighting on every chunk)
+  // Uses RAF so multiple calls in the same frame collapse into one
+  const scrollToBottom = useCallback((force = false) => {
+    if (!force && !isAtBottomRef.current) return; // user scrolled up — don't hijack
+    cancelAnimationFrame(scrollRAFRef.current);
+    scrollRAFRef.current = requestAnimationFrame(() => {
+      const el = scrollAreaRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  }, []);
+
+  // Auto-scroll when new committed messages arrive or routing UI shows (force = always scroll)
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, streamingMessages, routingResult, scrollToBottom]);
+    scrollToBottom(true);
+  }, [messages.length, !!routingResult, scrollToBottom]); // only when list grows or routing shows
+
+  // Sticky-scroll while streaming (respects user scroll-up)
+  useEffect(() => {
+    if (isStreaming) scrollToBottom();
+  }, [streamingMessages, isStreaming, scrollToBottom]);
+
+  // Stop / cancel ongoing request
+  const handleStop = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsStreaming(false);
+    setIsRouting(false);
+    setTypingModel(null);
+    setStreamingMessages(new Map());
+  };
 
   // Handle new chat
   const handleNewChat = async () => {
@@ -104,12 +150,6 @@ export default function Dashboard() {
   // ============================================
   // === Step 1: Route prompt ===
   // ============================================
-  // Store convId in a ref so handleApproveAndSend can always access it
-  const activeConvIdRef = useRef<number | null>(activeConversationId);
-  useEffect(() => {
-    activeConvIdRef.current = activeConversationId;
-  }, [activeConversationId]);
-
   const handleSend = async (content: string, mode: "single" | "multi" | "debate") => {
     setPendingContent(content);
     setPendingMode(mode);
@@ -127,24 +167,16 @@ export default function Dashboard() {
       }
 
       if (mode === "single") {
-        // Step 1: Get routing from Gemini
         const result = await routePrompt(convId, content, mode);
         setIsRouting(false);
 
         if (result.routingType === "casual") {
-          // CASUAL → Send directly to main model, NO approval card, NO enhanced prompt
           handleApproveAndSend(content, mode, content, result.targetModel?.id, convId);
         } else {
-          // SPECIALIZED → Show approval card with enhanced prompt + model selector
           setRoutingResult(result);
           setEditedEnhancedPrompt(result.enhancedPrompt);
           setSelectedModelId(result.targetModel?.id || "");
         }
-      } else if (mode === "multi") {
-        const result = await routePrompt(convId, content, mode);
-        setIsRouting(false);
-        setRoutingResult(result);
-        setEditedEnhancedPrompt(result.enhancedPrompt);
       } else {
         const result = await routePrompt(convId, content, mode);
         setIsRouting(false);
@@ -154,7 +186,6 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Routing error:", error);
       setIsRouting(false);
-      // Fallback: send directly
       const fallbackId = activeConvIdRef.current;
       if (fallbackId) {
         handleApproveAndSend(content, mode, content, undefined, fallbackId);
@@ -177,13 +208,16 @@ export default function Dashboard() {
     setStreamingMessages(new Map());
     setShowModelDropdown(false);
 
-    // Use explicit convId first, then state, then ref
     const convId = explicitConvId || activeConversationId || activeConvIdRef.current;
     if (!convId) {
       console.error("No conversation ID available");
       setIsStreaming(false);
       return;
     }
+
+    // Create a new AbortController for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       await sendMessage(
@@ -192,6 +226,7 @@ export default function Dashboard() {
         mode,
         // onChunk
         (modelName, chunkContent) => {
+          if (activeConvIdRef.current !== convId) return;
           setStreamingMessages((prev) => {
             const newMap = new Map(prev);
             const existing = newMap.get(modelName) || { modelName, content: "", isComplete: false };
@@ -201,6 +236,7 @@ export default function Dashboard() {
         },
         // onModelStart
         (modelName) => {
+          if (activeConvIdRef.current !== convId) return;
           setTypingModel(modelName);
           setStreamingMessages((prev) => {
             const newMap = new Map(prev);
@@ -210,6 +246,7 @@ export default function Dashboard() {
         },
         // onModelComplete
         (modelName, message) => {
+          if (activeConvIdRef.current !== convId) return;
           setTypingModel(null);
           setStreamingMessages((prev) => {
             const newMap = new Map(prev);
@@ -220,32 +257,46 @@ export default function Dashboard() {
         },
         // onUserMessage
         (message) => {
+          if (activeConvIdRef.current !== convId) return;
           setMessages((prev) => [...prev, message]);
         },
         // onTitleUpdate
-        (_title) => { },
+        (newTitle) => {
+          // Title is already patched in the query cache by use-chat.ts,
+          // but we keep this callback in case we need to update local state later
+          void newTitle;
+        },
         // onDone
         () => {
+          if (activeConvIdRef.current !== convId) return;
           setIsStreaming(false);
           setTypingModel(null);
           setStreamingMessages(new Map());
         },
         enhancedPrompt,
         targetModelId,
+        abortController.signal,
       );
-    } catch (error) {
-      console.error("Send error:", error);
-      setIsStreaming(false);
+    } catch (error: any) {
+      // Ignore abort errors (user clicked stop)
+      if (error?.name !== "AbortError") {
+        console.error("Send error:", error);
+      }
+      if (activeConvIdRef.current === convId) {
+        setIsStreaming(false);
+        setTypingModel(null);
+        setStreamingMessages(new Map());
+      }
+    } finally {
+      abortControllerRef.current = null;
     }
   };
 
-  // Skip routing - send original prompt directly
   const handleSkipRouting = () => {
     setRoutingResult(null);
     handleApproveAndSend(pendingContent, pendingMode, pendingContent, undefined);
   };
 
-  // Handle retry
   const handleRetry = async (messageIndex: number) => {
     if (!activeConversationId) return;
     const userMessages = messages.slice(0, messageIndex).filter(m => m.role === "user");
@@ -265,7 +316,6 @@ export default function Dashboard() {
     }
   };
 
-  // Handle edit
   const handleEdit = async (messageId: number, newContent: string) => {
     if (!activeConversationId) return;
     try {
@@ -281,16 +331,40 @@ export default function Dashboard() {
     }
   };
 
-  // Check if multi-model response
   const isMultiModelMsg = (msg: Message) => {
     const meta = msg.metadata as any;
-    return meta?.isMultiModelResponse === true;
+    return meta?.isMultiModelResponse === true || meta?.isSummary === true;
   };
 
-  // Get currently selected model for the dropdown
   const getSelectedModel = () => {
     return availableModels.find(m => m.id === selectedModelId);
   };
+
+  // Group messages logic
+  const groupedMessages = useMemo(() => {
+    const groups: (Message | Message[])[] = [];
+    let currentMultiGroup: Message[] = [];
+
+    messages.forEach((msg) => {
+      if (isMultiModelMsg(msg) && msg.role === "assistant") {
+        currentMultiGroup.push(msg);
+      } else {
+        if (currentMultiGroup.length > 0) {
+          groups.push([...currentMultiGroup]);
+          currentMultiGroup = [];
+        }
+        groups.push(msg);
+      }
+    });
+    if (currentMultiGroup.length > 0) {
+      groups.push([...currentMultiGroup]);
+    }
+    return groups;
+  }, [messages]);
+
+  const mainModelName = useMemo(() => {
+    return availableModels.find(m => m.id === mainModelId)?.displayName || "Main AI";
+  }, [availableModels, mainModelId]);
 
   // Loading
   if (authLoading) {
@@ -313,7 +387,6 @@ export default function Dashboard() {
       />
 
       <main className="flex-1 lg:ml-64 flex flex-col h-screen">
-        {/* Top bar */}
         <div className="flex items-center justify-end px-4 py-2 border-b border-white/5">
           <button
             onClick={() => setShowSettings(!showSettings)}
@@ -324,7 +397,6 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Model Settings Panel */}
         <AnimatePresence>
           {showSettings && (
             <motion.div
@@ -333,15 +405,20 @@ export default function Dashboard() {
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden border-b border-white/5"
             >
-              <ModelSettings onClose={() => setShowSettings(false)} />
+              <ModelSettings
+                onClose={() => setShowSettings(false)}
+                onSave={fetchModels}
+              />
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Chat Messages Area */}
-        <div className="flex-1 overflow-y-auto">
+        <div
+          ref={scrollAreaRef}
+          className="flex-1 overflow-y-auto"
+          onScroll={handleScrollAreaScroll}
+        >
           {messages.length === 0 && !isStreaming && !routingResult && !isRouting ? (
-            // Empty state
             <div className="h-full flex flex-col items-center justify-center p-8">
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -353,64 +430,78 @@ export default function Dashboard() {
                 </div>
                 <h2 className="text-2xl font-bold text-white">Start a Conversation</h2>
                 <p className="text-muted-foreground max-w-md">
-                  Ask anything! <strong className="text-white">Gemini Flash</strong> handles casual chats directly.
+                  Ask anything! <strong className="text-white">{mainModelName}</strong> handles casual chats directly.
                   For specialized tasks, it routes to the best model and lets you review the enhanced prompt first.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 mt-4">
-                  {[
-                    "✨ Gemini Flash (Default)",
-                    "🔬 Deep Reasoning",
-                    "🦙 General",
-                    "💎 Technical",
-                    "⚡ Code",
-                    "🧮 Math",
-                    "✍️ Creative",
-                    "📚 Research",
-                    "📊 Business"
-                  ].map(tag => (
-                    <span key={tag} className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-muted-foreground">
-                      {tag}
+                  {availableModels.map(m => (
+                    <span key={m.id} className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-muted-foreground">
+                      {m.icon} {m.displayName} {m.id === mainModelId ? "(Main)" : ""}
                     </span>
                   ))}
-                </div>
-                <div className="mt-6 flex flex-col items-center gap-2 text-xs text-muted-foreground/60">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3 text-primary" />
-                    <span><strong className="text-primary">Casual</strong> → Gemini answers directly</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Zap className="w-3 h-3 text-yellow-400" />
-                    <span><strong className="text-yellow-400">Specialized</strong> → Routes to best model + you approve enhanced prompt</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span>👥</span>
-                    <span><strong className="text-primary">All Models</strong> → Every model responds + summary</span>
-                  </div>
                 </div>
               </motion.div>
             </div>
           ) : (
-            // Messages list
             <div className="max-w-4xl mx-auto py-4 pb-12">
               <AnimatePresence>
-                {messages.map((msg, index) => (
-                  <ChatMessage
-                    key={msg.id}
-                    role={msg.role as "user" | "assistant"}
-                    content={msg.content}
-                    modelName={msg.modelName}
-                    timestamp={new Date(msg.createdAt)}
-                    metadata={msg.metadata}
-                    isCollapsible={isMultiModelMsg(msg)}
-                    defaultCollapsed={isMultiModelMsg(msg)}
-                    onRetry={msg.role === "assistant" && !isStreaming ? () => handleRetry(index) : undefined}
-                    onEdit={msg.role === "user" && !isStreaming ? (newContent) => handleEdit(msg.id, newContent) : undefined}
-                  />
-                ))}
+                {groupedMessages.map((item, index) => {
+                  if (Array.isArray(item)) {
+                    // It's a MultiModel Group
+                    const isLastGroup = index === groupedMessages.length - 1;
+                    const streaming = isLastGroup && isStreaming ? streamingMessages : undefined;
 
-                {/* ======================================== */}
-                {/* === Routing Loading Indicator === */}
-                {/* ======================================== */}
+                    const streamingContentMap = streaming
+                      ? new Map(Array.from(streaming.entries()).map(([k, v]) => [k, v.content]))
+                      : undefined;
+
+                    return (
+                      <MultiModelResponse
+                        key={`multi-${index}`}
+                        messages={item}
+                        streamingContent={streamingContentMap}
+                      />
+                    );
+                  } else {
+                    const msg = item;
+                    return (
+                      <ChatMessage
+                        key={msg.id}
+                        role={msg.role as "user" | "assistant"}
+                        content={msg.content}
+                        modelName={msg.modelName}
+                        timestamp={new Date(msg.createdAt)}
+                        metadata={msg.metadata}
+                        onRetry={msg.role === "assistant" && !isStreaming ? () => handleRetry(index) : undefined}
+                        onEdit={msg.role === "user" && !isStreaming ? (newContent) => handleEdit(msg.id, newContent) : undefined}
+                      />
+                    );
+                  }
+                })}
+
+                {/* If we are streaming but NO messages are in the last group yet */}
+                {isStreaming && (groupedMessages.length === 0 || !Array.isArray(groupedMessages[groupedMessages.length - 1])) && (
+                  (streamingMessages.size > 1 || pendingMode === "multi") ? (
+                    <MultiModelResponse
+                      key="streaming-multi"
+                      messages={[]}
+                      streamingContent={new Map(Array.from(streamingMessages.entries()).map(([k, v]) => [k, v.content]))}
+                    />
+                  ) : (
+                    // Single model streaming
+                    Array.from(streamingMessages.values()).map((sm) => (
+                      <ChatMessage
+                        key={`streaming-${sm.modelName}`}
+                        role="assistant"
+                        content={sm.content}
+                        modelName={sm.modelName}
+                        isStreaming
+                      />
+                    ))
+                  )
+                )}
+
+                {/* Routing / Routing Result UI */}
                 {isRouting && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -419,25 +510,17 @@ export default function Dashboard() {
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                      <span className="text-sm font-medium text-white">Gemini Flash is analyzing your prompt...</span>
+                      <span className="text-sm font-medium text-white">{mainModelName} is analyzing your prompt...</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Deciding if this needs a specialist model or if Gemini can handle it directly.
-                    </p>
                   </motion.div>
                 )}
 
-                {/* ======================================== */}
-                {/* === Enhanced Prompt Approval Card === */}
-                {/* === (Only shown for specialized routing) === */}
-                {/* ======================================== */}
                 {routingResult && !isStreaming && (
                   <motion.div
                     initial={{ opacity: 0, y: 10, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     className="mx-4 my-4 rounded-xl bg-gradient-to-br from-card to-card/80 border border-white/10 overflow-hidden shadow-xl shadow-primary/5"
                   >
-                    {/* Routing Header */}
                     <div className="px-4 py-3 bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-white/10">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
@@ -451,7 +534,6 @@ export default function Dashboard() {
                           </span>
                         </div>
 
-                        {/* Model Selector (Single mode only) */}
                         {routingResult.routingType === "specialized" && (
                           <div className="relative">
                             <button
@@ -461,12 +543,9 @@ export default function Dashboard() {
                               <span className="text-lg">{getSelectedModel()?.icon || "🤖"}</span>
                               <div className="text-left">
                                 <div className="text-xs font-medium text-white">{getSelectedModel()?.displayName || "Select Model"}</div>
-                                <div className="text-[10px] text-muted-foreground">{getSelectedModel()?.role}</div>
                               </div>
                               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
                             </button>
-
-                            {/* Model Dropdown */}
                             <AnimatePresence>
                               {showModelDropdown && (
                                 <motion.div
@@ -493,9 +572,6 @@ export default function Dashboard() {
                                           <div className="text-xs font-medium text-white">{model.displayName}</div>
                                           <div className="text-[10px] text-muted-foreground">{model.role}</div>
                                         </div>
-                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-muted-foreground/60">
-                                          {model.provider === "gemini" ? "Gemini" : "OpenRouter"}
-                                        </span>
                                         {selectedModelId === model.id && (
                                           <span className="text-primary text-xs">✓</span>
                                         )}
@@ -508,7 +584,6 @@ export default function Dashboard() {
                           </div>
                         )}
                       </div>
-
                       {routingResult.reason && (
                         <p className="text-[11px] text-muted-foreground/70 mt-1.5 italic">
                           💡 {routingResult.reason}
@@ -516,22 +591,18 @@ export default function Dashboard() {
                       )}
                     </div>
 
-                    {/* Enhanced Prompt Editor */}
                     <div className="p-4">
                       <div className="flex items-center gap-2 mb-2">
                         <Edit3 className="w-3.5 h-3.5 text-primary" />
                         <span className="text-xs font-medium text-primary">Enhanced Prompt</span>
                         <span className="text-[10px] text-muted-foreground/50">(edit before sending)</span>
                       </div>
-
                       <textarea
                         value={editedEnhancedPrompt}
                         onChange={(e) => setEditedEnhancedPrompt(e.target.value)}
                         className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none font-normal leading-relaxed"
                         rows={Math.min(8, Math.max(3, editedEnhancedPrompt.split("\n").length + 1))}
                       />
-
-                      {/* Original prompt comparison */}
                       <div className="mt-2 mb-3">
                         <div className="text-[10px] text-muted-foreground/40 mb-1">Your original prompt:</div>
                         <div className="text-xs text-muted-foreground/50 italic bg-white/[0.03] rounded px-2 py-1.5 border border-white/5">
@@ -539,7 +610,6 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* Multi-model list */}
                       {routingResult.routingType === "multi" && routingResult.models && (
                         <div className="mb-3 pb-3 border-b border-white/5">
                           <div className="text-xs text-muted-foreground/60 mb-2">Will send to {routingResult.models.length} models:</div>
@@ -554,7 +624,6 @@ export default function Dashboard() {
                         </div>
                       )}
 
-                      {/* Action Buttons */}
                       <div className="flex items-center gap-2 justify-end">
                         <button
                           onClick={() => {
@@ -591,31 +660,17 @@ export default function Dashboard() {
                   </motion.div>
                 )}
 
-                {/* Streaming messages */}
-                {Array.from(streamingMessages.values()).map((sm) => (
-                  <ChatMessage
-                    key={`streaming-${sm.modelName}`}
-                    role="assistant"
-                    content={sm.content}
-                    modelName={sm.modelName}
-                    isStreaming
-                  />
-                ))}
-
-                {/* Typing indicator */}
-                {typingModel && !streamingMessages.has(typingModel) && (
+                {typingModel && !streamingMessages.has(typingModel) && (streamingMessages.size === 0) && (
                   <TypingIndicator modelName={typingModel} />
                 )}
               </AnimatePresence>
-
-              <div ref={messagesEndRef} />
             </div>
           )}
         </div>
 
-        {/* Chat Input */}
         <ChatInput
           onSend={handleSend}
+          onStop={handleStop}
           isLoading={isStreaming || isRouting}
           disabled={convLoading}
         />

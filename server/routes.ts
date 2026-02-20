@@ -173,8 +173,8 @@ export async function registerRoutes(
       }
 
       if (mode === "single") {
-        // Analyze and route using Gemini
-        const routing = await analyzeAndRoute(content, currentModels);
+        // Analyze and route using main model
+        const routing = await analyzeAndRoute(content, currentModels, getMainModel());
 
         res.json({
           routingType: routing.type,
@@ -199,9 +199,9 @@ Return ONLY the enhanced prompt text, nothing else.`;
 
         let enhancedPrompt = content;
         try {
-          enhancedPrompt = await callGemini("gemini-3-flash-preview", [
+          enhancedPrompt = await callModel(getMainModel(), [
             { role: "user", content: enhancePrompt }
-          ], { maxTokens: 300, temperature: 0.3 });
+          ], { maxTokens: 1000, temperature: 0.3 });
           // Clean up any quotes
           enhancedPrompt = enhancedPrompt.replace(/^["']|["']$/g, "").trim();
         } catch (e) {
@@ -224,7 +224,7 @@ Return ONLY the enhanced prompt text, nothing else.`;
         // Debate mode - just enhance
         let enhancedPrompt = content;
         try {
-          const result = await callGemini("gemini-3-flash-preview", [
+          const result = await callModel(getMainModel(), [
             { role: "user", content: `Rephrase this as a clear debate topic: "${content}". Return ONLY the topic, nothing else.` }
           ], { maxTokens: 100, temperature: 0.3 });
           enhancedPrompt = result.replace(/^["']|["']$/g, "").trim() || content;
@@ -263,11 +263,15 @@ Return ONLY the enhanced prompt text, nothing else.`;
       // The prompt to actually send to the model (user-approved enhanced prompt)
       const promptToSend = enhancedPrompt || content;
 
-      // Save user message (always save the original content the user sees)
+      // Check message count BEFORE saving the user message (so 0 = first ever message)
+      const existingMessages = await storage.getMessages(conversationId);
+      const isFirstMessage = existingMessages.length === 0;
+
+      // Save user message (store the enhanced prompt if available, replacing the original)
       const userMessage = await storage.addMessage({
         conversationId,
         role: "user",
-        content,
+        content: promptToSend,
         modelName: null,
       });
 
@@ -286,9 +290,31 @@ Return ONLY the enhanced prompt text, nothing else.`;
         content: `${m.modelName ? `[${m.modelName}]: ` : ""}${m.content}`
       }));
 
+      // =============================================
+      // === TITLE: fire concurrently on 1st message ===
+      // =============================================
+      let titlePromise: Promise<void> = Promise.resolve();
+      if (isFirstMessage) {
+        titlePromise = (async () => {
+          try {
+            const rawTitle = await callModel(getMainModel(), [
+              { role: "user", content: `Generate a very short title (3-5 words max) for a conversation that starts with this message: "${content}". Return ONLY the title text, no quotes, no punctuation at the end.` }
+            ], { maxTokens: 30, temperature: 0.3 });
+            const cleanTitle = rawTitle.replace(/["'.!\n?]/g, "").trim().slice(0, 50);
+            console.log(`[Title] Generated: "${cleanTitle}" for conv ${conversationId}`);
+            if (cleanTitle) {
+              await storage.updateConversationTitle(conversationId, cleanTitle);
+              sendSSE(res, "title_update", { title: cleanTitle });
+            }
+          } catch (e) {
+            console.error("Title generation error:", e);
+          }
+        })();
+      }
+
       // ===========================================
       // === SINGLE MODE ===
-      // ===========================================
+      // ============================================
       if (mode === "single") {
         // Find target model
         let targetModel: ModelConfig;
@@ -337,11 +363,12 @@ Return ONLY the enhanced prompt text, nothing else.`;
         // ===========================================
         // === MULTI MODE ===
         // ===========================================
+        // ===========================================
+        // === MULTI MODE ===
+        // ===========================================
       } else if (mode === "multi") {
         const modelResponses: { modelName: string; content: string; role: string }[] = [];
-
-        // Send to ALL models
-        for (const model of currentModels) {
+        const promises = currentModels.map(async (model) => {
           sendSSE(res, "model_start", { modelName: model.displayName, role: model.role, provider: model.provider });
 
           let fullContent = "";
@@ -354,7 +381,7 @@ Return ONLY the enhanced prompt text, nothing else.`;
               },
               {
                 systemPrompt: model.systemPrompt,
-                maxTokens: 1024,
+                maxTokens: 4096,
               }
             );
           } catch (e) {
@@ -382,7 +409,9 @@ Return ONLY the enhanced prompt text, nothing else.`;
             },
           });
           sendSSE(res, "model_complete", { modelName: model.displayName, message: assistantMessage });
-        }
+        });
+
+        await Promise.all(promises);
 
         // Main model (Gemini) summarizes all responses
         const summaryModelName = "✨ Summary";
@@ -397,7 +426,7 @@ Return ONLY the enhanced prompt text, nothing else.`;
 User Query: "${content}"
 
 Model Responses:
-${modelResponses.map(r => `\n--- ${r.modelName} (${r.role}) ---\n${r.content.substring(0, 800)}`).join("\n")}
+${modelResponses.map(r => `\n--- ${r.modelName} (${r.role}) ---\n${r.content.substring(0, 1500)}`).join("\n")}
 
 Provide a well-structured summary. Do NOT just repeat - synthesize and add value.`;
 
@@ -410,7 +439,7 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
             (chunk) => {
               sendSSE(res, "chunk", { modelName: summaryModelName, content: chunk });
             },
-            { maxTokens: 2048 }
+            { maxTokens: 4096 }
           );
         } catch (e) {
           console.error("Summary error:", e);
@@ -475,21 +504,8 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
         }
       }
 
-      // Auto-generate title for first message
-      if (history.length <= 1) {
-        try {
-          const title = await callGemini("gemini-3-flash-preview", [
-            { role: "user", content: `Generate a very short title (3-5 words) for a conversation starting with: "${content}". Return ONLY the title.` }
-          ], { maxTokens: 30, temperature: 0.3 });
-          let cleanTitle = title.replace(/[".\n]/g, "").trim().slice(0, 50);
-          if (cleanTitle) {
-            await storage.updateConversationTitle(conversationId, cleanTitle);
-            sendSSE(res, "title_update", { title: cleanTitle });
-          }
-        } catch (e) {
-          console.error("Title generation error:", e);
-        }
-      }
+      // Wait for parallel title generation to finish before closing SSE
+      await titlePromise;
 
       sendSSE(res, "done", {});
       res.end();

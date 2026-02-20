@@ -1,10 +1,30 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Conversation, Message, ConversationWithMessages } from "@shared/schema";
 
+// Helper: directly patch a conversation's title in the cache
+function patchConversationTitle(
+    queryClient: ReturnType<typeof useQueryClient>,
+    conversationId: number,
+    title: string
+) {
+    // Patch the conversation list
+    queryClient.setQueryData<Conversation[]>(
+        ["/api/chat/conversations"],
+        (old) => old?.map((c) => c.id === conversationId ? { ...c, title } : c) ?? old
+    );
+    // Patch the individual conversation cache too
+    queryClient.setQueryData<ConversationWithMessages>(
+        ["/api/chat/conversations", conversationId],
+        (old) => old ? { ...old, title } : old
+    );
+}
+
 // GET /api/chat/conversations
 export function useConversations() {
     return useQuery<Conversation[]>({
         queryKey: ["/api/chat/conversations"],
+        staleTime: 1000 * 15,       // treat as fresh for 15s to avoid mid-stream refetches
+        refetchOnWindowFocus: false, // don't refetch just because window gets focus
         queryFn: async () => {
             const res = await fetch("/api/chat/conversations", { credentials: "include" });
             if (res.status === 401) throw new Error("Unauthorized");
@@ -129,12 +149,14 @@ export function useSendMessage() {
         // Optional: pass the enhanced prompt + target model from routing
         enhancedPrompt?: string,
         targetModelId?: string,
+        signal?: AbortSignal,
     ) => {
         const res = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ content, mode, enhancedPrompt, targetModelId }),
             credentials: "include",
+            signal,
         });
 
         if (!res.ok) {
@@ -156,39 +178,43 @@ export function useSendMessage() {
             const lines = buffer.split("\n");
             buffer = lines.pop() || "";
 
+            // Proper SSE state-machine: accumulate event/data pairs line by line
+            let currentEvent = "";
             for (const line of lines) {
                 if (line.startsWith("event: ")) {
-                    const eventType = line.slice(7);
-                    const nextLine = lines[lines.indexOf(line) + 1];
-                    if (nextLine?.startsWith("data: ")) {
-                        try {
-                            const data = JSON.parse(nextLine.slice(6));
-
-                            switch (eventType) {
-                                case "user_message":
-                                    onUserMessage(data);
-                                    break;
-                                case "model_start":
-                                    onModelStart(data.modelName, data);
-                                    break;
-                                case "chunk":
-                                    onChunk(data.modelName, data.content);
-                                    break;
-                                case "model_complete":
-                                    onModelComplete(data.modelName, data.message);
-                                    break;
-                                case "title_update":
-                                    onTitleUpdate?.(data.title);
-                                    queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations"] });
-                                    break;
-                                case "done":
-                                    onDone?.();
-                                    break;
-                            }
-                        } catch (e) {
-                            console.error("Error parsing SSE data:", e);
+                    currentEvent = line.slice(7).trim();
+                } else if (line.startsWith("data: ") && currentEvent) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        switch (currentEvent) {
+                            case "user_message":
+                                onUserMessage(data);
+                                break;
+                            case "model_start":
+                                onModelStart(data.modelName, data);
+                                break;
+                            case "chunk":
+                                onChunk(data.modelName, data.content);
+                                break;
+                            case "model_complete":
+                                onModelComplete(data.modelName, data.message);
+                                break;
+                            case "title_update":
+                                onTitleUpdate?.(data.title);
+                                patchConversationTitle(queryClient, conversationId, data.title);
+                                break;
+                            case "done":
+                                onDone?.();
+                                break;
                         }
+                    } catch (e) {
+                        console.error("Error parsing SSE data:", e);
                     }
+                    // Reset after consuming the data line
+                    currentEvent = "";
+                } else if (line === "") {
+                    // blank line resets (SSE spec: dispatch the event)
+                    currentEvent = "";
                 }
             }
         }
