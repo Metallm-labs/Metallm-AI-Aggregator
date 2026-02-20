@@ -50,18 +50,33 @@ export default function Dashboard() {
   const activeConvIdRef = useRef<number | null>(activeConversationId);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Persists streaming state per conv so switching away & back restores it
+  const streamingStateRef = useRef<Map<number, {
+    messages: Map<string, StreamingMessage>;
+    isStreaming: boolean;
+    typingModel: string | null;
+  }>>(new Map());
+
   const { data: conversationData, isLoading: convLoading } = useConversation(activeConversationId);
   const createConversation = useCreateConversation();
   const { sendMessage } = useSendMessage();
 
-  // Keep ref in sync & clear state on switch
+  // Keep ref in sync; restore saved streaming state when switching back to a conv
   useEffect(() => {
     activeConvIdRef.current = activeConversationId;
-    setStreamingMessages(new Map());
-    setIsStreaming(false);
-    setTypingModel(null);
     setRoutingResult(null);
     setIsRouting(false);
+
+    if (activeConversationId !== null) {
+      const saved = streamingStateRef.current.get(activeConversationId);
+      setStreamingMessages(saved?.messages ?? new Map());
+      setIsStreaming(saved?.isStreaming ?? false);
+      setTypingModel(saved?.typingModel ?? null);
+    } else {
+      setStreamingMessages(new Map());
+      setIsStreaming(false);
+      setTypingModel(null);
+    }
   }, [activeConversationId]);
 
   // Fetch available models on mount
@@ -83,8 +98,9 @@ export default function Dashboard() {
   };
 
   // Handle conversation deletion
-  const handleConversationDeleted = (deletedId: number) => {
-    if (activeConversationId === deletedId) {
+  const handleConversationDeleted = useCallback((deletedId: number) => {
+    streamingStateRef.current.delete(deletedId);
+    if (activeConvIdRef.current === deletedId) {
       setActiveConversationId(null);
       setMessages([]);
       setStreamingMessages(new Map());
@@ -92,7 +108,7 @@ export default function Dashboard() {
       setTypingModel(null);
       setRoutingResult(null);
     }
-  };
+  }, []);
 
   // Sync messages
   useEffect(() => {
@@ -130,22 +146,25 @@ export default function Dashboard() {
   }, [streamingMessages, isStreaming, scrollToBottom]);
 
   // Stop / cancel ongoing request
-  const handleStop = () => {
+  const handleStop = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    if (activeConvIdRef.current !== null) {
+      streamingStateRef.current.delete(activeConvIdRef.current);
+    }
     setIsStreaming(false);
     setIsRouting(false);
     setTypingModel(null);
     setStreamingMessages(new Map());
-  };
+  }, []);
 
   // Handle new chat
-  const handleNewChat = async () => {
+  const handleNewChat = useCallback(() => {
     setActiveConversationId(null);
     setMessages([]);
     setStreamingMessages(new Map());
     setRoutingResult(null);
-  };
+  }, []);
 
   // ============================================
   // === Step 1: Route prompt ===
@@ -223,6 +242,9 @@ export default function Dashboard() {
       return;
     }
 
+    // Initialise per-conv streaming state so it survives navigation away & back
+    streamingStateRef.current.set(convId, { messages: new Map(), isStreaming: true, typingModel: null });
+
     // Create a new AbortController for this request
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -232,54 +254,61 @@ export default function Dashboard() {
         convId,
         originalContent,
         mode,
-        // onChunk
+        // onChunk — always update the ref; only update React state when this conv is active
         (modelName, chunkContent) => {
-          if (activeConvIdRef.current !== convId) return;
-          setStreamingMessages((prev) => {
-            const newMap = new Map(prev);
-            const existing = newMap.get(modelName) || { modelName, content: "", isComplete: false };
-            newMap.set(modelName, { ...existing, content: existing.content + chunkContent });
-            return newMap;
-          });
+          const s = streamingStateRef.current.get(convId);
+          if (!s) return;
+          const newMessages = new Map(s.messages);
+          const existing = newMessages.get(modelName) ?? { modelName, content: "", isComplete: false };
+          newMessages.set(modelName, { ...existing, content: existing.content + chunkContent });
+          streamingStateRef.current.set(convId, { ...s, messages: newMessages });
+          if (activeConvIdRef.current === convId) {
+            setStreamingMessages(new Map(newMessages));
+          }
         },
         // onModelStart
         (modelName) => {
-          if (activeConvIdRef.current !== convId) return;
-          setTypingModel(modelName);
-          setStreamingMessages((prev) => {
-            const newMap = new Map(prev);
-            newMap.set(modelName, { modelName, content: "", isComplete: false });
-            return newMap;
-          });
+          const s = streamingStateRef.current.get(convId) ?? { messages: new Map(), isStreaming: true, typingModel: null };
+          const newMessages = new Map(s.messages);
+          newMessages.set(modelName, { modelName, content: "", isComplete: false });
+          streamingStateRef.current.set(convId, { ...s, typingModel: modelName, messages: newMessages });
+          if (activeConvIdRef.current === convId) {
+            setTypingModel(modelName);
+            setStreamingMessages(new Map(newMessages));
+          }
         },
         // onModelComplete
         (modelName, message) => {
-          if (activeConvIdRef.current !== convId) return;
-          setTypingModel(null);
-          setStreamingMessages((prev) => {
-            const newMap = new Map(prev);
-            newMap.delete(modelName);
-            return newMap;
-          });
-          setMessages((prev) => [...prev, message]);
+          const s = streamingStateRef.current.get(convId);
+          if (s) {
+            const newMessages = new Map(s.messages);
+            newMessages.delete(modelName);
+            streamingStateRef.current.set(convId, { ...s, typingModel: null, messages: newMessages });
+            if (activeConvIdRef.current === convId) {
+              setTypingModel(null);
+              setStreamingMessages(new Map(newMessages));
+            }
+          }
+          if (activeConvIdRef.current === convId) {
+            setMessages((prev) => [...prev, message]);
+          }
         },
         // onUserMessage
         (message) => {
-          if (activeConvIdRef.current !== convId) return;
-          setMessages((prev) => [...prev, message]);
+          if (activeConvIdRef.current === convId) {
+            setMessages((prev) => [...prev, message]);
+          }
         },
-        // onTitleUpdate
-        (newTitle) => {
-          // Title is already patched in the query cache by use-chat.ts,
-          // but we keep this callback in case we need to update local state later
-          void newTitle;
-        },
+        // onTitleUpdate — already patched in cache by use-chat.ts
+        (newTitle) => { void newTitle; },
         // onDone
         () => {
-          if (activeConvIdRef.current !== convId) return;
-          setIsStreaming(false);
-          setTypingModel(null);
-          setStreamingMessages(new Map());
+          streamingStateRef.current.delete(convId);
+          if (activeConvIdRef.current === convId) {
+            setIsStreaming(false);
+            setTypingModel(null);
+            setStreamingMessages(new Map());
+          }
         },
         enhancedPrompt,
         targetModelId,
@@ -290,6 +319,7 @@ export default function Dashboard() {
       if (error?.name !== "AbortError") {
         console.error("Send error:", error);
       }
+      streamingStateRef.current.delete(convId);
       if (activeConvIdRef.current === convId) {
         setIsStreaming(false);
         setTypingModel(null);

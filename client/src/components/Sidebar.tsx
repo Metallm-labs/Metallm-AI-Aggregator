@@ -3,7 +3,7 @@ import { PlusCircle, History, Settings, LogOut, Hexagon, Brain, Menu, MessageSqu
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { cn } from "@/lib/utils";
 import { useConversations, useDeleteConversation } from "@/hooks/use-chat";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,7 +15,7 @@ interface SidebarProps {
   onConversationDeleted?: (id: number) => void;
 }
 
-export function Sidebar({ activeConversationId, onSelectConversation, onNewChat, onConversationDeleted }: SidebarProps) {
+export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectConversation, onNewChat, onConversationDeleted }: SidebarProps) {
   const [location] = useLocation();
   const { logout, user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -202,4 +202,4 @@ export function Sidebar({ activeConversationId, onSelectConversation, onNewChat,
       </div>
     </>
   );
-}
+});
