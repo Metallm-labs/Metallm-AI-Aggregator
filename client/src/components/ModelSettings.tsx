@@ -4,6 +4,7 @@ import { X, Save, RotateCcw, ChevronDown, ChevronUp, Settings2 } from "lucide-re
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { ModelIcon } from "@/components/ModelIcon";
 
 interface ModelConfig {
     id: string;
@@ -11,6 +12,7 @@ interface ModelConfig {
     role: string;
     systemPrompt: string;
     icon: string;
+    iconUrl?: string;
     color: string;
 }
 
@@ -172,7 +174,7 @@ export function ModelSettings({ onClose, onSave }: ModelSettingsProps) {
                     >
                         {models.map(m => (
                             <option key={m.id} value={m.id}>
-                                {m.icon} {m.displayName} ({m.role})
+                                {m.displayName} ({m.role})
                             </option>
                         ))}
                     </select>
@@ -191,7 +193,7 @@ export function ModelSettings({ onClose, onSave }: ModelSettingsProps) {
                                 className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-white/5 transition-colors"
                                 onClick={() => setExpandedModel(expandedModel === model.id ? null : model.id)}
                             >
-                                <span className="text-lg">{model.icon}</span>
+                                <span className="text-lg flex-shrink-0"><ModelIcon modelName={model.displayName} iconUrl={model.iconUrl} size={22} /></span>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm font-medium text-white truncate">{model.displayName}</span>

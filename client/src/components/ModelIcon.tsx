@@ -1,7 +1,11 @@
-// Brand-accurate SVG icons for each AI model provider
+// Brand-accurate icons for each AI model provider.
+// When a model provides an iconUrl (sourced from server/models.json),
+// we render it as an <img>. Otherwise we fall back to the local SVGs below.
 
 interface ModelIconProps {
     modelName: string;
+    /** Direct URL to the brand icon image (e.g. SimpleIcons CDN SVG) */
+    iconUrl?: string;
     className?: string;
     size?: number;
 }
@@ -193,7 +197,30 @@ const MODEL_ICON_MAP: Record<string, (size: number) => JSX.Element> = {
     "GLM": (s) => <GLMIcon size={s} />,
 };
 
-export function ModelIcon({ modelName, size = 20, className }: ModelIconProps) {
+export function ModelIcon({ modelName, iconUrl, size = 20, className }: ModelIconProps) {
+    // Prefer the official brand icon URL from models.json
+    if (iconUrl) {
+        return (
+            <span className={className} style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
+                <img
+                    src={iconUrl}
+                    alt={modelName}
+                    width={size}
+                    height={size}
+                    style={{ width: size, height: size, objectFit: "contain", display: "block" }}
+                    onError={(e) => {
+                        // On load failure fall back to SVG
+                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                        (e.currentTarget.nextSibling as HTMLElement | null)?.style.removeProperty("display");
+                    }}
+                />
+                {/* Hidden SVG fallback revealed only if the img fails to load */}
+                <span style={{ display: "none" }}>{MODEL_ICON_MAP[modelName]?.(size) ?? <DefaultModelIcon size={size} />}</span>
+            </span>
+        );
+    }
+
+    // No URL provided — use local SVG map
     const iconFn = MODEL_ICON_MAP[modelName];
     if (iconFn) {
         return (

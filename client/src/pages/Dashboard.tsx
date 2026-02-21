@@ -4,6 +4,7 @@ import { ChatMessage, TypingIndicator } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
+import { ModelIcon } from "@/components/ModelIcon";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversation, useCreateConversation, useSendMessage, routePrompt, type RoutingResult } from "@/hooks/use-chat";
 import { Loader2, MessageSquare, Settings, Zap, Edit3, Send, X, Sparkles, ChevronDown, Globe, Search } from "lucide-react";
@@ -32,6 +33,7 @@ interface AvailableModel {
   displayName: string;
   role: string;
   icon: string;
+  iconUrl?: string;
   provider: string;
 }
 
@@ -539,8 +541,9 @@ export default function Dashboard() {
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 mt-4">
                   {availableModels.map(m => (
-                    <span key={m.id} className="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-muted-foreground">
-                      {m.icon} {m.displayName} {m.id === mainModelId ? "(Main)" : ""}
+                    <span key={m.id} className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-muted-foreground">
+                      <ModelIcon modelName={m.displayName} iconUrl={m.iconUrl} size={14} />
+                      {m.displayName} {m.id === mainModelId ? "(Main)" : ""}
                     </span>
                   ))}
                 </div>
@@ -645,7 +648,7 @@ export default function Dashboard() {
                               onClick={() => setShowModelDropdown(!showModelDropdown)}
                               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-sm"
                             >
-                              <span className="text-lg">{getSelectedModel()?.icon || "🤖"}</span>
+                              <ModelIcon modelName={getSelectedModel()?.displayName || ""} iconUrl={getSelectedModel()?.iconUrl} size={18} />
                               <div className="text-left">
                                 <div className="text-xs font-medium text-white">{getSelectedModel()?.displayName || "Select Model"}</div>
                               </div>
@@ -672,7 +675,7 @@ export default function Dashboard() {
                                           : "hover:bg-white/5 border border-transparent"
                                           }`}
                                       >
-                                        <span className="text-lg">{model.icon}</span>
+                                        <ModelIcon modelName={model.displayName} iconUrl={model.iconUrl} size={20} />
                                         <div className="flex-1 min-w-0">
                                           <div className="text-xs font-medium text-white">{model.displayName}</div>
                                           <div className="text-[10px] text-muted-foreground">{model.role}</div>

@@ -1,5 +1,7 @@
 // OpenRouter + Gemini API integration for multi-model AI aggregation
+// Model definitions are in server/models.json — edit that file to add/change models.
 import { GoogleGenAI } from "@google/genai";
+import modelsJson from "./models.json";
 
 // ================================
 // === Web Search Types ===
@@ -215,108 +217,24 @@ const gemini = new GoogleGenAI({
     },
 });
 
-export type ModelProvider = "gemini" | "openrouter";
+export type ModelProvider = "gemini" | "openrouter" | "openai" | "anthropic" | "grok";
 
 export interface ModelConfig {
-    id: string;           // Model ID (Gemini model name OR OpenRouter model ID)
-    displayName: string;  // Friendly name
-    role: string;         // Role/specialty
-    systemPrompt: string; // Default system prompt
-    icon: string;         // Emoji icon
-    color: string;        // CSS color identifier
-    provider: ModelProvider; // Which API to use
+    id: string;
+    displayName: string;
+    role: string;
+    systemPrompt: string;
+    icon: string;
+    /** URL to the brand icon image (e.g. SimpleIcons CDN SVG) */
+    iconUrl?: string;
+    color: string;
+    provider: ModelProvider;
 }
 
-// Default model configurations with roles and system prompts
-export const DEFAULT_MODELS: ModelConfig[] = [
-    // ===== GEMINI MODELS (Native API) =====
-    {
-        id: "gemini-2.5-flash",
-        displayName: "Gemini Flash",
-        role: "Main AI Assistant",
-        systemPrompt: "You are Gemini Flash, Google's fastest and most capable AI model. You provide intelligent, accurate, and well-structured responses. You excel at understanding context, following instructions precisely, and generating high-quality content across all domains.",
-        icon: "✨",
-        color: "blue",
-        provider: "gemini",
-    },
-
-    // ===== OPENROUTER MODELS (Free Tier) =====
-    {
-        id: "deepseek/deepseek-r1-0528:free",
-        displayName: "DeepSeek R1",
-        role: "Deep Reasoning & Analysis",
-        systemPrompt: "You are DeepSeek R1, an expert in deep reasoning, logical analysis, and complex problem solving. You excel at breaking down intricate problems into clear steps, providing thorough analysis with well-reasoned conclusions. Always think step by step and provide detailed explanations.",
-        icon: "🔬",
-        color: "purple",
-        provider: "openrouter",
-    },
-    {
-        id: "meta-llama/llama-3.3-70b-instruct:free",
-        displayName: "LLaMA 3.3",
-        role: "General Knowledge & Conversation",
-        systemPrompt: "You are LLaMA 3.3, a highly capable general-purpose AI assistant. You excel at providing clear, accurate, and helpful responses across a wide range of topics. You are friendly, approachable, and always aim to be helpful while being honest about your limitations.",
-        icon: "🦙",
-        color: "green",
-        provider: "openrouter",
-    },
-    {
-        id: "google/gemma-3-27b-it:free",
-        displayName: "Gemma 3 27B",
-        role: "Technical & Scientific",
-        systemPrompt: "You are Gemma 3 27B, Google's advanced AI model specializing in technical and scientific topics. You provide precise, well-structured responses with a focus on accuracy and technical depth. You are excellent at explaining complex concepts clearly and providing code examples when relevant.",
-        icon: "💎",
-        color: "indigo",
-        provider: "openrouter",
-    },
-    {
-        id: "mistralai/devstral-2512:free",
-        displayName: "Devstral",
-        role: "Code & Development",
-        systemPrompt: "You are Devstral by Mistral AI, a specialized coding and software development assistant. You excel at writing clean, efficient code, debugging, explaining software architecture, and providing best practices. Always include code examples and explain your reasoning.",
-        icon: "⚡",
-        color: "cyan",
-        provider: "openrouter",
-    },
-    {
-        id: "nvidia/nemotron-3-nano-30b-a3b:free",
-        displayName: "Nemotron",
-        role: "Data & Math",
-        systemPrompt: "You are Nemotron by NVIDIA, an AI model specializing in data analysis, mathematics, statistics, and computational tasks. You provide precise numerical analysis, mathematical proofs, and data-driven insights. Always show your work and calculations.",
-        icon: "🧮",
-        color: "lime",
-        provider: "openrouter",
-    },
-    {
-        id: "qwen/qwen-2.5-vl-7b-instruct:free",
-        displayName: "Qwen 2.5",
-        role: "Creative & Writing",
-        systemPrompt: "You are Qwen 2.5, an AI model with exceptional creative writing and content generation abilities. You excel at crafting engaging narratives, marketing copy, poetry, and creative content. Your writing style is vivid, engaging, and adaptable to different tones and formats.",
-        icon: "✍️",
-        color: "pink",
-        provider: "openrouter",
-    },
-    {
-        id: "google/gemma-3-12b-it:free",
-        displayName: "Gemma 3 12B",
-        role: "Research & Education",
-        systemPrompt: "You are Gemma 3 12B, focused on research and educational content. You excel at explaining complex topics in an accessible way, providing well-cited information, and creating educational content. You adapt your explanations to different knowledge levels.",
-        icon: "📚",
-        color: "amber",
-        provider: "openrouter",
-    },
-    {
-        id: "z-ai/glm-4.5-air:free",
-        displayName: "GLM 4.5",
-        role: "Business & Strategy",
-        systemPrompt: "You are GLM 4.5, an AI model specializing in business analysis, strategy, and professional consulting. You provide actionable business insights, market analysis, and strategic recommendations. Your responses are structured, professional, and data-informed.",
-        icon: "📊",
-        color: "teal",
-        provider: "openrouter",
-    },
-];
-
-// The default main orchestrator model (can be changed in settings)
-export const DEFAULT_MAIN_MODEL_ID = "gemini-3-flash-preview";
+// ─── Load model registry from models.json ───────────────────────────────────
+// To add a new model, edit server/models.json only — no code changes needed.
+export const DEFAULT_MODELS: ModelConfig[] = modelsJson.models as ModelConfig[];
+export const DEFAULT_MAIN_MODEL_ID: string = modelsJson.defaultMainModelId;
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -451,11 +369,10 @@ async function callGeminiStream(
     }));
 
     const config: any = {};
-    if (!options?.directMode) {
-        // Google Search grounding — Gemini decides when to invoke it.
-        // Disabled in directMode so responses stay plain and conversational.
-        config.tools = [{ googleSearch: {} }];
-    }
+    // Google Search grounding — always enabled so Gemini can look up real-time
+    // information (prices, news, etc.). Gemini decides when to invoke the tool.
+    // directMode only suppresses chain-of-thought output, NOT web access.
+    config.tools = [{ googleSearch: {} }];
     if (options?.directMode) {
         // Suppress thinking output so the model responds directly.
         config.thinkingConfig = { thinkingBudget: 0 };
