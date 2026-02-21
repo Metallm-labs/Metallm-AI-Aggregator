@@ -258,7 +258,7 @@ Return ONLY the enhanced prompt text, nothing else.`;
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
 
-      const { content, mode, enhancedPrompt, targetModelId } = req.body;
+      const { content, mode, enhancedPrompt, targetModelId, webSearch } = req.body;
       if (!content) return res.status(400).json({ message: "Content is required" });
 
       // The prompt to actually send to the model (user-approved enhanced prompt)
@@ -338,6 +338,10 @@ Return ONLY the enhanced prompt text, nothing else.`;
             {
               systemPrompt: targetModel.systemPrompt,
               maxTokens: 2048,
+              webSearch: !!webSearch,
+              onStatus: (event, data) => {
+                sendSSE(res, "web_search_status", { modelName, phase: event, ...data });
+              },
             }
           );
           fullContent = result.content;
@@ -391,6 +395,10 @@ Return ONLY the enhanced prompt text, nothing else.`;
               {
                 systemPrompt: model.systemPrompt,
                 maxTokens: 4096,
+                webSearch: !!webSearch,
+                onStatus: (event, data) => {
+                  sendSSE(res, "web_search_status", { modelName: model.displayName, phase: event, ...data });
+                },
               }
             );
             fullContent = result.content;

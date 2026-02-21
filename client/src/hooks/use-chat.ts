@@ -150,11 +150,14 @@ export function useSendMessage() {
         enhancedPrompt?: string,
         targetModelId?: string,
         signal?: AbortSignal,
+        onWebSearchStatus?: (modelName: string, phase: string, data: any) => void,
+        webSearch?: boolean,
+        onWebSources?: (modelName: string, sources: { title: string; url: string }[]) => void,
     ) => {
         const res = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content, mode, enhancedPrompt, targetModelId }),
+            body: JSON.stringify({ content, mode, enhancedPrompt, targetModelId, webSearch }),
             credentials: "include",
             signal,
         });
@@ -200,8 +203,10 @@ export function useSendMessage() {
                                 onModelComplete(data.modelName, data.message);
                                 break;
                             case "web_sources":
-                                // Sources are already stored in model_complete message metadata;
-                                // this event is informational — safe to ignore client-side
+                                onWebSources?.(data.modelName, data.sources ?? []);
+                                break;
+                            case "web_search_status":
+                                onWebSearchStatus?.(data.modelName, data.phase, data);
                                 break;
                             case "title_update":
                                 onTitleUpdate?.(data.title);

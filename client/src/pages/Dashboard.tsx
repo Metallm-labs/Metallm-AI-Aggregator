@@ -6,7 +6,7 @@ import { ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversation, useCreateConversation, useSendMessage, routePrompt, type RoutingResult } from "@/hooks/use-chat";
-import { Loader2, MessageSquare, Settings, Zap, Edit3, Send, X, Sparkles, ChevronDown } from "lucide-react";
+import { Loader2, MessageSquare, Settings, Zap, Edit3, Send, X, Sparkles, ChevronDown, Globe, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Message } from "@shared/schema";
 
@@ -14,6 +14,17 @@ interface StreamingMessage {
   modelName: string;
   content: string;
   isComplete: boolean;
+  sources?: { title: string; url: string }[];
+}
+
+interface WebSearchStatus {
+  modelName: string;
+  phase: "searching" | "results" | "fetching" | "done";
+  query?: string;
+  count?: number;
+  fetchIndex?: number;
+  fetchTitle?: string;
+  fetchTotal?: number;
 }
 
 interface AvailableModel {
@@ -39,10 +50,12 @@ export default function Dashboard() {
   const [editedEnhancedPrompt, setEditedEnhancedPrompt] = useState("");
   const [pendingMode, setPendingMode] = useState<"single" | "multi" | "debate">("single");
   const [pendingContent, setPendingContent] = useState("");
+  const [pendingWebSearch, setPendingWebSearch] = useState(false);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [mainModelId, setMainModelId] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [webSearchStatus, setWebSearchStatus] = useState<WebSearchStatus | null>(null);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -55,6 +68,7 @@ export default function Dashboard() {
     messages: Map<string, StreamingMessage>;
     isStreaming: boolean;
     typingModel: string | null;
+    webSearchStatus: WebSearchStatus | null;
   }>>(new Map());
 
   const { data: conversationData, isLoading: convLoading } = useConversation(activeConversationId);
@@ -72,10 +86,12 @@ export default function Dashboard() {
       setStreamingMessages(saved?.messages ?? new Map());
       setIsStreaming(saved?.isStreaming ?? false);
       setTypingModel(saved?.typingModel ?? null);
+      setWebSearchStatus(saved?.webSearchStatus ?? null);
     } else {
       setStreamingMessages(new Map());
       setIsStreaming(false);
       setTypingModel(null);
+      setWebSearchStatus(null);
     }
   }, [activeConversationId]);
 
@@ -156,6 +172,7 @@ export default function Dashboard() {
     setIsRouting(false);
     setTypingModel(null);
     setStreamingMessages(new Map());
+    setWebSearchStatus(null);
   }, []);
 
   // Handle new chat
@@ -169,9 +186,10 @@ export default function Dashboard() {
   // ============================================
   // === Step 1: Route prompt ===
   // ============================================
-  const handleSend = async (content: string, mode: "single" | "multi" | "debate", enhancerEnabled = true) => {
+  const handleSend = async (content: string, mode: "single" | "multi" | "debate", enhancerEnabled = true, webSearch = false) => {
     setPendingContent(content);
     setPendingMode(mode);
+    setPendingWebSearch(webSearch);
     setRoutingResult(null);
 
     // Create conversation if needed (shared by both paths)
@@ -185,7 +203,7 @@ export default function Dashboard() {
 
     // ── Enhancer OFF: skip routing, send directly ──────────────────────────
     if (!enhancerEnabled) {
-      handleApproveAndSend(content, mode, content, undefined, convId);
+      handleApproveAndSend(content, mode, content, undefined, convId, webSearch);
       return;
     }
 
@@ -198,7 +216,7 @@ export default function Dashboard() {
         setIsRouting(false);
 
         if (result.routingType === "casual") {
-          handleApproveAndSend(content, mode, content, result.targetModel?.id, convId);
+          handleApproveAndSend(content, mode, content, result.targetModel?.id, convId, webSearch);
         } else {
           setRoutingResult(result);
           setEditedEnhancedPrompt(result.enhancedPrompt);
@@ -215,7 +233,7 @@ export default function Dashboard() {
       setIsRouting(false);
       const fallbackId = activeConvIdRef.current;
       if (fallbackId) {
-        handleApproveAndSend(content, mode, content, undefined, fallbackId);
+        handleApproveAndSend(content, mode, content, undefined, fallbackId, webSearch);
       }
     }
   };
@@ -229,6 +247,7 @@ export default function Dashboard() {
     enhancedPrompt: string,
     targetModelId?: string,
     explicitConvId?: number,
+    webSearch?: boolean,
   ) => {
     setRoutingResult(null);
     setIsStreaming(true);
@@ -243,7 +262,7 @@ export default function Dashboard() {
     }
 
     // Initialise per-conv streaming state so it survives navigation away & back
-    streamingStateRef.current.set(convId, { messages: new Map(), isStreaming: true, typingModel: null });
+    streamingStateRef.current.set(convId, { messages: new Map(), isStreaming: true, typingModel: null, webSearchStatus: null });
 
     // Create a new AbortController for this request
     const abortController = new AbortController();
@@ -268,13 +287,14 @@ export default function Dashboard() {
         },
         // onModelStart
         (modelName) => {
-          const s = streamingStateRef.current.get(convId) ?? { messages: new Map(), isStreaming: true, typingModel: null };
-          const newMessages = new Map(s.messages);
-          newMessages.set(modelName, { modelName, content: "", isComplete: false });
-          streamingStateRef.current.set(convId, { ...s, typingModel: modelName, messages: newMessages });
+          // Only mark who is typing — don't put an empty bubble in streamingMessages
+          // yet, because that would immediately hide the TypingIndicator / web-search
+          // status banner whose condition checks !streamingMessages.has(typingModel).
+          // The streaming bubble will appear on the first chunk.
+          const s = streamingStateRef.current.get(convId) ?? { messages: new Map(), isStreaming: true, typingModel: null, webSearchStatus: null };
+          streamingStateRef.current.set(convId, { ...s, typingModel: modelName });
           if (activeConvIdRef.current === convId) {
             setTypingModel(modelName);
-            setStreamingMessages(new Map(newMessages));
           }
         },
         // onModelComplete
@@ -308,11 +328,40 @@ export default function Dashboard() {
             setIsStreaming(false);
             setTypingModel(null);
             setStreamingMessages(new Map());
+            setWebSearchStatus(null);
           }
         },
         enhancedPrompt,
         targetModelId,
         abortController.signal,
+        // onWebSearchStatus
+        (modelName, phase, data) => {
+          const status: WebSearchStatus = {
+            modelName,
+            phase: phase as WebSearchStatus["phase"],
+            query: data.query,
+            count: data.count,
+            fetchIndex: data.index,
+            fetchTitle: data.title,
+            fetchTotal: data.total,
+          };
+          const s = streamingStateRef.current.get(convId);
+          if (s) streamingStateRef.current.set(convId, { ...s, webSearchStatus: phase === "done" ? null : status });
+          if (activeConvIdRef.current === convId) {
+            setWebSearchStatus(phase === "done" ? null : status);
+          }
+        },
+        webSearch,
+        // onWebSources — store live sources on the streaming bubble
+        (modelName, sources) => {
+          const s = streamingStateRef.current.get(convId);
+          if (!s) return;
+          const newMessages = new Map(s.messages);
+          const existing = newMessages.get(modelName) ?? { modelName, content: "", isComplete: false };
+          newMessages.set(modelName, { ...existing, sources });
+          streamingStateRef.current.set(convId, { ...s, messages: newMessages });
+          if (activeConvIdRef.current === convId) setStreamingMessages(new Map(newMessages));
+        },
       );
     } catch (error: any) {
       // Ignore abort errors (user clicked stop)
@@ -324,6 +373,7 @@ export default function Dashboard() {
         setIsStreaming(false);
         setTypingModel(null);
         setStreamingMessages(new Map());
+        setWebSearchStatus(null);
       }
     } finally {
       abortControllerRef.current = null;
@@ -332,7 +382,7 @@ export default function Dashboard() {
 
   const handleSkipRouting = () => {
     setRoutingResult(null);
-    handleApproveAndSend(pendingContent, pendingMode, pendingContent, undefined);
+    handleApproveAndSend(pendingContent, pendingMode, pendingContent, undefined, undefined, pendingWebSearch);
   };
 
   const handleRetry = async (messageIndex: number) => {
@@ -534,6 +584,7 @@ export default function Dashboard() {
                         content={sm.content}
                         modelName={sm.modelName}
                         isStreaming
+                        metadata={sm.sources && sm.sources.length > 0 ? { sources: sm.sources } : undefined}
                       />
                     ))
                   )
@@ -685,7 +736,9 @@ export default function Dashboard() {
                               pendingContent,
                               pendingMode,
                               editedEnhancedPrompt,
-                              routingResult?.routingType === "specialized" ? selectedModelId : routingResult?.targetModel?.id
+                              routingResult?.routingType === "specialized" ? selectedModelId : routingResult?.targetModel?.id,
+                              undefined,
+                              pendingWebSearch
                             );
                           }}
                           className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-primary hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
@@ -698,7 +751,44 @@ export default function Dashboard() {
                   </motion.div>
                 )}
 
-                {typingModel && !streamingMessages.has(typingModel) && (streamingMessages.size === 0) && (
+                {/* Web search status — shown while DDG pipeline is running */}
+                {webSearchStatus && (
+                  <motion.div
+                    key="web-search-status"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="flex items-start gap-3 px-4 py-2.5"
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+                      <Globe className="w-4 h-4 text-blue-400 animate-pulse" />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      {webSearchStatus.phase === "searching" && (
+                        <span className="text-xs text-blue-400/80 flex items-center gap-1.5">
+                          <Search className="w-3 h-3 animate-spin" style={{ animationDuration: '1.5s' }} />
+                          Searching the web{webSearchStatus.query ? <>: <em className="not-italic font-medium text-blue-300 truncate max-w-[260px]">&ldquo;{webSearchStatus.query}&rdquo;</em></> : '...'}
+                        </span>
+                      )}
+                      {webSearchStatus.phase === "results" && (
+                        <span className="text-xs text-blue-400/80 flex items-center gap-1.5">
+                          <Globe className="w-3 h-3" />
+                          Found {webSearchStatus.count} results &mdash; reading pages...
+                        </span>
+                      )}
+                      {webSearchStatus.phase === "fetching" && (
+                        <span className="text-xs text-blue-400/80 flex items-center gap-1.5">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Reading page {webSearchStatus.fetchIndex}/{webSearchStatus.fetchTotal}:
+                          <span className="font-medium text-blue-300 truncate max-w-[220px]">{webSearchStatus.fetchTitle}</span>
+                        </span>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Typing indicator — only while waiting for the first chunk and no web search banner is shown */}
+                {typingModel && !streamingMessages.has(typingModel) && streamingMessages.size === 0 && !webSearchStatus && (
                   <TypingIndicator modelName={typingModel} />
                 )}
               </AnimatePresence>

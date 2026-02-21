@@ -2,14 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square } from "lucide-react";
-import { motion } from "framer-motion";
+import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 type ChatMode = "single" | "multi" | "debate";
 
 interface ChatInputProps {
-    onSend: (content: string, mode: ChatMode, enhancerEnabled: boolean) => void;
+    onSend: (content: string, mode: ChatMode, enhancerEnabled: boolean, webSearch?: boolean) => void;
     onStop?: () => void;
     isLoading?: boolean;
     disabled?: boolean;
@@ -37,9 +37,12 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
     const [content, setContent] = useState("");
     const [mode, setMode] = useState<ChatMode>("single");
     const [enhancerEnabled, setEnhancerEnabled] = useState(true);
+    const [webSearchEnabled, setWebSearchEnabled] = useState(false);
     const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+    const [showAttachMenu, setShowAttachMenu] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const attachMenuRef = useRef<HTMLDivElement>(null);
 
     // Auto-resize textarea
     useEffect(() => {
@@ -49,22 +52,34 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
         }
     }, [content]);
 
+    // Close attach menu on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
+                setShowAttachMenu(false);
+            }
+        };
+        if (showAttachMenu) {
+            document.addEventListener("mousedown", handleClickOutside);
+            return () => document.removeEventListener("mousedown", handleClickOutside);
+        }
+    }, [showAttachMenu]);
+
     const handleSubmit = (e?: React.FormEvent) => {
         e?.preventDefault();
         if (!content.trim() || isLoading || disabled) return;
 
-        // For now, just send text content
-        // TODO: Implement file upload handling in the future
         if (attachedFiles.length > 0) {
             const fileNames = attachedFiles.map(f => f.name).join(", ");
             const contentWithFiles = `${content.trim()}\n\n[Attached files: ${fileNames}]`;
-            onSend(contentWithFiles, mode, enhancerEnabled);
+            onSend(contentWithFiles, mode, enhancerEnabled, webSearchEnabled);
         } else {
-            onSend(content.trim(), mode, enhancerEnabled);
+            onSend(content.trim(), mode, enhancerEnabled, webSearchEnabled);
         }
 
         setContent("");
         setAttachedFiles([]);
+        // Don't reset webSearchEnabled — user may want it on for subsequent messages
     };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,10 +120,23 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
                     {/* Glow effect */}
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 rounded-2xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition duration-300 blur" />
 
-                    <div className="relative bg-card/50 rounded-2xl border border-white/10 overflow-hidden">
-                        {/* Attached files */}
-                        {attachedFiles.length > 0 && (
+                    <div className="relative bg-card/50 rounded-2xl border border-white/10">
+                        {/* Attached files + web search badge */}
+                        {(attachedFiles.length > 0 || webSearchEnabled) && (
                             <div className="flex flex-wrap gap-2 px-4 pt-3">
+                                {webSearchEnabled && (
+                                    <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
+                                        <Globe className="w-3 h-3" />
+                                        <span>Web Search</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setWebSearchEnabled(false)}
+                                            className="hover:text-white"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                )}
                                 {attachedFiles.map((file, index) => (
                                     <div
                                         key={index}
@@ -143,7 +171,7 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
                         {/* Bottom toolbar */}
                         <div className="flex items-center justify-between px-3 py-2">
                             <div className="flex items-center gap-2">
-                                {/* Attach button */}
+                                {/* Attach menu (Plus button) */}
                                 <input
                                     ref={fileInputRef}
                                     type="file"
@@ -152,19 +180,78 @@ export function ChatInput({ onSend, onStop, isLoading, disabled }: ChatInputProp
                                     className="hidden"
                                     accept="image/*,.pdf,.doc,.docx,.txt"
                                 />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                        "w-8 h-8 text-muted-foreground hover:text-white transition-colors",
-                                        attachedFiles.length > 0 && "text-primary"
-                                    )}
-                                    onClick={() => fileInputRef.current?.click()}
-                                    title="Attach files"
-                                >
-                                    <Paperclip className="w-4 h-4" />
-                                </Button>
+                                <div className="relative" ref={attachMenuRef}>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn(
+                                            "w-8 h-8 text-muted-foreground hover:text-white transition-colors",
+                                            (showAttachMenu || webSearchEnabled || attachedFiles.length > 0) && "text-primary"
+                                        )}
+                                        onClick={() => setShowAttachMenu(v => !v)}
+                                        title="Attach files or enable web search"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                    </Button>
+
+                                    <AnimatePresence>
+                                        {showAttachMenu && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                                                transition={{ duration: 0.15 }}
+                                                className="absolute bottom-full left-0 mb-2 w-52 bg-card border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+                                            >
+                                                <div className="p-1.5">
+                                                    {/* Web Search toggle */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setWebSearchEnabled(v => !v);
+                                                            setShowAttachMenu(false);
+                                                        }}
+                                                        className={cn(
+                                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all text-sm",
+                                                            webSearchEnabled
+                                                                ? "bg-blue-500/15 text-blue-400"
+                                                                : "hover:bg-white/5 text-muted-foreground hover:text-white"
+                                                        )}
+                                                    >
+                                                        <Globe className="w-4 h-4 flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-medium text-xs">Web Search</div>
+                                                            <div className="text-[10px] opacity-60">Search the web for answers</div>
+                                                        </div>
+                                                        {webSearchEnabled && (
+                                                            <span className="text-blue-400 text-xs font-bold">✓</span>
+                                                        )}
+                                                    </button>
+
+                                                    {/* Divider */}
+                                                    <div className="border-t border-white/5 my-1" />
+
+                                                    {/* Attach file */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            fileInputRef.current?.click();
+                                                            setShowAttachMenu(false);
+                                                        }}
+                                                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all text-sm hover:bg-white/5 text-muted-foreground hover:text-white"
+                                                    >
+                                                        <Paperclip className="w-4 h-4 flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-medium text-xs">Attach File</div>
+                                                            <div className="text-[10px] opacity-60">Upload images, PDFs, docs</div>
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
 
                                 {/* Mode selector */}
                                 <Select value={mode} onValueChange={(v) => setMode(v as ChatMode)}>

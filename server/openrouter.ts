@@ -10,26 +10,200 @@ export interface WebSource {
 }
 
 // ================================
-// === Web Search Need Detection ===
+// === Web Content Fetching (used when user explicitly enables Web Search) ===
 // ================================
-export function needsWebSearch(prompt: string): boolean {
-    const lower = prompt.trim().toLowerCase();
-    const patterns: RegExp[] = [
-        // Explicit date/time references
-        /\b(today|tonight|right now|at the moment|as of (today|now))\b/,
-        /\bthis (morning|afternoon|evening|week|month|year)\b/,
-        /\b(yesterday|last (week|month|year|night|monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/,
-        // Current events signals
-        /\b(latest|recent|newest|most recent|current|currently|live|breaking|real.?time)\b.{0,60}\b(news|update|version|release|event|story|score|result|match|game|election|war|price|rate|deal|launch)\b/,
-        /\b(news|headlines|trending|viral|happening)\b/,
-        /\bwhat('?s| is) (happening|going on|the (news|weather|score|result|price|rate)|trending)\b/,
-        // Specific current-world questions
-        /\b(who (is|won|leads?|has)) .{0,40}(now|today|currently|in \d{4})\b/,
-        /\b(stock|crypto|bitcoin|price|rate|weather|temperature|forecast) (of|for|in|at|today)\b/,
-        // Year-anchored searches
-        /\b(2025|2026).{0,80}\b(news|update|election|champion|winner|president|prime minister|ceo|discovered|released|launched|happened|died|arrested)\b/,
-    ];
-    return patterns.some(p => p.test(lower));
+
+// Strip HTML to plain text
+function stripHtml(html: string): string {
+    return html
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+        .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#?\w+;/g, " ")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+}
+
+// Fetch a page and extract text (with timeout)
+async function fetchPageText(url: string, maxChars = 4000): Promise<string> {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const res = await fetch(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                Accept: "text/html,application/xhtml+xml",
+            },
+            signal: controller.signal,
+            redirect: "follow",
+        });
+        clearTimeout(timeout);
+        if (!res.ok) return "";
+        const ct = res.headers.get("content-type") || "";
+        if (!ct.includes("text/html") && !ct.includes("text/plain")) return "";
+        const html = await res.text();
+        return stripHtml(html).slice(0, maxChars);
+    } catch {
+        return "";
+    }
+}
+
+// Parse DuckDuckGo HTML response into result objects
+function parseDDGHtml(html: string, maxResults: number): Array<{ title: string; url: string; snippet: string }> {
+    const results: Array<{ title: string; url: string; snippet: string }> = [];
+    const blocks = html.split(/class="result[\s"]/);
+    for (const block of blocks.slice(1, maxResults + 1)) {
+        const uddgMatch = block.match(/href="[^"]*uddg=([^&"]+)/);
+        const directMatch = block.match(/class="result__a"[^>]*href="([^"]+)"/);
+        let url = "";
+        if (uddgMatch) {
+            url = decodeURIComponent(uddgMatch[1]);
+        } else if (directMatch) {
+            url = directMatch[1];
+            if (url.startsWith("//")) url = "https:" + url;
+        }
+        if (!url || !url.startsWith("http")) continue;
+        const titleMatch = block.match(/class="result__a"[^>]*>([\s\S]*?)<\/a>/);
+        const snippetMatch = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/);
+        results.push({
+            title: titleMatch ? stripHtml(titleMatch[1]) : url,
+            url,
+            snippet: snippetMatch ? stripHtml(snippetMatch[1]) : "",
+        });
+    }
+    return results;
+}
+
+// Search DuckDuckGo lite HTML and parse results
+async function searchDDG(query: string, maxResults = 5): Promise<Array<{ title: string; url: string; snippet: string }>> {
+    // Try GET (lite endpoint) first — more reliable, fewer bot blocks
+    const tryFetch = async (url: string, init: RequestInit): Promise<string> => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        try {
+            const res = await fetch(url, { ...init, signal: controller.signal });
+            clearTimeout(timer);
+            return await res.text();
+        } catch (e) {
+            clearTimeout(timer);
+            throw e;
+        }
+    };
+
+    const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+    const headers = { "User-Agent": userAgent, "Accept": "text/html,application/xhtml+xml", "Accept-Language": "en-US,en;q=0.9" };
+
+    // Attempt 1: DuckDuckGo lite GET
+    try {
+        const html = await tryFetch(`https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}&kl=us-en`, { headers });
+        // lite.duckduckgo.com uses <a class="result-link"> and <td class="result-snippet">
+        const liteResults: Array<{ title: string; url: string; snippet: string }> = [];
+        const rowMatches = Array.from(html.matchAll(/<a[^>]+href="([^"]+)"[^>]*class="result-link"[^>]*>([^<]+)<\/a>/g));
+        const snippetMatches = Array.from(html.matchAll(/<td[^>]+class="result-snippet"[^>]*>([\s\S]*?)<\/td>/g));
+        for (let i = 0; i < Math.min(rowMatches.length, maxResults); i++) {
+            let url = rowMatches[i][1];
+            if (url.includes("uddg=")) {
+                const m = url.match(/uddg=([^&]+)/);
+                if (m) url = decodeURIComponent(m[1]);
+            }
+            if (!url.startsWith("http")) continue;
+            liteResults.push({
+                title: stripHtml(rowMatches[i][2]),
+                url,
+                snippet: snippetMatches[i] ? stripHtml(snippetMatches[i][1]) : "",
+            });
+        }
+        if (liteResults.length > 0) {
+            console.log(`[WebSearch] DDG lite found ${liteResults.length} results for: "${query.substring(0, 60)}"`);
+            return liteResults;
+        }
+    } catch (e) {
+        console.warn("[WebSearch] DDG lite GET failed:", (e as Error).message);
+    }
+
+    // Attempt 2: DuckDuckGo HTML POST
+    try {
+        const html = await tryFetch("https://html.duckduckgo.com/html/", {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
+            body: `q=${encodeURIComponent(query)}&kl=us-en`,
+        });
+        const results = parseDDGHtml(html, maxResults);
+        console.log(`[WebSearch] DDG POST found ${results.length} results for: "${query.substring(0, 60)}"`);
+        return results;
+    } catch (e) {
+        console.error("[WebSearch] DDG POST failed:", (e as Error).message);
+    }
+
+    // Attempt 3: DuckDuckGo HTML GET
+    try {
+        const html = await tryFetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=us-en`, { headers });
+        const results = parseDDGHtml(html, maxResults);
+        console.log(`[WebSearch] DDG GET found ${results.length} results for: "${query.substring(0, 60)}"`);
+        return results;
+    } catch (e) {
+        console.error("[WebSearch] DDG GET failed:", (e as Error).message);
+    }
+
+    return [];
+}
+
+// Full pipeline: search → fetch top pages → build context string + sources
+async function fetchWebContext(
+    query: string,
+    onStatus?: (event: string, data: any) => void
+): Promise<{ context: string; sources: WebSource[] }> {
+    const t0 = Date.now();
+    onStatus?.("searching", { query });
+    const searchResults = await searchDDG(query);
+    if (searchResults.length === 0) {
+        onStatus?.("done", { count: 0 });
+        return { context: "", sources: [] };
+    }
+
+    const sources: WebSource[] = searchResults.map(r => ({ title: r.title, url: r.url }));
+    onStatus?.("results", { results: sources, count: sources.length });
+
+    // Fetch actual page content from top 3 results in parallel
+    const topN = Math.min(3, searchResults.length);
+    const pages = await Promise.all(
+        searchResults.slice(0, topN).map(async (r, i) => {
+            onStatus?.("fetching", { index: i + 1, title: r.title, url: r.url, total: topN });
+            const content = await fetchPageText(r.url);
+            return { ...r, content };
+        })
+    );
+
+    // Build context for the model
+    const now = new Date().toISOString();
+    let context = `\n\n[WEB SEARCH RESULTS — query: "${query}" — fetched: ${now}]\n`;
+    for (const page of pages) {
+        context += `\nSource: ${page.title}\nURL: ${page.url}\n`;
+        if (page.content) {
+            context += `Content:\n${page.content}\n`;
+        } else if (page.snippet) {
+            context += `Snippet: ${page.snippet}\n`;
+        }
+        context += "---\n";
+    }
+    for (const r of searchResults.slice(3)) {
+        if (r.snippet) {
+            context += `\nSource: ${r.title} (${r.url})\nSnippet: ${r.snippet}\n---\n`;
+        }
+    }
+    context += "[END OF WEB SEARCH RESULTS]\n";
+
+    console.log(`[WebSearch] Pipeline done in ${Date.now() - t0}ms (${pages.filter(p => p.content).length}/${pages.length} pages fetched)`);
+    onStatus?.("done", { count: sources.length });
+    return { context, sources };
 }
 
 // Initialize Gemini client
@@ -57,7 +231,7 @@ export interface ModelConfig {
 export const DEFAULT_MODELS: ModelConfig[] = [
     // ===== GEMINI MODELS (Native API) =====
     {
-        id: "gemini-3-flash-preview",
+        id: "gemini-2.5-flash",
         displayName: "Gemini Flash",
         role: "Main AI Assistant",
         systemPrompt: "You are Gemini Flash, Google's fastest and most capable AI model. You provide intelligent, accurate, and well-structured responses. You excel at understanding context, following instructions precisely, and generating high-quality content across all domains.",
@@ -275,17 +449,17 @@ async function callGeminiStream(
         parts: [{ text: m.content }],
     }));
 
-    const config: any = {};
+    const config: any = {
+        // Always provide Google Search grounding inside config —
+        // Gemini decides autonomously when to invoke it, like Google AI Studio.
+        tools: [{ googleSearch: {} }],
+    };
     if (options?.maxTokens) config.maxOutputTokens = options.maxTokens;
     if (options?.temperature !== undefined) config.temperature = options.temperature;
 
     const systemInstruction = options?.systemPrompt
         ? { parts: [{ text: options.systemPrompt }] }
         : undefined;
-
-    // Always provide Google Search grounding — Gemini decides when to invoke it,
-    // exactly like Google AI Studio / Gemini.google.com behave.
-    const tools = [{ googleSearch: {} }];
 
     const safetySettings = [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -302,7 +476,6 @@ async function callGeminiStream(
         model: modelId,
         contents,
         config,
-        tools,
         safetySettings,
         ...(systemInstruction ? { systemInstruction } : {}),
     } as any);
@@ -313,14 +486,45 @@ async function callGeminiStream(
             onChunk(text);
             fullContent += text;
         }
-        // Extract Google Search grounding sources when model chose to search
-        const groundingChunks: any[] = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-        for (const gc of groundingChunks) {
-            if (gc.web?.uri && !seenUrls.has(gc.web.uri)) {
-                seenUrls.add(gc.web.uri);
-                sources.push({ title: gc.web.title || gc.web.uri, url: gc.web.uri });
+
+        // Extract Google Search grounding sources from every chunk that has them.
+        // The SDK may surface them at candidate-level or response-level.
+        const candidate: any = chunk.candidates?.[0];
+        const gm = candidate?.groundingMetadata;
+        if (gm) {
+            // Log once so we can see the shape
+            if (sources.length === 0) {
+                console.log("[Gemini] groundingMetadata keys:", Object.keys(gm));
+            }
+            // Standard path: groundingChunks
+            const groundingChunks: any[] = gm.groundingChunks || [];
+            for (const gc of groundingChunks) {
+                const uri = gc.web?.uri;
+                if (uri && !seenUrls.has(uri)) {
+                    seenUrls.add(uri);
+                    sources.push({ title: gc.web.title || uri, url: uri });
+                }
+            }
+            // Alternative path: groundingSupports → segment.groundingChunkIndices
+            // (some SDK versions nest differently)
+            const supports: any[] = gm.groundingSupports || gm.grounding_supports || [];
+            for (const s of supports) {
+                const chunk2 = s.groundingChunk || s.grounding_chunk;
+                if (chunk2?.web?.uri && !seenUrls.has(chunk2.web.uri)) {
+                    seenUrls.add(chunk2.web.uri);
+                    sources.push({ title: chunk2.web.title || chunk2.web.uri, url: chunk2.web.uri });
+                }
+            }
+            // Alternative: webSearchQueries (signals that search was used even if sources differ)
+            const queries: string[] = gm.webSearchQueries || gm.web_search_queries || [];
+            if (queries.length > 0 && sources.length === 0) {
+                console.log("[Gemini] Search was used with queries:", queries, "but no source URLs found yet");
             }
         }
+    }
+
+    if (sources.length > 0) {
+        console.log(`[Gemini] Extracted ${sources.length} web sources`);
     }
 
     return { content: fullContent, sources };
@@ -351,9 +555,11 @@ async function callOpenRouterStream(
         max_tokens: options?.maxTokens || 4096,
         temperature: options?.temperature ?? 0.7,
         stream: true,
-        // Use OpenRouter's built-in web search plugin when needed
-        ...(options?.webSearch ? { plugins: [{ id: "web", max_results: 5 }] } : {}),
     };
+    // Add web search plugin when enabled
+    if (options?.webSearch) {
+        body.plugins = [{ id: "web", max_results: 5 }];
+    }
 
     const response = await fetch(OPENROUTER_API_URL, {
         method: "POST",
@@ -421,6 +627,20 @@ async function callOpenRouterStream(
 }
 
 // ================================
+// === Current date helper ===
+// ================================
+function getDateContext(): string {
+    return `Today's date is ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}. When answering questions about current events, prices, news, or any time-sensitive topic, always use the most recent information available from web search results.`;
+}
+
+// ================================
+// === Sleep helper for retry ===
+// ================================
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ================================
 // === Unified Streaming (auto-picks provider) ===
 // ================================
 export async function callModelStream(
@@ -431,18 +651,87 @@ export async function callModelStream(
         maxTokens?: number;
         temperature?: number;
         systemPrompt?: string;
+        onStatus?: (event: string, data: any) => void;
+        webSearch?: boolean; // User-toggled web search — only affects OpenRouter
     }
 ): Promise<{ content: string; sources: WebSource[] }> {
+    const onStatus = options?.onStatus;
+    const userWantsWebSearch = options?.webSearch === true;
+
+    // Inject current date into the system prompt so the model knows "today"
+    const dateContext = getDateContext();
+    const enrichedSystemPrompt = options?.systemPrompt
+        ? `${options.systemPrompt}\n\n${dateContext}`
+        : dateContext;
+
     if (model.provider === "gemini") {
-        // Gemini: googleSearch tool is always enabled inside callGeminiStream;
-        // the model itself decides when to invoke it.
-        return callGeminiStream(model.id, messages, onChunk, options);
+        // Gemini: Google Search grounding is always enabled inside callGeminiStream.
+        // The user's web search toggle is ignored — Gemini handles it natively.
+        const enrichedOptions = { ...options, systemPrompt: enrichedSystemPrompt };
+        let lastError: Error | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                return await callGeminiStream(model.id, messages, onChunk, enrichedOptions);
+            } catch (e: any) {
+                lastError = e;
+                const errMsg = String(e?.message || "");
+                if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+                    console.warn(`[Gemini] Rate limited (attempt ${attempt + 1}/3), waiting before retry...`);
+                    await sleep((attempt + 1) * 3_000);
+                    continue;
+                }
+                throw e;
+            }
+        }
+        // All retries exhausted — fall back to first OpenRouter model
+        console.warn(`[Gemini] All retries exhausted, falling back to OpenRouter`);
+        const fallbackModel = DEFAULT_MODELS.find(m => m.provider === "openrouter");
+        if (fallbackModel) {
+            // If user enabled web search, use our DDG pipeline for the fallback
+            const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content ?? "";
+            let webSources: WebSource[] = [];
+            let finalSystemPrompt = enrichedSystemPrompt;
+            if (userWantsWebSearch) {
+                const { context: webCtx, sources } = await fetchWebContext(lastUserMsg, onStatus);
+                webSources = sources;
+                if (webCtx) {
+                    finalSystemPrompt += `\n\n${webCtx}\n\nThe above are fresh web search results. Use them to answer the user's question. For factual, numerical, or time-sensitive claims, prefer these results. Cite sources when you use them.`;
+                }
+            }
+            const result = await callOpenRouterStream(fallbackModel.id, messages, onChunk, {
+                ...options,
+                systemPrompt: finalSystemPrompt,
+                webSearch: false, // We injected context manually
+            });
+            return { content: result.content, sources: [...webSources, ...result.sources] };
+        }
+        throw lastError!;
     } else {
-        // OpenRouter: use keyword detection so the web plugin is only activated
-        // when the query is clearly about real-time / current-world data.
+        // ── OpenRouter ──────────────────────────────────────────────
+        // Web search ONLY when user explicitly enabled it via the toggle.
+        // Uses our DDG scraping pipeline to fetch real page content.
         const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content ?? "";
-        const useWeb = needsWebSearch(lastUserMsg);
-        return callOpenRouterStream(model.id, messages, onChunk, { ...options, webSearch: useWeb });
+        let webSources: WebSource[] = [];
+        let finalSystemPrompt = enrichedSystemPrompt;
+
+        if (userWantsWebSearch) {
+            console.log(`[WebSearch] User enabled web search for OpenRouter query: "${lastUserMsg.substring(0, 60)}"`);
+            const { context: webCtx, sources } = await fetchWebContext(lastUserMsg, onStatus);
+            webSources = sources;
+            if (webCtx) {
+                finalSystemPrompt += `\n\n${webCtx}\n\nThe above are fresh web search results. Use them to answer the user's question. For factual, numerical, or time-sensitive claims, prefer these results over your training data. Cite sources when you use them.`;
+            }
+        }
+
+        const result = await callOpenRouterStream(model.id, messages, onChunk, {
+            ...options,
+            systemPrompt: finalSystemPrompt,
+            webSearch: false, // We injected context manually via DDG
+        });
+        return {
+            content: result.content,
+            sources: webSources.length > 0 ? webSources : result.sources,
+        };
     }
 }
 
