@@ -12,7 +12,7 @@ interface AvailableModel {
     id: string;
     displayName: string;
     role: string;
-    icon: string;
+    iconUrl?: string;
     provider: string;
 }
 
@@ -22,6 +22,7 @@ interface ChatInputProps {
     isLoading?: boolean;
     disabled?: boolean;
     availableModels?: AvailableModel[];
+    onModeChange?: (mode: ChatMode) => void;
 }
 
 const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; description: string; color: string }> = {
@@ -51,7 +52,7 @@ const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; descr
     },
 };
 
-export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels = [] }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels = [], onModeChange }: ChatInputProps) {
     const [content, setContent] = useState("");
     const [mode, setMode] = useState<ChatMode>("single");
     const [directModelId, setDirectModelIdState] = useState<string>("");
@@ -70,6 +71,11 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels
     const attachMenuRef = useRef<HTMLDivElement>(null);
     const modeMenuRef = useRef<HTMLDivElement>(null);
     const modelPickerRef = useRef<HTMLDivElement>(null);
+
+    // Notify parent when mode changes
+    useEffect(() => {
+        onModeChange?.(mode);
+    }, [mode]);
 
     // Clear directModelId when leaving direct mode so re-entering always re-defaults to first model
     useEffect(() => {
@@ -334,7 +340,7 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels
                                             )}
                                         >
                                             {selectedModel ? (
-                                                <ModelIcon modelName={selectedModel.displayName} size={16} />
+                                                <ModelIcon modelName={selectedModel.displayName} iconUrl={selectedModel.iconUrl} size={16} />
                                             ) : (
                                                 <Bot className="w-3.5 h-3.5" />
                                             )}
@@ -369,7 +375,7 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels
                                                                         : "hover:bg-white/5 border border-transparent"
                                                                 )}
                                                             >
-                                                                <ModelIcon modelName={model.displayName} size={22} className="flex-shrink-0" />
+                                                                <ModelIcon modelName={model.displayName} iconUrl={model.iconUrl} size={22} className="flex-shrink-0" />
                                                                 <div className="flex-1 min-w-0">
                                                                     <div className="text-xs font-medium text-white truncate">{model.displayName}</div>
                                                                     <div className="text-[10px] text-muted-foreground/60 truncate">{model.role}</div>

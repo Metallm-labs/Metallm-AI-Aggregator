@@ -96,14 +96,14 @@ export interface RoutingResult {
         id: string;
         displayName: string;
         role: string;
-        icon: string;
+        iconUrl?: string;
         provider: string;
     };
     models?: Array<{
         id: string;
         displayName: string;
         role: string;
-        icon: string;
+        iconUrl?: string;
         provider: string;
     }>;
     reason: string;

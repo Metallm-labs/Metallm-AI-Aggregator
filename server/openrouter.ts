@@ -224,8 +224,7 @@ export interface ModelConfig {
     displayName: string;
     role: string;
     systemPrompt: string;
-    icon: string;
-    /** URL to the brand icon image (e.g. SimpleIcons CDN SVG) */
+    /** URL to the local brand icon image (served from /icons/) */
     iconUrl?: string;
     color: string;
     provider: ModelProvider;

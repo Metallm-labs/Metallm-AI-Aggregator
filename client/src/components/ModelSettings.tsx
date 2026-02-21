@@ -11,7 +11,6 @@ interface ModelConfig {
     displayName: string;
     role: string;
     systemPrompt: string;
-    icon: string;
     iconUrl?: string;
     color: string;
 }
@@ -250,20 +249,6 @@ export function ModelSettings({ onClose, onSave }: ModelSettingsProps) {
                                                     value={model.role}
                                                     onChange={(e) => updateModel(index, "role", e.target.value)}
                                                     className="w-full bg-background/50 border border-white/10 rounded-md px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary"
-                                                />
-                                            </div>
-
-                                            {/* Icon */}
-                                            <div>
-                                                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">
-                                                    Icon (emoji)
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={model.icon}
-                                                    onChange={(e) => updateModel(index, "icon", e.target.value)}
-                                                    className="w-24 bg-background/50 border border-white/10 rounded-md px-3 py-1.5 text-sm text-white text-center focus:outline-none focus:ring-1 focus:ring-primary"
-                                                    maxLength={4}
                                                 />
                                             </div>
 

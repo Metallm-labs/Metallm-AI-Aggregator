@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatMessage, TypingIndicator } from "@/components/ChatMessage";
-import { ChatInput } from "@/components/ChatInput";
+import { ChatInput, type ChatMode } from "@/components/ChatInput";
 import { ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { ModelIcon } from "@/components/ModelIcon";
@@ -32,7 +32,6 @@ interface AvailableModel {
   id: string;
   displayName: string;
   role: string;
-  icon: string;
   iconUrl?: string;
   provider: string;
 }
@@ -57,6 +56,7 @@ export default function Dashboard() {
   const [mainModelId, setMainModelId] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [currentChatMode, setCurrentChatMode] = useState<ChatMode>("single");
   const [webSearchStatus, setWebSearchStatus] = useState<WebSearchStatus | null>(null);
   // Remember the last send params so retry/edit replays the exact same model
   const lastSendModeRef = useRef<"single" | "multi" | "debate" | "direct">("single");
@@ -525,28 +525,26 @@ export default function Dashboard() {
           onScroll={handleScrollAreaScroll}
         >
           {messages.length === 0 && !isStreaming && !routingResult && !isRouting ? (
-            <div className="h-full flex flex-col items-center justify-center p-8">
+            <div className="min-h-full flex flex-col items-center justify-center p-8 text-center">
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="text-center space-y-4"
+                className="text-center space-y-4 w-full max-w-md"
               >
-                <div className="w-20 h-20 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-2xl flex items-center justify-center mx-auto">
-                  <MessageSquare className="w-10 h-10 text-primary" />
-                </div>
-                <h2 className="text-2xl font-bold text-white">Start a Conversation</h2>
-                <p className="text-muted-foreground max-w-md">
-                  Ask anything! <strong className="text-white">{mainModelName}</strong> handles casual chats directly.
-                  For specialized tasks, it routes to the best model and lets you review the enhanced prompt first.
+                <h2 className="text-2xl font-bold text-white">
+                  {currentChatMode === "single" && "Start a Conversation"}
+                  {currentChatMode === "multi" && "All Models, One Query"}
+                  {currentChatMode === "debate" && "Let Them Debate"}
+                  {currentChatMode === "direct" && "Direct Chat"}
+                </h2>
+                <p className="text-muted-foreground">
+                  {currentChatMode === "single" && (
+                    <>Get accurate answers &amp; save your time — <strong className="text-white">{mainModelName}</strong> routes every question to the best model automatically.</>
+                  )}
+                  {currentChatMode === "multi" && "Every model answers simultaneously — compare perspectives side by side in a single view."}
+                  {currentChatMode === "debate" && "Models argue your question from different angles — get richer, more nuanced insights."}
+                  {currentChatMode === "direct" && "Talk directly to your chosen model — full control over which AI you're speaking with."}
                 </p>
-                <div className="flex flex-wrap justify-center gap-2 mt-4">
-                  {availableModels.map(m => (
-                    <span key={m.id} className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-muted-foreground">
-                      <ModelIcon modelName={m.displayName} iconUrl={m.iconUrl} size={14} />
-                      {m.displayName} {m.id === mainModelId ? "(Main)" : ""}
-                    </span>
-                  ))}
-                </div>
               </motion.div>
             </div>
           ) : (
@@ -724,7 +722,7 @@ export default function Dashboard() {
                           <div className="flex flex-wrap gap-1.5">
                             {routingResult.models.map(m => (
                               <span key={m.id} className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-muted-foreground flex items-center gap-1">
-                                <span>{m.icon}</span>
+                                <ModelIcon modelName={m.displayName} iconUrl={m.iconUrl} size={12} />
                                 <span>{m.displayName}</span>
                               </span>
                             ))}
@@ -821,6 +819,7 @@ export default function Dashboard() {
           isLoading={isStreaming || isRouting}
           disabled={convLoading}
           availableModels={availableModels}
+          onModeChange={setCurrentChatMode}
         />
       </main>
     </div>

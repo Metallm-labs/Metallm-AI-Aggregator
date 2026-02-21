@@ -5,6 +5,7 @@ import { MarkdownRenderer } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { ModelIcon } from "@/components/ModelIcon";
 
 // Extract hostname for favicon
 function getFavicon(url: string): string {
@@ -16,28 +17,28 @@ function getFavicon(url: string): string {
     }
 }
 
-// Dynamic model colors and icons configuration
-const modelConfig: Record<string, { color: string; bgColor: string; icon: string }> = {
+// Dynamic model colors configuration
+const modelConfig: Record<string, { color: string; bgColor: string }> = {
     // OpenRouter Models
-    "DeepSeek R1": { color: "text-purple-400", bgColor: "bg-purple-500/20", icon: "🔬" },
-    "LLaMA 3.3": { color: "text-green-400", bgColor: "bg-green-500/20", icon: "🦙" },
-    "Gemma 3 27B": { color: "text-blue-400", bgColor: "bg-blue-500/20", icon: "💎" },
-    "Devstral": { color: "text-cyan-400", bgColor: "bg-cyan-500/20", icon: "⚡" },
-    "Nemotron": { color: "text-lime-400", bgColor: "bg-lime-500/20", icon: "🧮" },
-    "Qwen 2.5": { color: "text-pink-400", bgColor: "bg-pink-500/20", icon: "✍️" },
-    "Gemma 3 12B": { color: "text-amber-400", bgColor: "bg-amber-500/20", icon: "📚" },
-    "GLM 4.5": { color: "text-teal-400", bgColor: "bg-teal-500/20", icon: "📊" },
+    "DeepSeek R1": { color: "text-purple-400", bgColor: "bg-purple-500/20" },
+    "LLaMA 3.3": { color: "text-green-400", bgColor: "bg-green-500/20" },
+    "Gemma 3 27B": { color: "text-blue-400", bgColor: "bg-blue-500/20" },
+    "Devstral": { color: "text-cyan-400", bgColor: "bg-cyan-500/20" },
+    "Nemotron": { color: "text-lime-400", bgColor: "bg-lime-500/20" },
+    "Qwen 2.5": { color: "text-pink-400", bgColor: "bg-pink-500/20" },
+    "Gemma 3 12B": { color: "text-amber-400", bgColor: "bg-amber-500/20" },
+    "GLM 4.5": { color: "text-teal-400", bgColor: "bg-teal-500/20" },
     // Summary
-    "Summary": { color: "text-yellow-400", bgColor: "bg-gradient-to-br from-yellow-500/20 to-orange-500/20", icon: "🏆" },
+    "Summary": { color: "text-yellow-400", bgColor: "bg-gradient-to-br from-yellow-500/20 to-orange-500/20" },
     // Legacy models
-    Gemini: { color: "text-blue-400", bgColor: "bg-blue-500/20", icon: "✨" },
-    Claude: { color: "text-orange-400", bgColor: "bg-orange-500/20", icon: "🧠" },
-    Grok: { color: "text-cyan-400", bgColor: "bg-cyan-500/20", icon: "⚡" },
-    LLaMA: { color: "text-green-400", bgColor: "bg-green-500/20", icon: "🦙" },
+    Gemini: { color: "text-blue-400", bgColor: "bg-blue-500/20" },
+    Claude: { color: "text-orange-400", bgColor: "bg-orange-500/20" },
+    Grok: { color: "text-cyan-400", bgColor: "bg-cyan-500/20" },
+    LLaMA: { color: "text-green-400", bgColor: "bg-green-500/20" },
 };
 
 const getModelConfig = (name: string) => {
-    return modelConfig[name] || { color: "text-gray-400", bgColor: "bg-gray-500/20", icon: "🤖" };
+    return modelConfig[name] || { color: "text-gray-400", bgColor: "bg-gray-500/20" };
 };
 
 interface ChatMessageProps {
@@ -113,7 +114,7 @@ export function ChatMessage({
                 onClick={() => isCollapsible && setIsExpanded(!isExpanded)}
                 title={isCollapsible ? (isExpanded ? "Click to collapse" : "Click to expand") : undefined}
             >
-                {isUser ? <User className="w-4 h-4" /> : <span>{config.icon}</span>}
+                {isUser ? <User className="w-4 h-4" /> : <ModelIcon modelName={modelName || ""} size={18} />}
             </div>
 
             {/* Message Content */}
@@ -356,8 +357,8 @@ export function RoutingIndicator({ modelName, role, reason, type }: {
             <span className="text-muted-foreground">
                 {type === "specialized" ? "Routing to specialist:" : "Handling as general query:"}
             </span>
-            <span className={cn("font-medium", config.color)}>
-                {config.icon} {modelName}
+            <span className={cn("font-medium flex items-center gap-1", config.color)}>
+                <ModelIcon modelName={modelName} size={12} /> {modelName}
             </span>
             <span className="text-muted-foreground/60">({role})</span>
         </motion.div>
@@ -376,7 +377,7 @@ export function TypingIndicator({ modelName }: { modelName: string }) {
             className="flex gap-3 px-4 py-3"
         >
             <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", config.bgColor)}>
-                <span>{config.icon}</span>
+                <ModelIcon modelName={modelName} size={18} />
             </div>
             <div className="flex items-center gap-1">
                 <span className={cn("text-xs font-medium mr-2", config.color)}>{modelName}</span>

@@ -1,9 +1,8 @@
-import { Link, useLocation } from "wouter";
-import { PlusCircle, History, Settings, LogOut, Hexagon, Brain, Menu, MessageSquare, Trash2, X, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Menu, MessageSquare, Trash2, PanelLeftClose, PanelLeft, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useState, useEffect, memo } from "react";
+import { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useConversations, useDeleteConversation } from "@/hooks/use-chat";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,7 +15,6 @@ interface SidebarProps {
 }
 
 export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectConversation, onNewChat, onConversationDeleted }: SidebarProps) {
-  const [location] = useLocation();
   const { logout, user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -41,8 +39,8 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
       <div className={cn("p-4 border-b border-white/5", collapsed && "px-2")}>
         <div className={cn("flex items-center justify-between mb-6", collapsed && "justify-center")}>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-primary to-secondary rounded-lg shadow-lg shadow-primary/20">
-              <Hexagon className="w-5 h-5 text-white fill-current" />
+            <div className="flex-shrink-0">
+              <img src="/favicon.png" alt="Metallm" className={collapsed ? "w-9 h-9" : "w-10 h-10"} style={{ objectFit: "contain" }} />
             </div>
             {!collapsed && (
               <div>
@@ -76,21 +74,20 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
           )}
         </div>
 
-        {/* New Chat Button */}
-        <Button
+        {/* New Chat */}
+        <button
           onClick={() => {
             onNewChat?.();
             setIsOpen(false);
           }}
           className={cn(
-            "w-full bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 transition-all duration-300 group",
-            collapsed ? "px-2" : "justify-start gap-2"
+            "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-white hover:bg-white/5 transition-all duration-200",
+            collapsed && "justify-center px-2"
           )}
-          size={collapsed ? "icon" : "lg"}
         >
-          <PlusCircle className={cn("w-4 h-4", !collapsed && "group-hover:rotate-90 transition-transform duration-300")} />
-          {!collapsed && "New Chat"}
-        </Button>
+          <MessageSquare className="w-4 h-4 flex-shrink-0" />
+          {!collapsed && <span>New Chat</span>}
+        </button>
       </div>
 
       {/* Chat History */}

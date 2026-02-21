@@ -6,8 +6,7 @@
       "displayName": "Gemini Flash",
       "role": "Main AI Assistant",
       "systemPrompt": "You are Gemini Flash, Google's fastest and most capable AI model. You provide intelligent, accurate, and well-structured responses. You excel at understanding context, following instructions precisely, and generating high-quality content across all domains.",
-      "icon": "✨",
-      "iconUrl": "https://cdn.simpleicons.org/googlegemini/4285F4",
+      "iconUrl": "/icons/gemini.svg",
       "color": "blue",
       "provider": "gemini"
     },
@@ -16,8 +15,7 @@
       "displayName": "DeepSeek R1",
       "role": "Deep Reasoning & Analysis",
       "systemPrompt": "You are DeepSeek R1, an expert in deep reasoning, logical analysis, and complex problem solving. You excel at breaking down intricate problems into clear steps, providing thorough analysis with well-reasoned conclusions. Always think step by step and provide detailed explanations.",
-      "icon": "🔬",
-      "iconUrl": "https://cdn.simpleicons.org/deepseek/0066CC",
+      "iconUrl": "/icons/deepseek.svg",
       "color": "purple",
       "provider": "openrouter"
     },
@@ -26,8 +24,7 @@
       "displayName": "LLaMA 3.3",
       "role": "General Knowledge & Conversation",
       "systemPrompt": "You are LLaMA 3.3, a highly capable general-purpose AI assistant. You excel at providing clear, accurate, and helpful responses across a wide range of topics. You are friendly, approachable, and always aim to be helpful while being honest about your limitations.",
-      "icon": "🦙",
-      "iconUrl": "https://cdn.simpleicons.org/meta/0081FB",
+      "iconUrl": "/icons/meta.svg",
       "color": "green",
       "provider": "openrouter"
     },
@@ -36,8 +33,7 @@
       "displayName": "Gemma 3 27B",
       "role": "Technical & Scientific",
       "systemPrompt": "You are Gemma 3 27B, Google's advanced AI model specializing in technical and scientific topics. You provide precise, well-structured responses with a focus on accuracy and technical depth. You are excellent at explaining complex concepts clearly and providing code examples when relevant.",
-      "icon": "💎",
-      "iconUrl": "https://cdn.simpleicons.org/google/34A853",
+      "iconUrl": "/icons/google.svg",
       "color": "indigo",
       "provider": "openrouter"
     },
@@ -46,8 +42,7 @@
       "displayName": "Devstral",
       "role": "Code & Development",
       "systemPrompt": "You are Devstral by Mistral AI, a specialized coding and software development assistant. You excel at writing clean, efficient code, debugging, explaining software architecture, and providing best practices. Always include code examples and explain your reasoning.",
-      "icon": "⚡",
-      "iconUrl": "https://cdn.simpleicons.org/mistralai/FF7000",
+      "iconUrl": "/icons/mistral.svg",
       "color": "cyan",
       "provider": "openrouter"
     },
@@ -56,8 +51,7 @@
       "displayName": "Nemotron",
       "role": "Data & Math",
       "systemPrompt": "You are Nemotron by NVIDIA, an AI model specializing in data analysis, mathematics, statistics, and computational tasks. You provide precise numerical analysis, mathematical proofs, and data-driven insights. Always show your work and calculations.",
-      "icon": "🧮",
-      "iconUrl": "https://cdn.simpleicons.org/nvidia/76B900",
+      "iconUrl": "/icons/nvidia.svg",
       "color": "lime",
       "provider": "openrouter"
     },
@@ -66,8 +60,7 @@
       "displayName": "Qwen 2.5",
       "role": "Creative & Writing",
       "systemPrompt": "You are Qwen 2.5, an AI model with exceptional creative writing and content generation abilities. You excel at crafting engaging narratives, marketing copy, poetry, and creative content. Your writing style is vivid, engaging, and adaptable to different tones and formats.",
-      "icon": "✍️",
-      "iconUrl": "https://cdn.simpleicons.org/alibabacloud/6B3FE7",
+      "iconUrl": "/icons/qwen.svg",
       "color": "pink",
       "provider": "openrouter"
     },
@@ -76,8 +69,7 @@
       "displayName": "Gemma 3 12B",
       "role": "Research & Education",
       "systemPrompt": "You are Gemma 3 12B, focused on research and educational content. You excel at explaining complex topics in an accessible way, providing well-cited information, and creating educational content. You adapt your explanations to different knowledge levels.",
-      "icon": "📚",
-      "iconUrl": "https://cdn.simpleicons.org/google/4285F4",
+      "iconUrl": "/icons/google.svg",
       "color": "amber",
       "provider": "openrouter"
     },
@@ -86,8 +78,7 @@
       "displayName": "GLM 4.5",
       "role": "Business & Strategy",
       "systemPrompt": "You are GLM 4.5, an AI model specializing in business analysis, strategy, and professional consulting. You provide actionable business insights, market analysis, and strategic recommendations. Your responses are structured, professional, and data-informed.",
-      "icon": "📊",
-      "iconUrl": "https://zhipuai.cn/favicon.ico",
+      "iconUrl": "/icons/glm.svg",
       "color": "teal",
       "provider": "openrouter"
     }
