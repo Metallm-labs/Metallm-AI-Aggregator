@@ -56,6 +56,9 @@ export default function Dashboard() {
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [webSearchStatus, setWebSearchStatus] = useState<WebSearchStatus | null>(null);
+  // Remember the last send params so retry/edit replays the exact same model
+  const lastSendModeRef = useRef<"single" | "multi" | "debate" | "direct">("single");
+  const lastSendDirectModelIdRef = useRef<string | undefined>(undefined);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -186,9 +189,16 @@ export default function Dashboard() {
   // ============================================
   // === Step 1: Route prompt ===
   // ============================================
-  const handleSend = async (content: string, mode: "single" | "multi" | "debate", enhancerEnabled = true, webSearch = false) => {
+  const handleSend = async (content: string, mode: "single" | "multi" | "debate" | "direct", enhancerEnabled = true, webSearch = false, directModelId?: string) => {
+    // Remap "direct" mode → "single" for internal routing
+    const resolvedMode = mode === "direct" ? "single" : mode as "single" | "multi" | "debate";
+
+    // Persist so retry/edit can replay the same model
+    lastSendModeRef.current = mode;
+    lastSendDirectModelIdRef.current = directModelId;
+
     setPendingContent(content);
-    setPendingMode(mode);
+    setPendingMode(resolvedMode);
     setPendingWebSearch(webSearch);
     setRoutingResult(null);
 
@@ -201,9 +211,15 @@ export default function Dashboard() {
       activeConvIdRef.current = convId;
     }
 
+    // ── Direct mode: bypass routing, send to specific model ───────────────
+    if (mode === "direct" && directModelId) {
+      handleApproveAndSend(content, "single", content, directModelId, convId, webSearch);
+      return;
+    }
+
     // ── Enhancer OFF: skip routing, send directly ──────────────────────────
     if (!enhancerEnabled) {
-      handleApproveAndSend(content, mode, content, undefined, convId, webSearch);
+      handleApproveAndSend(content, resolvedMode, content, undefined, convId, webSearch);
       return;
     }
 
@@ -211,19 +227,19 @@ export default function Dashboard() {
     setIsRouting(true);
 
     try {
-      if (mode === "single") {
-        const result = await routePrompt(convId, content, mode);
+      if (resolvedMode === "single") {
+        const result = await routePrompt(convId, content, resolvedMode);
         setIsRouting(false);
 
         if (result.routingType === "casual") {
-          handleApproveAndSend(content, mode, content, result.targetModel?.id, convId, webSearch);
+          handleApproveAndSend(content, resolvedMode, content, result.targetModel?.id, convId, webSearch);
         } else {
           setRoutingResult(result);
           setEditedEnhancedPrompt(result.enhancedPrompt);
           setSelectedModelId(result.targetModel?.id || "");
         }
       } else {
-        const result = await routePrompt(convId, content, mode);
+        const result = await routePrompt(convId, content, resolvedMode);
         setIsRouting(false);
         setRoutingResult(result);
         setEditedEnhancedPrompt(result.enhancedPrompt);
@@ -233,7 +249,7 @@ export default function Dashboard() {
       setIsRouting(false);
       const fallbackId = activeConvIdRef.current;
       if (fallbackId) {
-        handleApproveAndSend(content, mode, content, undefined, fallbackId, webSearch);
+        handleApproveAndSend(content, resolvedMode, content, undefined, fallbackId, webSearch);
       }
     }
   };
@@ -398,7 +414,7 @@ export default function Dashboard() {
       const response = await fetch(`/api/chat/conversations/${activeConversationId}`, { credentials: "include" });
       const data = await response.json();
       setMessages(data.messages);
-      handleSend(lastUserMessage.content, "single");
+      handleSend(lastUserMessage.content, lastSendModeRef.current, true, false, lastSendDirectModelIdRef.current);
     } catch (error) {
       console.error("Retry error:", error);
     }
@@ -413,7 +429,7 @@ export default function Dashboard() {
       const response = await fetch(`/api/chat/conversations/${activeConversationId}`, { credentials: "include" });
       const data = await response.json();
       setMessages(data.messages);
-      handleSend(newContent, "single");
+      handleSend(newContent, lastSendModeRef.current, true, false, lastSendDirectModelIdRef.current);
     } catch (error) {
       console.error("Edit error:", error);
     }
@@ -801,6 +817,7 @@ export default function Dashboard() {
           onStop={handleStop}
           isLoading={isStreaming || isRouting}
           disabled={convLoading}
+          availableModels={availableModels}
         />
       </main>
     </div>

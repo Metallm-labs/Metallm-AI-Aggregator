@@ -287,10 +287,6 @@ Return ONLY the enhanced prompt text, nothing else.`;
 
       // Get conversation history for context
       const history = await storage.getMessages(conversationId);
-      const contextMessages = history.slice(-10).map(m => ({
-        role: m.role === "user" ? "user" : "assistant",
-        content: `${m.modelName ? `[${m.modelName}]: ` : ""}${m.content}`
-      }));
 
       // =============================================
       // === TITLE: instant — first 3-4 words of user message ===
@@ -326,6 +322,45 @@ Return ONLY the enhanced prompt text, nothing else.`;
         const modelName = targetModel.displayName;
         sendSSE(res, "model_start", { modelName, role: targetModel.role, provider: targetModel.provider });
 
+        // directMode = user explicitly picked a model; skip grounding/thinking formatting
+        const isDirectMode = !!targetModelId;
+
+        // Build context messages — annotate assistant messages from OTHER models
+        // so the current model won't adopt their identity.
+        // Messages from other models are injected as brief system notes rather than
+        // being presented as the current model's own assistant turns.
+        const contextMessages: { role: string; content: string }[] = [];
+        for (const m of history.slice(-10)) {
+          const clean = m.content.replace(/^\[[^\]]+\]:\s*/, "");
+          if (m.role === "user") {
+            contextMessages.push({ role: "user", content: clean });
+          } else if (m.modelName && m.modelName !== modelName) {
+            // Another model's response → system-level note so the current model
+            // knows about it but won't mistake it for its own words.
+            contextMessages.push({
+              role: "user",
+              content: `[System note: The user's previous message was answered by a different AI model named "${m.modelName}". Here is a summary of that response for context — it is NOT your response, do not claim it as yours.]\n\n${m.modelName}'s reply: ${clean.slice(0, 500)}${clean.length > 500 ? "..." : ""}`,
+            });
+            // Follow with an empty assistant ack so turn order stays valid
+            contextMessages.push({ role: "assistant", content: "(Understood, that was another model's response.)" });
+          } else {
+            // This model's own previous response
+            contextMessages.push({ role: "assistant", content: clean });
+          }
+        }
+
+        // In direct mode, explain the multi-model aggregator context clearly
+        const systemPrompt = isDirectMode
+          ? `${targetModel.systemPrompt}
+
+IMPORTANT CONTEXT — Multi-Model Aggregator:
+This chat runs inside "Metallm AI Aggregator", a platform where the user can switch between multiple AI models mid-conversation. The user chose to talk to YOU (${modelName}) right now. Other AI models (like Gemini Flash, Nemotron, DeepSeek, LLaMA, etc.) may have responded to earlier messages in the same conversation — their responses appear as system notes in the history. Key rules:
+1. You ARE ${modelName}. Never claim to be a different model.
+2. Acknowledge that other models' responses exist in the history when relevant, but clearly distinguish them from your own.
+3. If the user asks "which model am I talking to" or "how many models are in this chat", explain that this is a multi-model platform and they are currently talking to ${modelName}. Other models responded to earlier messages.
+4. Do NOT say "there is only one model" — multiple models have participated in this conversation.`
+          : targetModel.systemPrompt;
+
         let fullContent = "";
         let modelSources: WebSource[] = [];
         try {
@@ -336,9 +371,10 @@ Return ONLY the enhanced prompt text, nothing else.`;
               sendSSE(res, "chunk", { modelName, content: chunk });
             },
             {
-              systemPrompt: targetModel.systemPrompt,
+              systemPrompt,
               maxTokens: 2048,
               webSearch: !!webSearch,
+              directMode: isDirectMode,
               onStatus: (event, data) => {
                 sendSSE(res, "web_search_status", { modelName, phase: event, ...data });
               },

@@ -442,6 +442,7 @@ async function callGeminiStream(
         maxTokens?: number;
         temperature?: number;
         systemPrompt?: string;
+        directMode?: boolean;
     }
 ): Promise<{ content: string; sources: WebSource[] }> {
     const contents = messages.map(m => ({
@@ -449,11 +450,16 @@ async function callGeminiStream(
         parts: [{ text: m.content }],
     }));
 
-    const config: any = {
-        // Always provide Google Search grounding inside config —
-        // Gemini decides autonomously when to invoke it, like Google AI Studio.
-        tools: [{ googleSearch: {} }],
-    };
+    const config: any = {};
+    if (!options?.directMode) {
+        // Google Search grounding — Gemini decides when to invoke it.
+        // Disabled in directMode so responses stay plain and conversational.
+        config.tools = [{ googleSearch: {} }];
+    }
+    if (options?.directMode) {
+        // Suppress thinking output so the model responds directly.
+        config.thinkingConfig = { thinkingBudget: 0 };
+    }
     if (options?.maxTokens) config.maxOutputTokens = options.maxTokens;
     if (options?.temperature !== undefined) config.temperature = options.temperature;
 
@@ -653,6 +659,7 @@ export async function callModelStream(
         systemPrompt?: string;
         onStatus?: (event: string, data: any) => void;
         webSearch?: boolean; // User-toggled web search — only affects OpenRouter
+        directMode?: boolean; // Bypass routing formatting; respond naturally
     }
 ): Promise<{ content: string; sources: WebSource[] }> {
     const onStatus = options?.onStatus;
@@ -665,19 +672,28 @@ export async function callModelStream(
         : dateContext;
 
     if (model.provider === "gemini") {
-        // Gemini: Google Search grounding is always enabled inside callGeminiStream.
-        // The user's web search toggle is ignored — Gemini handles it natively.
-        const enrichedOptions = { ...options, systemPrompt: enrichedSystemPrompt };
+        // Gemini: Google Search grounding is enabled unless directMode is set.
+        // The user's web search toggle is ignored for Gemini — it handles it natively.
+        const enrichedOptions = { ...options, systemPrompt: enrichedSystemPrompt, directMode: options?.directMode };
         let lastError: Error | null = null;
         for (let attempt = 0; attempt < 3; attempt++) {
+            // On the 2nd retry, drop thinkingConfig in case the model doesn't support it
+            const attemptOptions = attempt >= 1 && enrichedOptions.directMode
+                ? { ...enrichedOptions, directMode: false }
+                : enrichedOptions;
             try {
-                return await callGeminiStream(model.id, messages, onChunk, enrichedOptions);
+                return await callGeminiStream(model.id, messages, onChunk, attemptOptions);
             } catch (e: any) {
                 lastError = e;
                 const errMsg = String(e?.message || "");
                 if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
                     console.warn(`[Gemini] Rate limited (attempt ${attempt + 1}/3), waiting before retry...`);
                     await sleep((attempt + 1) * 3_000);
+                    continue;
+                }
+                if (errMsg.includes("fetch failed") || errMsg.includes("ECONNRESET") || errMsg.includes("ETIMEDOUT")) {
+                    console.warn(`[Gemini] Network error (attempt ${attempt + 1}/3), retrying...`);
+                    await sleep(1_000);
                     continue;
                 }
                 throw e;
@@ -723,11 +739,29 @@ export async function callModelStream(
             }
         }
 
-        const result = await callOpenRouterStream(model.id, messages, onChunk, {
-            ...options,
-            systemPrompt: finalSystemPrompt,
-            webSearch: false, // We injected context manually via DDG
-        });
+        const result = await (async () => {
+            let lastErr: Error | null = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    return await callOpenRouterStream(model.id, messages, onChunk, {
+                        ...options,
+                        systemPrompt: finalSystemPrompt,
+                        webSearch: false,
+                    });
+                } catch (e: any) {
+                    lastErr = e;
+                    const msg = String(e?.message || "");
+                    const isConnErr = msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT") || msg.includes("UND_ERR_CONNECT_TIMEOUT");
+                    if (isConnErr && attempt < 2) {
+                        console.warn(`[OpenRouter] Connection error attempt ${attempt + 1}/3, retrying in ${(attempt + 1) * 2}s...`);
+                        await sleep((attempt + 1) * 2_000);
+                        continue;
+                    }
+                    throw e;
+                }
+            }
+            throw lastErr!;
+        })();
         return {
             content: result.content,
             sources: webSources.length > 0 ? webSources : result.sources,
