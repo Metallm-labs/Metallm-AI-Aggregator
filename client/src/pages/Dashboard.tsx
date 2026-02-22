@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatMessage, TypingIndicator } from "@/components/ChatMessage";
-import { ChatInput, type ChatMode } from "@/components/ChatInput";
+import { ChatInput, type ChatMode, type DebateParticipant } from "@/components/ChatInput";
 import { ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { ModelIcon } from "@/components/ModelIcon";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversation, useCreateConversation, useSendMessage, routePrompt, type RoutingResult } from "@/hooks/use-chat";
-import { Loader2, MessageSquare, Settings, Zap, Edit3, Send, X, Sparkles, ChevronDown, Globe, Search } from "lucide-react";
+import { Loader2, MessageSquare, Zap, Edit3, Send, X, Sparkles, ChevronDown, Globe, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Message } from "@shared/schema";
 
@@ -57,6 +58,9 @@ export default function Dashboard() {
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [currentChatMode, setCurrentChatMode] = useState<ChatMode>("single");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [selectedMultiModelIds, setSelectedMultiModelIds] = useState<string[]>([]);
+  const [debateParticipants, setDebateParticipants] = useState<DebateParticipant[]>([]);
   const [webSearchStatus, setWebSearchStatus] = useState<WebSearchStatus | null>(null);
   // Remember the last send params so retry/edit replays the exact same model
   const lastSendModeRef = useRef<"single" | "multi" | "debate" | "direct">("single");
@@ -112,6 +116,11 @@ export default function Dashboard() {
         const data = await res.json();
         setAvailableModels(data.models);
         setMainModelId(data.mainModelId);
+        setSelectedMultiModelIds((prev) => prev.length > 0 ? prev : data.models.map((m: any) => m.id));
+        setDebateParticipants((prev) => prev.length > 0 ? prev : [
+          { modelId: data.models[0]?.id ?? "", customRole: data.models[0]?.role ?? "", customSystemPrompt: "" },
+          { modelId: data.models[1]?.id ?? data.models[0]?.id ?? "", customRole: data.models[1]?.role ?? "", customSystemPrompt: "" },
+        ]);
       }
     } catch (e) {
       console.error("Failed to fetch models:", e);
@@ -215,13 +224,13 @@ export default function Dashboard() {
 
     // ── Direct mode: bypass routing, send to specific model ───────────────
     if (mode === "direct" && directModelId) {
-      handleApproveAndSend(content, "single", content, directModelId, convId, webSearch);
+      handleApproveAndSend(content, "single", content, directModelId, convId, webSearch, selectedMultiModelIds, debateParticipants);
       return;
     }
 
     // ── Enhancer OFF: skip routing, send directly ──────────────────────────
     if (!enhancerEnabled) {
-      handleApproveAndSend(content, resolvedMode, content, undefined, convId, webSearch);
+      handleApproveAndSend(content, resolvedMode, content, undefined, convId, webSearch, selectedMultiModelIds, debateParticipants);
       return;
     }
 
@@ -234,7 +243,7 @@ export default function Dashboard() {
         setIsRouting(false);
 
         if (result.routingType === "casual") {
-          handleApproveAndSend(content, resolvedMode, content, result.targetModel?.id, convId, webSearch);
+          handleApproveAndSend(content, resolvedMode, content, result.targetModel?.id, convId, webSearch, selectedMultiModelIds, debateParticipants);
         } else {
           setRoutingResult(result);
           setEditedEnhancedPrompt(result.enhancedPrompt);
@@ -251,7 +260,7 @@ export default function Dashboard() {
       setIsRouting(false);
       const fallbackId = activeConvIdRef.current;
       if (fallbackId) {
-        handleApproveAndSend(content, resolvedMode, content, undefined, fallbackId, webSearch);
+        handleApproveAndSend(content, resolvedMode, content, undefined, fallbackId, webSearch, selectedMultiModelIds, debateParticipants);
       }
     }
   };
@@ -266,6 +275,8 @@ export default function Dashboard() {
     targetModelId?: string,
     explicitConvId?: number,
     webSearch?: boolean,
+    selectedModelIds?: string[],
+    debateConfig?: DebateParticipant[],
   ) => {
     setRoutingResult(null);
     setIsStreaming(true);
@@ -354,6 +365,7 @@ export default function Dashboard() {
         abortController.signal,
         // onWebSearchStatus
         (modelName, phase, data) => {
+          // eslint-disable-next-line no-shadow
           const status: WebSearchStatus = {
             modelName,
             phase: phase as WebSearchStatus["phase"],
@@ -380,6 +392,8 @@ export default function Dashboard() {
           streamingStateRef.current.set(convId, { ...s, messages: newMessages });
           if (activeConvIdRef.current === convId) setStreamingMessages(new Map(newMessages));
         },
+        selectedModelIds,
+        debateConfig,
       );
     } catch (error: any) {
       // Ignore abort errors (user clicked stop)
@@ -400,7 +414,7 @@ export default function Dashboard() {
 
   const handleSkipRouting = () => {
     setRoutingResult(null);
-    handleApproveAndSend(pendingContent, pendingMode, pendingContent, undefined, undefined, pendingWebSearch);
+    handleApproveAndSend(pendingContent, pendingMode, pendingContent, undefined, undefined, pendingWebSearch, selectedMultiModelIds, debateParticipants);
   };
 
   const handleRetry = async (messageIndex: number) => {
@@ -490,35 +504,15 @@ export default function Dashboard() {
         onSelectConversation={setActiveConversationId}
         onNewChat={handleNewChat}
         onConversationDeleted={handleConversationDeleted}
+        onCollapseChange={setSidebarCollapsed}
       />
 
-      <main className="flex-1 lg:ml-64 flex flex-col h-screen">
-        <div className="flex items-center justify-end px-4 py-2 border-b border-white/5">
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-white hover:bg-white/5 transition-all"
-          >
-            <Settings className="w-4 h-4" />
-            <span className="hidden sm:inline">Model Settings</span>
-          </button>
-        </div>
-
-        <AnimatePresence>
-          {showSettings && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden border-b border-white/5"
-            >
-              <ModelSettings
-                onClose={() => setShowSettings(false)}
-                onSave={fetchModels}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
+      <main
+        className={cn(
+          "flex-1 flex flex-col h-screen transition-all duration-200",
+          sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
+        )}
+      >
         <div
           ref={scrollAreaRef}
           className="flex-1 overflow-y-auto"
@@ -755,7 +749,9 @@ export default function Dashboard() {
                               editedEnhancedPrompt,
                               routingResult?.routingType === "specialized" ? selectedModelId : routingResult?.targetModel?.id,
                               undefined,
-                              pendingWebSearch
+                              pendingWebSearch,
+                              selectedMultiModelIds,
+                              debateParticipants
                             );
                           }}
                           className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-primary hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
@@ -813,6 +809,28 @@ export default function Dashboard() {
           )}
         </div>
 
+        <AnimatePresence>
+          {showSettings && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden border-t border-white/5"
+            >
+              <ModelSettings
+                mode={currentChatMode}
+                availableModels={availableModels}
+                selectedMultiModelIds={selectedMultiModelIds}
+                onMultiModelsChange={setSelectedMultiModelIds}
+                debateParticipants={debateParticipants}
+                onDebateConfigChange={setDebateParticipants}
+                onClose={() => setShowSettings(false)}
+                onSave={fetchModels}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <ChatInput
           onSend={handleSend}
           onStop={handleStop}
@@ -820,6 +838,10 @@ export default function Dashboard() {
           disabled={convLoading}
           availableModels={availableModels}
           onModeChange={setCurrentChatMode}
+          onSettingsClick={() => setShowSettings(v => !v)}
+          showSettings={showSettings}
+          selectedMultiModelIds={selectedMultiModelIds}
+          debateParticipants={debateParticipants}
         />
       </main>
     </div>

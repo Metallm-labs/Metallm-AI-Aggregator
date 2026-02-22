@@ -256,7 +256,7 @@ Return ONLY the enhanced prompt text, nothing else.`;
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
 
-      const { content, mode, enhancedPrompt, targetModelId, webSearch } = req.body;
+      const { content, mode, enhancedPrompt, targetModelId, webSearch, selectedModelIds, debateConfig } = req.body;
       if (!content) return res.status(400).json({ message: "Content is required" });
 
       // The prompt to actually send to the model (user-approved enhanced prompt)
@@ -414,7 +414,10 @@ This chat runs inside "Metallm AI Aggregator", a platform where the user can swi
         // ===========================================
       } else if (mode === "multi") {
         const modelResponses: { modelName: string; content: string; role: string }[] = [];
-        const promises = currentModels.map(async (model) => {
+        const modelsToRun = Array.isArray(selectedModelIds) && selectedModelIds.length > 0
+          ? currentModels.filter((m) => selectedModelIds.includes(m.id))
+          : currentModels;
+        const promises = modelsToRun.map(async (model) => {
           sendSSE(res, "model_start", { modelName: model.displayName, role: model.role, provider: model.provider });
 
           let fullContent = "";
@@ -518,7 +521,15 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
         // ===========================================
       } else if (mode === "debate") {
         const debateRounds = 2;
-        const debaters = currentModels.slice(0, 3);
+        let debaters: typeof currentModels;
+        if (Array.isArray(debateConfig) && debateConfig.length >= 2) {
+          debaters = debateConfig.map((p: { modelId: string; customRole: string; customSystemPrompt: string }) => {
+            const base = currentModels.find((m) => m.id === p.modelId) ?? currentModels[0];
+            return { ...base, role: p.customRole || base.role, systemPrompt: p.customSystemPrompt || base.systemPrompt };
+          });
+        } else {
+          debaters = currentModels.slice(0, 3);
+        }
         let debateContext = `Topic: ${promptToSend}\n\n`;
 
         for (let round = 0; round < debateRounds; round++) {

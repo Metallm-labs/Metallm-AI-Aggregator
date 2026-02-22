@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Conversation, Message, ConversationWithMessages } from "@shared/schema";
+import type { DebateParticipant } from "@/components/ChatInput";
 
 // Helper: directly patch a conversation's title in the cache
 function patchConversationTitle(
@@ -153,11 +154,13 @@ export function useSendMessage() {
         onWebSearchStatus?: (modelName: string, phase: string, data: any) => void,
         webSearch?: boolean,
         onWebSources?: (modelName: string, sources: { title: string; url: string }[]) => void,
+        selectedModelIds?: string[],
+        debateConfig?: DebateParticipant[],
     ) => {
         const res = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content, mode, enhancedPrompt, targetModelId, webSearch }),
+            body: JSON.stringify({ content, mode, enhancedPrompt, targetModelId, webSearch, selectedModelIds, debateConfig }),
             credentials: "include",
             signal,
         });

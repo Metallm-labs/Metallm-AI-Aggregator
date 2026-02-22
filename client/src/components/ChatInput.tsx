@@ -1,12 +1,18 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown } from "lucide-react";
+import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ModelIcon } from "@/components/ModelIcon";
 
 export type ChatMode = "single" | "multi" | "debate" | "direct";
+
+export interface DebateParticipant {
+    modelId: string;
+    customRole: string;
+    customSystemPrompt: string;
+}
 
 interface AvailableModel {
     id: string;
@@ -23,6 +29,10 @@ interface ChatInputProps {
     disabled?: boolean;
     availableModels?: AvailableModel[];
     onModeChange?: (mode: ChatMode) => void;
+    onSettingsClick?: () => void;
+    showSettings?: boolean;
+    selectedMultiModelIds?: string[];
+    debateParticipants?: DebateParticipant[];
 }
 
 const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; description: string; color: string }> = {
@@ -52,7 +62,7 @@ const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; descr
     },
 };
 
-export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels = [], onModeChange }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [] }: ChatInputProps) {
     const [content, setContent] = useState("");
     const [mode, setMode] = useState<ChatMode>("single");
     const [directModelId, setDirectModelIdState] = useState<string>("");
@@ -163,9 +173,43 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 rounded-2xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition duration-300 blur" />
 
                     <div className="relative bg-card/50 rounded-2xl border border-white/10">
-                        {/* Attached files + web search badge */}
-                        {(attachedFiles.length > 0 || webSearchEnabled) && (
+                        {/* Attached files / web search / model selection badges */}
+                        {(attachedFiles.length > 0 || webSearchEnabled || (mode === "multi" && selectedMultiModelIds.length > 0) || (mode === "debate" && debateParticipants.length >= 2)) && (
                             <div className="flex flex-wrap gap-2 px-4 pt-3">
+                                {/* Multi-mode selected models pill */}
+                                {mode === "multi" && selectedMultiModelIds.length > 0 && (() => {
+                                    const chosen = availableModels.filter(m => selectedMultiModelIds.includes(m.id));
+                                    return (
+                                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300">
+                                            <div className="flex items-center -space-x-1">
+                                                {chosen.slice(0, 4).map(m => (
+                                                    <span key={m.id} className="ring-1 ring-background rounded-full">
+                                                        <ModelIcon modelName={m.displayName} iconUrl={m.iconUrl} size={14} />
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <span>{chosen.length} model{chosen.length !== 1 ? "s" : ""}</span>
+                                        </div>
+                                    );
+                                })()}
+                                {/* Debate-mode participant pills */}
+                                {mode === "debate" && debateParticipants.length >= 2 && (
+                                    <div className="flex items-center gap-1.5">
+                                        {debateParticipants.slice(0, 2).map((p, i) => {
+                                            const m = availableModels.find(x => x.id === p.modelId);
+                                            if (!m) return null;
+                                            return (
+                                                <div key={i} className={cn(
+                                                    "flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs",
+                                                    i === 0 ? "bg-orange-500/10 border-orange-500/20 text-orange-300" : "bg-blue-500/10 border-blue-500/20 text-blue-300"
+                                                )}>
+                                                    <ModelIcon modelName={m.displayName} iconUrl={m.iconUrl} size={14} />
+                                                    <span className="truncate max-w-[80px]">{p.customRole || m.displayName}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                                 {webSearchEnabled && (
                                     <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
                                         <Globe className="w-3 h-3" />
@@ -393,8 +437,29 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels
                                 )}
                             </div>
 
-                            {/* ── Send / Stop button ── */}
-                            {isLoading ? (
+                            {/* ── Right side: Settings + Send/Stop ── */}
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {/* ── Settings button (hidden in direct mode) ── */}
+                                {mode !== "direct" && (
+                                    <button
+                                        type="button"
+                                        onClick={onSettingsClick}
+                                        className={cn(
+                                            "flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-medium border transition-all",
+                                            showSettings
+                                                ? "bg-white/10 border-white/20 text-white"
+                                                : "bg-transparent border-transparent hover:bg-white/5 hover:border-white/10 text-muted-foreground hover:text-white"
+                                        )}
+                                    >
+                                        <Settings className="w-3.5 h-3.5 flex-shrink-0" />
+                                        <span className="hidden sm:inline">
+                                            {mode === "multi" ? "Select Models" : mode === "debate" ? "Debate Config" : "Model Settings"}
+                                        </span>
+                                    </button>
+                                )}
+
+                                {/* ── Send / Stop button ── */}
+                                {isLoading ? (
                                 <Button
                                     type="button"
                                     size="icon"
@@ -418,6 +483,7 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels
                                     <Send className="w-4 h-4" />
                                 </Button>
                             )}
+                            </div>
                         </div>
                     </div>
                 </div>
