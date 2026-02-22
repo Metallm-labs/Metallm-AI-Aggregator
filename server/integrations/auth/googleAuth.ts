@@ -72,7 +72,11 @@ export async function setupGoogleAuth(app: Express) {
   const googleConfigured = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
 
   if (googleConfigured) {
-    const callbackURL = process.env.GOOGLE_CALLBACK_URL || "http://localhost:3000/api/auth/google/callback";
+    // Use a relative path so Passport derives the full callback URL from the
+    // incoming request's host header.  This works both locally (localhost:3000)
+    // and on any deployment (Koyeb, Heroku, etc.) without changing env vars.
+    // The explicit GOOGLE_CALLBACK_URL override is still honoured when set.
+    const callbackURL = process.env.GOOGLE_CALLBACK_URL || "/api/auth/google/callback";
 
     passport.use(
       new GoogleStrategy(
@@ -80,6 +84,7 @@ export async function setupGoogleAuth(app: Express) {
           clientID: process.env.GOOGLE_CLIENT_ID!,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
           callbackURL: callbackURL,
+          proxy: true, // trust X-Forwarded-Proto so https:// is used in production
         },
         async (accessToken, refreshToken, profile, done) => {
           try {
