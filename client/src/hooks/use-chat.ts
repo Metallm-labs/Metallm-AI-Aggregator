@@ -110,18 +110,20 @@ export interface RoutingResult {
     reason: string;
     enhancedPrompt: string;
     originalPrompt: string;
+    perModelPrompts?: Array<{ modelId: string; displayName: string; prompt: string }>;
 }
 
 // Step 1: Route the prompt (get enhanced prompt + routing decision)
 export async function routePrompt(
     conversationId: number,
     content: string,
-    mode: "single" | "multi" | "debate"
+    mode: "single" | "multi" | "debate",
+    selectedModelIds?: string[],
 ): Promise<RoutingResult> {
     const res = await fetch(`/api/chat/conversations/${conversationId}/route`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, mode }),
+        body: JSON.stringify({ content, mode, selectedModelIds }),
         credentials: "include",
     });
 
@@ -156,11 +158,12 @@ export function useSendMessage() {
         onWebSources?: (modelName: string, sources: { title: string; url: string }[]) => void,
         selectedModelIds?: string[],
         debateConfig?: DebateParticipant[],
+        perModelPrompts?: Array<{ modelId: string; displayName: string; prompt: string }>,
     ) => {
         const res = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content, mode, enhancedPrompt, targetModelId, webSearch, selectedModelIds, debateConfig }),
+            body: JSON.stringify({ content, mode, enhancedPrompt, targetModelId, webSearch, selectedModelIds, debateConfig, perModelPrompts }),
             credentials: "include",
             signal,
         });

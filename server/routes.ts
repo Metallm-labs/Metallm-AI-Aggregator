@@ -168,7 +168,7 @@ export async function registerRoutes(
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
 
-      const { content, mode } = req.body;
+      const { content, mode, selectedModelIds } = req.body;
       if (!content || typeof content !== "string") {
         return res.status(400).json({ message: "Content is required" });
       }
@@ -190,33 +190,56 @@ export async function registerRoutes(
           originalPrompt: content,
         });
       } else if (mode === "multi") {
-        // For multi-mode: enhance the prompt for all models
-        const enhancePrompt = `You are a prompt engineer. Improve this user prompt to be clearer, more specific, and better structured. Keep the same intent but add clarity.
+        // Filter to only selected models
+        const selectedModels = Array.isArray(selectedModelIds) && selectedModelIds.length > 0
+          ? currentModels.filter((m) => (selectedModelIds as string[]).includes(m.id))
+          : currentModels;
 
-User prompt: "${content}"
+        // Generate a tailored prompt for each model based on its role/specialty
+        const perModelPromptReq = `You are an expert prompt engineer. A user has submitted a request that will be answered by multiple AI models simultaneously, each with a unique specialty. Your task is to write a tailored, optimized version of the user's prompt for EACH model, making the most of that model's specific strengths and role.
 
-Return ONLY the enhanced prompt text, nothing else.`;
+User request: "${content}"
 
-        let enhancedPrompt = content;
+Models to tailor for:
+${selectedModels.map((m, i) => `${i + 1}. id="${m.id}" name="${m.displayName}" specialty="${m.role}"`).join("\n")}
+
+Rules:
+- Each prompt must address the SAME underlying question but be framed to play to that model's specialty
+- Keep the user's intent intact
+- Return ONLY a valid JSON array — no markdown fences, no explanation
+
+Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
+
+        let perModelPrompts: { modelId: string; displayName: string; prompt: string }[] =
+          selectedModels.map((m) => ({ modelId: m.id, displayName: m.displayName, prompt: content }));
+
         try {
-          enhancedPrompt = await callModel(getMainModel(), [
-            { role: "user", content: enhancePrompt }
-          ], { maxTokens: 1000, temperature: 0.3 });
-          // Clean up any quotes
-          enhancedPrompt = enhancedPrompt.replace(/^["']|["']$/g, "").trim();
+          const raw = await callModel(getMainModel(), [{ role: "user", content: perModelPromptReq }], {
+            maxTokens: 2500,
+            temperature: 0.3,
+          });
+          const jsonStr = raw.replace(/```json|```/g, "").trim();
+          const parsed = JSON.parse(jsonStr);
+          if (Array.isArray(parsed)) {
+            perModelPrompts = parsed.map((p: any) => {
+              const m = selectedModels.find((m) => m.id === p.modelId);
+              return { modelId: p.modelId, displayName: m?.displayName ?? p.modelId, prompt: String(p.prompt || content) };
+            });
+          }
         } catch (e) {
-          console.error("Prompt enhancement failed:", e);
+          console.error("Per-model prompt generation failed, using raw content:", e);
         }
 
         res.json({
           routingType: "multi",
-          models: currentModels.map(m => ({
+          models: selectedModels.map((m) => ({
             id: m.id,
             displayName: m.displayName,
             role: m.role,
             provider: m.provider,
           })),
-          enhancedPrompt,
+          enhancedPrompt: perModelPrompts[0]?.prompt ?? content,
+          perModelPrompts,
           originalPrompt: content,
         });
       } else {
@@ -256,7 +279,7 @@ Return ONLY the enhanced prompt text, nothing else.`;
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
 
-      const { content, mode, enhancedPrompt, targetModelId, webSearch, selectedModelIds, debateConfig } = req.body;
+      const { content, mode, enhancedPrompt, targetModelId, webSearch, selectedModelIds, debateConfig, perModelPrompts } = req.body;
       if (!content) return res.status(400).json({ message: "Content is required" });
 
       // The prompt to actually send to the model (user-approved enhanced prompt)
@@ -420,12 +443,17 @@ This chat runs inside "Metallm AI Aggregator", a platform where the user can swi
         const promises = modelsToRun.map(async (model) => {
           sendSSE(res, "model_start", { modelName: model.displayName, role: model.role, provider: model.provider });
 
+          // Use per-model tailored prompt if provided, else fall back to the general enhanced prompt
+          const modelPrompt = Array.isArray(perModelPrompts)
+            ? (perModelPrompts.find((p: any) => p.modelId === model.id)?.prompt ?? promptToSend)
+            : promptToSend;
+
           let fullContent = "";
           let multiSources: WebSource[] = [];
           try {
             const result = await callModelStream(
               model,
-              [{ role: "user", content: promptToSend }],
+              [{ role: "user", content: modelPrompt }],
               (chunk) => {
                 sendSSE(res, "chunk", { modelName: model.displayName, content: chunk });
               },

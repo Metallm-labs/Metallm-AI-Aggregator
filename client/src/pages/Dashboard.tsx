@@ -61,6 +61,7 @@ export default function Dashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedMultiModelIds, setSelectedMultiModelIds] = useState<string[]>([]);
   const [debateParticipants, setDebateParticipants] = useState<DebateParticipant[]>([]);
+  const [perModelPrompts, setPerModelPrompts] = useState<Array<{ modelId: string; displayName: string; prompt: string }>>([]);
   const [webSearchStatus, setWebSearchStatus] = useState<WebSearchStatus | null>(null);
   // Remember the last send params so retry/edit replays the exact same model
   const lastSendModeRef = useRef<"single" | "multi" | "debate" | "direct">("single");
@@ -212,6 +213,7 @@ export default function Dashboard() {
     setPendingMode(resolvedMode);
     setPendingWebSearch(webSearch);
     setRoutingResult(null);
+    setPerModelPrompts([]);
 
     // Create conversation if needed (shared by both paths)
     let convId = activeConversationId;
@@ -250,10 +252,13 @@ export default function Dashboard() {
           setSelectedModelId(result.targetModel?.id || "");
         }
       } else {
-        const result = await routePrompt(convId, content, resolvedMode);
+        const result = await routePrompt(convId, content, resolvedMode, selectedMultiModelIds);
         setIsRouting(false);
         setRoutingResult(result);
         setEditedEnhancedPrompt(result.enhancedPrompt);
+        if (result.perModelPrompts?.length) {
+          setPerModelPrompts(result.perModelPrompts.map(p => ({ ...p })));
+        }
       }
     } catch (error) {
       console.error("Routing error:", error);
@@ -277,6 +282,7 @@ export default function Dashboard() {
     webSearch?: boolean,
     selectedModelIds?: string[],
     debateConfig?: DebateParticipant[],
+    perModelPromptsArg?: Array<{ modelId: string; displayName: string; prompt: string }>,
   ) => {
     setRoutingResult(null);
     setIsStreaming(true);
@@ -365,7 +371,6 @@ export default function Dashboard() {
         abortController.signal,
         // onWebSearchStatus
         (modelName, phase, data) => {
-          // eslint-disable-next-line no-shadow
           const status: WebSearchStatus = {
             modelName,
             phase: phase as WebSearchStatus["phase"],
@@ -394,6 +399,7 @@ export default function Dashboard() {
         },
         selectedModelIds,
         debateConfig,
+        perModelPromptsArg,
       );
     } catch (error: any) {
       // Ignore abort errors (user clicked stop)
@@ -609,8 +615,12 @@ export default function Dashboard() {
                     className="mx-4 my-4 p-4 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20"
                   >
                     <div className="flex items-center gap-2 mb-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                      <span className="text-sm font-medium text-white">{mainModelName} is analyzing your prompt...</span>
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        <span className="text-sm font-medium text-white">
+                          {pendingMode === "multi"
+                            ? `${mainModelName} is crafting tailored prompts for ${selectedMultiModelIds.length} model${selectedMultiModelIds.length !== 1 ? "s" : ""}...`
+                            : `${mainModelName} is analyzing your prompt...`}
+                        </span>
                     </div>
                   </motion.div>
                 )}
@@ -694,15 +704,45 @@ export default function Dashboard() {
                     <div className="p-4">
                       <div className="flex items-center gap-2 mb-2">
                         <Edit3 className="w-3.5 h-3.5 text-primary" />
-                        <span className="text-xs font-medium text-primary">Enhanced Prompt</span>
+                        <span className="text-xs font-medium text-primary">
+                          {routingResult.routingType === "multi" ? "Per-Model Prompts" : "Enhanced Prompt"}
+                        </span>
                         <span className="text-[10px] text-muted-foreground/50">(edit before sending)</span>
                       </div>
-                      <textarea
-                        value={editedEnhancedPrompt}
-                        onChange={(e) => setEditedEnhancedPrompt(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none font-normal leading-relaxed"
-                        rows={Math.min(8, Math.max(3, editedEnhancedPrompt.split("\n").length + 1))}
-                      />
+
+                      {routingResult.routingType === "multi" && perModelPrompts.length > 0 ? (
+                        <div className="space-y-2 mb-3">
+                          {perModelPrompts.map((p, i) => {
+                            const modelMeta = availableModels.find(m => m.id === p.modelId);
+                            return (
+                              <div key={p.modelId} className="rounded-lg border border-white/10 overflow-hidden bg-white/[0.03]">
+                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/5 bg-white/5">
+                                  <ModelIcon modelName={p.displayName} iconUrl={modelMeta?.iconUrl} size={14} />
+                                  <span className="text-xs font-medium text-white/80">{p.displayName}</span>
+                                  {modelMeta?.role && (
+                                    <span className="text-[10px] text-muted-foreground/50 ml-1">{modelMeta.role}</span>
+                                  )}
+                                </div>
+                                <textarea
+                                  value={p.prompt}
+                                  onChange={(e) => setPerModelPrompts(prev =>
+                                    prev.map((x, j) => j === i ? { ...x, prompt: e.target.value } : x)
+                                  )}
+                                  className="w-full bg-transparent px-3 py-2 text-sm text-white/90 focus:outline-none resize-none"
+                                  rows={Math.min(6, Math.max(2, p.prompt.split("\n").length + 1))}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <textarea
+                          value={editedEnhancedPrompt}
+                          onChange={(e) => setEditedEnhancedPrompt(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none font-normal leading-relaxed"
+                          rows={Math.min(8, Math.max(3, editedEnhancedPrompt.split("\n").length + 1))}
+                        />
+                      )}
                       <div className="mt-2 mb-3">
                         <div className="text-[10px] text-muted-foreground/40 mb-1">Your original prompt:</div>
                         <div className="text-xs text-muted-foreground/50 italic bg-white/[0.03] rounded px-2 py-1.5 border border-white/5">
@@ -712,10 +752,10 @@ export default function Dashboard() {
 
                       {routingResult.routingType === "multi" && routingResult.models && (
                         <div className="mb-3 pb-3 border-b border-white/5">
-                          <div className="text-xs text-muted-foreground/60 mb-2">Will send to {routingResult.models.length} models:</div>
+                          <div className="text-xs text-muted-foreground/60 mb-2">Will send to {routingResult.models.length} selected model{routingResult.models.length !== 1 ? "s" : ""}:</div>
                           <div className="flex flex-wrap gap-1.5">
                             {routingResult.models.map(m => (
-                              <span key={m.id} className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-muted-foreground flex items-center gap-1">
+                              <span key={m.id} className="text-[10px] px-2 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-muted-foreground flex items-center gap-1">
                                 <ModelIcon modelName={m.displayName} iconUrl={m.iconUrl} size={12} />
                                 <span>{m.displayName}</span>
                               </span>
@@ -751,7 +791,8 @@ export default function Dashboard() {
                               undefined,
                               pendingWebSearch,
                               selectedMultiModelIds,
-                              debateParticipants
+                              debateParticipants,
+                              pendingMode === "multi" ? perModelPrompts : undefined,
                             );
                           }}
                           className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-primary hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
