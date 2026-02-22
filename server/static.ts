@@ -10,18 +10,29 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath, { maxAge: "1d" }));
+  // Hashed assets (/assets/*) — cache aggressively (hash changes on rebuild)
+  app.use(
+    "/assets",
+    express.static(path.join(distPath, "assets"), {
+      maxAge: "30d",
+      immutable: true,
+    }),
+  );
 
-  // Only serve index.html for SPA navigation — NOT for asset requests.
-  // If a .js/.css/.png etc. file wasn't found by express.static above, return
-  // 404 so the browser sees a clear error instead of a text/html MIME mismatch.
+  // Other static files (favicon, icons, etc.) — short cache
+  app.use(express.static(distPath, { maxAge: "1h" }));
+
+  // SPA catch-all — serve index.html with NO cache for navigation routes.
+  // Skip asset requests so missing files get a proper 404 instead of text/html.
   app.use((req, res, next) => {
     const ext = path.extname(req.path);
     if (ext && ext !== ".html") {
-      // Static asset that wasn't found — let Express return 404 naturally
       return next();
     }
-    // SPA route — serve index.html
+    // Never cache index.html — it contains hashed asset references
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
