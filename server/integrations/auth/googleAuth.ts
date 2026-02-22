@@ -7,15 +7,16 @@ import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
 import { sendVerificationEmail } from "./email";
 import crypto from "crypto";
+import { pool } from "../../db";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
     createTableIfMissing: false,
     ttl: sessionTtl,
     tableName: "sessions",
+    pool: pool as any,
   });
   return session({
     secret: process.env.SESSION_SECRET || "dev-secret-change-in-production",
