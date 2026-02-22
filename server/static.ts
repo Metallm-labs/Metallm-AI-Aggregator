@@ -10,10 +10,18 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, { maxAge: "1d" }));
 
-  // fall through to index.html if the file doesn't exist
-  app.use("/{*path}", (_req, res) => {
+  // Only serve index.html for SPA navigation — NOT for asset requests.
+  // If a .js/.css/.png etc. file wasn't found by express.static above, return
+  // 404 so the browser sees a clear error instead of a text/html MIME mismatch.
+  app.use((req, res, next) => {
+    const ext = path.extname(req.path);
+    if (ext && ext !== ".html") {
+      // Static asset that wasn't found — let Express return 404 naturally
+      return next();
+    }
+    // SPA route — serve index.html
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
