@@ -76,7 +76,9 @@ export async function registerRoutes(
     try {
       const user = req.user as any;
       const userId = user.id || user.claims?.sub;
-      const conversations = await storage.getConversations(userId);
+      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const offset = Math.max(Number(req.query.offset) || 0, 0);
+      const conversations = await storage.getConversations(userId, limit, offset);
       res.json(conversations);
     } catch (err) {
       console.error("Error fetching conversations:", err);
@@ -124,7 +126,11 @@ export async function registerRoutes(
       const userId = user.id || user.claims?.sub;
       const conversationId = Number(req.params.id);
 
-      const conversation = await storage.getConversationWithMessages(conversationId);
+      const conversation = await storage.getConversationWithMessages(
+        conversationId,
+        Math.min(Number(req.query.messageLimit) || 100, 500),
+        req.query.beforeId ? Number(req.query.beforeId) : undefined
+      );
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
 
@@ -287,8 +293,9 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
 
 
       // Check message count BEFORE saving the user message (so 0 = first ever message)
-      const existingMessages = await storage.getMessages(conversationId);
-      const isFirstMessage = existingMessages.length === 0;
+      // Use count query instead of loading all messages — much cheaper at scale
+      const messageCount = await storage.getMessageCount(conversationId);
+      const isFirstMessage = messageCount === 0;
 
       // Save user message (store the enhanced prompt if available, replacing the original)
       const userMessage = await storage.addMessage({
@@ -306,8 +313,8 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
 
       sendSSE(res, "user_message", userMessage);
 
-      // Get conversation history for context
-      const history = await storage.getMessages(conversationId);
+      // Get conversation history for context (last 10 messages only)
+      const history = await storage.getMessages(conversationId, 12);
 
       // =============================================
       // === TITLE: instant — first 3-4 words of user message ===
@@ -652,7 +659,9 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
   app.get(api.metallm.list.path, isAuthenticated, async (req, res) => {
     const user = req.user as any;
     const userId = user.id || user.claims?.sub;
-    const queries = await storage.getQueries(userId);
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const queries = await storage.getQueries(userId, limit, offset);
     res.json(queries);
   });
 

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, bigint, bigserial, boolean, timestamp, jsonb, varchar, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -10,23 +10,29 @@ export * from "./models/chat";
 
 // === Conversations Table ===
 export const conversations = pgTable("conversations", {
-  id: serial("id").primaryKey(),
+  id: bigserial("id", { mode: "number" }).primaryKey(),
   userId: text("user_id").notNull(),
   title: text("title").default("New Chat").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_conversations_user_id").on(table.userId),
+  index("idx_conversations_user_updated").on(table.userId, table.updatedAt),
+]);
 
 // === Messages Table ===
 export const messages = pgTable("messages", {
-  id: serial("id").primaryKey(),
-  conversationId: integer("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  conversationId: bigint("conversation_id", { mode: "number" }).notNull().references(() => conversations.id, { onDelete: "cascade" }),
   role: text("role").notNull(), // 'user' | 'assistant' | 'system'
   content: text("content").notNull(),
   modelName: text("model_name"), // e.g., 'Gemini', 'Claude', 'Grok', 'LLaMA', null for user
   metadata: jsonb("metadata"), // For images, attachments, etc.
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_messages_conversation_id").on(table.conversationId),
+  index("idx_messages_conversation_created").on(table.conversationId, table.createdAt),
+]);
 
 // === Relations ===
 export const conversationsRelations = relations(conversations, ({ many }) => ({
@@ -42,24 +48,29 @@ export const messagesRelations = relations(messages, ({ one }) => ({
 
 // === Legacy Query Tables (keeping for backward compatibility) ===
 export const queries = pgTable("queries", {
-  id: serial("id").primaryKey(),
+  id: bigserial("id", { mode: "number" }).primaryKey(),
   userId: text("user_id").notNull(),
   prompt: text("prompt").notNull(),
   role: text("role").default("general").notNull(),
   orchestratorSummary: text("orchestrator_summary"),
   allModelsMode: boolean("all_models_mode").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_queries_user_id").on(table.userId),
+  index("idx_queries_user_created").on(table.userId, table.createdAt),
+]);
 
 export const modelResponses = pgTable("model_responses", {
-  id: serial("id").primaryKey(),
-  queryId: integer("query_id").notNull().references(() => queries.id),
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  queryId: bigint("query_id", { mode: "number" }).notNull().references(() => queries.id),
   modelName: text("model_name").notNull(),
   content: text("content").notNull(),
   responseType: text("response_type").default("text").notNull(),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_model_responses_query_id").on(table.queryId),
+]);
 
 export const queriesRelations = relations(queries, ({ many }) => ({
   responses: many(modelResponses),

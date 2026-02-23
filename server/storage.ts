@@ -4,7 +4,13 @@ import {
   type Conversation, type Message, type ConversationWithMessages
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte } from "drizzle-orm";
+import { eq, desc, and, gte, lt, sql } from "drizzle-orm";
+
+// Default pagination limits
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_MESSAGE_LIMIT = 100;
+const MAX_MESSAGE_LIMIT = 500;
 
 export interface IStorage {
   // Auth
@@ -16,19 +22,20 @@ export interface IStorage {
   createQuery(query: any): Promise<Query>;
   updateQuerySummary(id: number, summary: string): Promise<Query>;
   addModelResponse(response: { queryId: number; modelName: string; content: string; responseType: string; metadata?: any }): Promise<ModelResponse>;
-  getQueries(userId: string): Promise<Query[]>;
+  getQueries(userId: string, limit?: number, offset?: number): Promise<Query[]>;
   getQueryWithResponses(id: number): Promise<QueryWithResponses | undefined>;
 
   // Chat Conversations
-  getConversations(userId: string): Promise<Conversation[]>;
+  getConversations(userId: string, limit?: number, offset?: number): Promise<Conversation[]>;
   getConversation(id: number): Promise<Conversation | undefined>;
-  getConversationWithMessages(id: number): Promise<ConversationWithMessages | undefined>;
+  getConversationWithMessages(id: number, messageLimit?: number, beforeId?: number): Promise<ConversationWithMessages | undefined>;
   createConversation(data: { userId: string; title: string }): Promise<Conversation>;
   updateConversationTitle(id: number, title: string): Promise<Conversation>;
   deleteConversation(id: number): Promise<void>;
 
   // Messages
-  getMessages(conversationId: number): Promise<Message[]>;
+  getMessages(conversationId: number, limit?: number, beforeId?: number): Promise<Message[]>;
+  getMessageCount(conversationId: number): Promise<number>;
   addMessage(data: { conversationId: number; role: string; content: string; modelName: string | null; metadata?: any }): Promise<Message>;
   deleteMessagesAfter(conversationId: number, messageId: number): Promise<void>;
 }
@@ -70,12 +77,15 @@ export class DatabaseStorage implements IStorage {
     return res;
   }
 
-  async getQueries(userId: string): Promise<Query[]> {
+  async getQueries(userId: string, limit = DEFAULT_PAGE_SIZE, offset = 0): Promise<Query[]> {
+    const safeLimit = Math.min(limit, MAX_PAGE_SIZE);
     return db
       .select()
       .from(queries)
       .where(eq(queries.userId, userId))
-      .orderBy(desc(queries.createdAt));
+      .orderBy(desc(queries.createdAt))
+      .limit(safeLimit)
+      .offset(offset);
   }
 
   async getQueryWithResponses(id: number): Promise<QueryWithResponses | undefined> {
@@ -92,12 +102,15 @@ export class DatabaseStorage implements IStorage {
 
   // ===== Chat Conversation Methods =====
 
-  async getConversations(userId: string): Promise<Conversation[]> {
+  async getConversations(userId: string, limit = DEFAULT_PAGE_SIZE, offset = 0): Promise<Conversation[]> {
+    const safeLimit = Math.min(limit, MAX_PAGE_SIZE);
     return db
       .select()
       .from(conversations)
       .where(eq(conversations.userId, userId))
-      .orderBy(desc(conversations.updatedAt));
+      .orderBy(desc(conversations.updatedAt))
+      .limit(safeLimit)
+      .offset(offset);
   }
 
   async getConversation(id: number): Promise<Conversation | undefined> {
@@ -108,18 +121,26 @@ export class DatabaseStorage implements IStorage {
     return conversation;
   }
 
-  async getConversationWithMessages(id: number): Promise<ConversationWithMessages | undefined> {
+  async getConversationWithMessages(id: number, messageLimit = DEFAULT_MESSAGE_LIMIT, beforeId?: number): Promise<ConversationWithMessages | undefined> {
     const [conversation] = await db
       .select()
       .from(conversations)
       .where(eq(conversations.id, id));
     if (!conversation) return undefined;
 
-    const msgs = await db
+    const safeLimit = Math.min(messageLimit, MAX_MESSAGE_LIMIT);
+    let query = db
       .select()
       .from(messages)
-      .where(eq(messages.conversationId, id))
-      .orderBy(messages.createdAt);
+      .where(
+        beforeId
+          ? and(eq(messages.conversationId, id), lt(messages.id, beforeId))
+          : eq(messages.conversationId, id)
+      )
+      .orderBy(messages.createdAt)
+      .limit(safeLimit);
+
+    const msgs = await query;
 
     return { ...conversation, messages: msgs };
   }
@@ -148,12 +169,26 @@ export class DatabaseStorage implements IStorage {
 
   // ===== Message Methods =====
 
-  async getMessages(conversationId: number): Promise<Message[]> {
+  async getMessages(conversationId: number, limit = DEFAULT_MESSAGE_LIMIT, beforeId?: number): Promise<Message[]> {
+    const safeLimit = Math.min(limit, MAX_MESSAGE_LIMIT);
     return db
       .select()
       .from(messages)
-      .where(eq(messages.conversationId, conversationId))
-      .orderBy(messages.createdAt);
+      .where(
+        beforeId
+          ? and(eq(messages.conversationId, conversationId), lt(messages.id, beforeId))
+          : eq(messages.conversationId, conversationId)
+      )
+      .orderBy(messages.createdAt)
+      .limit(safeLimit);
+  }
+
+  async getMessageCount(conversationId: number): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId));
+    return result[0]?.count ?? 0;
   }
 
   async addMessage(data: { conversationId: number; role: string; content: string; modelName: string | null; metadata?: any }): Promise<Message> {
