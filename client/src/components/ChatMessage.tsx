@@ -97,7 +97,7 @@ export function ChatMessage({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className={cn(
-                "flex gap-3 px-4 py-3 group",
+                "flex gap-3 px-3 sm:px-4 py-3 group w-full min-w-0 overflow-x-hidden",
                 isUser ? "flex-row-reverse" : "flex-row",
                 isSummary && "bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border-t border-b border-yellow-500/10"
             )}
@@ -118,7 +118,10 @@ export function ChatMessage({
             </div>
 
             {/* Message Content */}
-            <div className={cn("flex-1 max-w-[80%]", isUser && "flex flex-col items-end")}>
+            <div className={cn(
+                "min-w-0 flex-1",
+                isUser ? "flex flex-col items-end max-w-[85%] sm:max-w-[78%]" : "max-w-full sm:max-w-[88%] overflow-hidden"
+            )}>
 
                 {/* Model name + role — no web search badge here */}
                 {!isUser && modelName && (
@@ -182,7 +185,7 @@ export function ChatMessage({
                                         ? "rounded-2xl px-4 py-3 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/15 rounded-bl-sm"
                                         : "py-1"
                                 )}>
-                                    <div className="prose prose-invert prose-base max-w-none [&>p]:text-gray-100 [&>p]:font-normal [&>p]:leading-relaxed [&>p]:text-base [&>ul]:text-gray-100 [&>ol]:text-gray-100 [&>li]:text-gray-100 [&>code]:bg-white/10 [&>code]:text-gray-100 [&>pre]:bg-white/5">
+                                    <div className="prose prose-invert prose-sm sm:prose-base max-w-none overflow-hidden [&>p]:text-gray-100 [&>p]:font-normal [&>p]:leading-relaxed [&>ul]:text-gray-100 [&>ol]:text-gray-100 [&>li]:text-gray-100 [&>code]:text-[#9cdcfe] [&>pre]:bg-[#1e1e1e] [&_pre]:max-w-full [&_pre]:overflow-x-auto">
                                         <MarkdownRenderer content={content} />
                                         {isStreaming && (
                                             <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />

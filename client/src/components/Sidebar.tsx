@@ -181,8 +181,22 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
       <div className={cn("p-3 mt-auto border-t border-white/5 bg-black/20", collapsed && "p-2")}>
         {!collapsed && (
           <div className="flex items-center gap-3 mb-3 px-1">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-500 flex items-center justify-center text-xs font-bold text-white shadow-inner">
-              {user?.firstName?.[0] || "U"}
+            <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+              {user?.profileImageUrl ? (
+                <img
+                  src={user.profileImageUrl}
+                  alt={user.firstName || "User"}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget.nextSibling as HTMLElement).style.display = 'flex'; }}
+                />
+              ) : null}
+              <div
+                className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-500 items-center justify-center text-xs font-bold text-white shadow-inner"
+                style={{ display: user?.profileImageUrl ? 'none' : 'flex' }}
+              >
+                {user?.firstName?.[0]?.toUpperCase() || "U"}
+              </div>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">

@@ -61,7 +61,7 @@ export default function Dashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedMultiModelIds, setSelectedMultiModelIds] = useState<string[]>([]);
   const [debateParticipants, setDebateParticipants] = useState<DebateParticipant[]>([]);
-  const [perModelPrompts, setPerModelPrompts] = useState<Array<{ modelId: string; displayName: string; prompt: string }>>([]);
+  const [perModelPrompts, setPerModelPrompts] = useState<Array<{ modelId: string; displayName: string; prompt: string; stance?: string }>>([]); 
   const [webSearchStatus, setWebSearchStatus] = useState<WebSearchStatus | null>(null);
   // Remember the last send params so retry/edit replays the exact same model
   const lastSendModeRef = useRef<"single" | "multi" | "debate" | "direct">("single");
@@ -84,12 +84,19 @@ export default function Dashboard() {
   const { data: conversationData, isLoading: convLoading } = useConversation(activeConversationId);
   const createConversation = useCreateConversation();
   const { sendMessage } = useSendMessage();
+  // Prevents the activeConversationId effect from wiping isRouting when we
+  // create a new conversation mid-send (the effect fires after setActiveConversationId)
+  const pendingRoutingRef = useRef(false);
 
   // Keep ref in sync; restore saved streaming state when switching back to a conv
   useEffect(() => {
     activeConvIdRef.current = activeConversationId;
     setRoutingResult(null);
-    setIsRouting(false);
+    // Only reset routing when switching convs by the user, not during a send flow
+    if (!pendingRoutingRef.current) {
+      setIsRouting(false);
+    }
+    pendingRoutingRef.current = false;
 
     if (activeConversationId !== null) {
       const saved = streamingStateRef.current.get(activeConversationId);
@@ -220,6 +227,7 @@ export default function Dashboard() {
     if (!convId) {
       const newConv = await createConversation.mutateAsync(undefined);
       convId = newConv.id;
+      pendingRoutingRef.current = true; // suppress upcoming effect's isRouting reset
       setActiveConversationId(convId);
       activeConvIdRef.current = convId;
     }
@@ -252,7 +260,7 @@ export default function Dashboard() {
           setSelectedModelId(result.targetModel?.id || "");
         }
       } else {
-        const result = await routePrompt(convId, content, resolvedMode, selectedMultiModelIds);
+        const result = await routePrompt(convId, content, resolvedMode, selectedMultiModelIds, resolvedMode === "debate" ? debateParticipants : undefined);
         setIsRouting(false);
         setRoutingResult(result);
         setEditedEnhancedPrompt(result.enhancedPrompt);
@@ -515,13 +523,13 @@ export default function Dashboard() {
 
       <main
         className={cn(
-          "flex-1 flex flex-col h-screen transition-all duration-200",
+          "flex-1 flex flex-col h-screen transition-all duration-200 overflow-x-hidden",
           sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
         )}
       >
         <div
           ref={scrollAreaRef}
-          className="flex-1 overflow-y-auto"
+          className="flex-1 overflow-y-auto overflow-x-hidden"
           onScroll={handleScrollAreaScroll}
         >
           {messages.length === 0 && !isStreaming && !routingResult && !isRouting ? (
@@ -548,7 +556,7 @@ export default function Dashboard() {
               </motion.div>
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto py-4 pb-12">
+            <div className="max-w-4xl mx-auto py-4 pb-12 overflow-x-hidden w-full">
               <AnimatePresence>
                 {groupedMessages.map((item, index) => {
                   if (Array.isArray(item)) {
@@ -619,7 +627,9 @@ export default function Dashboard() {
                         <span className="text-sm font-medium text-white">
                           {pendingMode === "multi"
                             ? `${mainModelName} is crafting tailored prompts for ${selectedMultiModelIds.length} model${selectedMultiModelIds.length !== 1 ? "s" : ""}...`
-                            : `${mainModelName} is analyzing your prompt...`}
+                            : pendingMode === "debate"
+                              ? `${mainModelName} is designing debate stances for each model...`
+                              : `${mainModelName} is analyzing your prompt...`}
                         </span>
                     </div>
                   </motion.div>
@@ -705,23 +715,26 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 mb-2">
                         <Edit3 className="w-3.5 h-3.5 text-primary" />
                         <span className="text-xs font-medium text-primary">
-                          {routingResult.routingType === "multi" ? "Per-Model Prompts" : "Enhanced Prompt"}
+                          {(routingResult.routingType === "multi" || routingResult.routingType === "debate") ? "Per-Model Prompts" : "Enhanced Prompt"}
                         </span>
                         <span className="text-[10px] text-muted-foreground/50">(edit before sending)</span>
                       </div>
 
-                      {routingResult.routingType === "multi" && perModelPrompts.length > 0 ? (
+                      {(routingResult.routingType === "multi" || routingResult.routingType === "debate") && perModelPrompts.length > 0 ? (
                         <div className="space-y-2 mb-3">
                           {perModelPrompts.map((p, i) => {
                             const modelMeta = availableModels.find(m => m.id === p.modelId);
+                            const isDebate = routingResult.routingType === "debate";
                             return (
                               <div key={p.modelId} className="rounded-lg border border-white/10 overflow-hidden bg-white/[0.03]">
                                 <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/5 bg-white/5">
                                   <ModelIcon modelName={p.displayName} iconUrl={modelMeta?.iconUrl} size={14} />
                                   <span className="text-xs font-medium text-white/80">{p.displayName}</span>
-                                  {modelMeta?.role && (
+                                  {isDebate && (p as any).stance ? (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/25 text-orange-300/80 ml-1">{(p as any).stance}</span>
+                                  ) : modelMeta?.role ? (
                                     <span className="text-[10px] text-muted-foreground/50 ml-1">{modelMeta.role}</span>
-                                  )}
+                                  ) : null}
                                 </div>
                                 <textarea
                                   value={p.prompt}
@@ -750,9 +763,11 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {routingResult.routingType === "multi" && routingResult.models && (
+                      {(routingResult.routingType === "multi" || routingResult.routingType === "debate") && routingResult.models && (
                         <div className="mb-3 pb-3 border-b border-white/5">
-                          <div className="text-xs text-muted-foreground/60 mb-2">Will send to {routingResult.models.length} selected model{routingResult.models.length !== 1 ? "s" : ""}:</div>
+                          <div className="text-xs text-muted-foreground/60 mb-2">
+                            {routingResult.routingType === "debate" ? `Debate between ${routingResult.models.length} model${routingResult.models.length !== 1 ? "s" : ""}:` : `Will send to ${routingResult.models.length} selected model${routingResult.models.length !== 1 ? "s" : ""}:`}
+                          </div>
                           <div className="flex flex-wrap gap-1.5">
                             {routingResult.models.map(m => (
                               <span key={m.id} className="text-[10px] px-2 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-muted-foreground flex items-center gap-1">
@@ -792,7 +807,7 @@ export default function Dashboard() {
                               pendingWebSearch,
                               selectedMultiModelIds,
                               debateParticipants,
-                              pendingMode === "multi" ? perModelPrompts : undefined,
+                              pendingMode === "multi" || pendingMode === "debate" ? perModelPrompts : undefined,
                             );
                           }}
                           className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-primary hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"

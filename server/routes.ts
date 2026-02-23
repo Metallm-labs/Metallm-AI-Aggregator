@@ -174,7 +174,7 @@ export async function registerRoutes(
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
 
-      const { content, mode, selectedModelIds } = req.body;
+      const { content, mode, selectedModelIds, debateConfig } = req.body;
       if (!content || typeof content !== "string") {
         return res.status(400).json({ message: "Content is required" });
       }
@@ -249,21 +249,103 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
           originalPrompt: content,
         });
       } else {
-        // Debate mode - just enhance
+        // Debate mode — main model reads full debater configs and generates per-debater prompts
+
+        // 1. Build the debater list — debateConfig (with custom role/systemPrompt) wins,
+        //    then selectedModelIds, then first 3 available models.
+        type DebaterEntry = typeof currentModels[number] & { customSystemPrompt?: string };
+        let debateModels: DebaterEntry[];
+        if (Array.isArray(debateConfig) && debateConfig.length >= 2) {
+          debateModels = debateConfig.map((p: { modelId: string; customRole?: string; customSystemPrompt?: string }) => {
+            const base = currentModels.find((m) => m.id === p.modelId) ?? currentModels[0];
+            return {
+              ...base,
+              role: p.customRole || base.role,
+              systemPrompt: p.customSystemPrompt || base.systemPrompt,
+              customSystemPrompt: p.customSystemPrompt,
+            };
+          });
+        } else if (Array.isArray(selectedModelIds) && selectedModelIds.length >= 2) {
+          debateModels = currentModels.filter((m) => (selectedModelIds as string[]).includes(m.id));
+          if (debateModels.length < 2) debateModels = currentModels.slice(0, 3);
+        } else {
+          debateModels = currentModels.slice(0, 3);
+        }
+
+        // 2. Rephrase user input into a complete debate topic
         let enhancedPrompt = content;
         try {
-          const result = await callModel(getMainModel(), [
-            { role: "user", content: `Rephrase this as a clear debate topic: "${content}". Return ONLY the topic, nothing else.` }
-          ], { maxTokens: 100, temperature: 0.3 });
-          enhancedPrompt = result.replace(/^["']|["']$/g, "").trim() || content;
+          const result = await callModel(getMainModel(), [{
+            role: "user",
+            content: `You are a debate facilitator. Rephrase the following user input as a clear, complete, neutral debate topic or question (1–2 sentences). Do NOT shorten, truncate, or cut it off. Return ONLY the rephrased topic — no intro, no commentary.
+
+User input: "${content}"
+
+Debate topic:`,
+          }], { maxTokens: 200, temperature: 0.3 });
+          enhancedPrompt = result.replace(/^["']+|["']+$/g, "").trim() || content;
         } catch (e) {
           console.error("Debate topic enhancement failed:", e);
+        }
+
+        // 3. Ask the main model to generate a tailored prompt for EACH debater,
+        //    using their full config: role, system prompt, and personality.
+        const perModelPrompts: { modelId: string; displayName: string; prompt: string; stance: string }[] =
+          debateModels.map((m) => ({ modelId: m.id, displayName: m.displayName, prompt: enhancedPrompt, stance: m.role }));
+
+        try {
+          const debaterDescriptions = debateModels.map((m, i) => {
+            const sysSnippet = m.systemPrompt ? m.systemPrompt.slice(0, 300) : "(no system prompt)";
+            return `${i + 1}. id="${m.id}"
+   name: ${m.displayName}
+   role/specialty: ${m.role}
+   personality (system prompt excerpt): ${sysSnippet}`;
+          }).join("\n\n");
+
+          const stanceReq = `You are a master debate facilitator and prompt engineer. A user wants to run a structured debate between multiple AI models.
+
+Debate topic: "${enhancedPrompt}"
+
+Debaters (with their full personality/role config):
+${debaterDescriptions}
+
+Your job:
+1. Assign each debater a DISTINCT debate stance (e.g. "strongly in favour", "strongly against", "devil's advocate", "neutral analyst", "ethical critic", "pragmatist", etc.) — no two debaters may share the same stance.
+2. Write a tailored opening-argument prompt FOR each debater that:
+   - Tells them exactly what stance to argue
+   - Frames the debate topic in a way that plays to THEIR specific role and personality (use what you know from their system prompt excerpt)
+   - Is concrete, specific, and compelling — not generic
+   - Is 2–4 sentences long
+
+Return ONLY a valid JSON array — no markdown fences, no explanation.
+
+Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored opening prompt>"}]`;
+
+          const raw = await callModel(getMainModel(), [{ role: "user", content: stanceReq }], {
+            maxTokens: 2000,
+            temperature: 0.4,
+          });
+          const jsonStr = raw.replace(/```json|```/g, "").trim();
+          const parsed = JSON.parse(jsonStr);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((p: any) => {
+              const idx = perModelPrompts.findIndex((x) => x.modelId === p.modelId);
+              if (idx !== -1) {
+                perModelPrompts[idx].prompt = String(p.prompt || enhancedPrompt);
+                perModelPrompts[idx].stance = String(p.stance || debateModels[idx].role);
+              }
+            });
+          }
+        } catch (e) {
+          console.error("Debate per-model prompt generation failed, using defaults:", e);
         }
 
         res.json({
           routingType: "debate",
           enhancedPrompt,
           originalPrompt: content,
+          models: debateModels.map((m) => ({ id: m.id, displayName: m.displayName, role: m.role, provider: m.provider })),
+          perModelPrompts,
         });
       }
     } catch (err) {
@@ -562,20 +644,42 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
             const base = currentModels.find((m) => m.id === p.modelId) ?? currentModels[0];
             return { ...base, role: p.customRole || base.role, systemPrompt: p.customSystemPrompt || base.systemPrompt };
           });
+        } else if (Array.isArray(perModelPrompts) && perModelPrompts.length >= 2) {
+          // Use models selected during routing step
+          debaters = perModelPrompts
+            .map((p: any) => currentModels.find((m) => m.id === p.modelId))
+            .filter(Boolean) as typeof currentModels;
+          if (debaters.length < 2) debaters = currentModels.slice(0, 3);
         } else {
           debaters = currentModels.slice(0, 3);
         }
-        let debateContext = `Topic: ${promptToSend}\n\n`;
+        let debateContext = `Debate topic: ${promptToSend}\n\n`;
 
         for (let round = 0; round < debateRounds; round++) {
           for (const debater of debaters) {
-            sendSSE(res, "model_start", { modelName: debater.displayName, round: round + 1 });
+            // Find the tailored per-model prompt from the routing step
+            const perModelEntry = Array.isArray(perModelPrompts)
+              ? (perModelPrompts as any[]).find((p) => p.modelId === debater.id)
+              : null;
 
-            const debatePrompt = `You are ${debater.displayName} (${debater.role}) in a friendly intellectual debate.
-              Topic: ${promptToSend}
-              Previous discussion: ${debateContext}
-              Round ${round + 1}: Provide your unique perspective (2-3 paragraphs).
-              ${round > 0 ? "Respond to or build upon points made by other participants." : ""}`;
+            const stance = perModelEntry?.stance || debater.role;
+            sendSSE(res, "model_start", { modelName: debater.displayName, round: round + 1, stance });
+
+            let debatePrompt: string;
+            if (round === 0 && perModelEntry?.prompt) {
+              // Use the tailored opening prompt from routing
+              debatePrompt = perModelEntry.prompt;
+            } else {
+              // Subsequent rounds: react to previous arguments
+              debatePrompt = `You are ${debater.displayName} in a structured debate, arguing from the perspective of "${stance}".
+
+Debate topic: ${promptToSend}
+
+Previous discussion:
+${debateContext}
+
+Round ${round + 1} — Respond directly to the most recent arguments above. Challenge or support specific points made by other participants using your expertise (${debater.role}). Be thorough and persuasive — fully develop your argument.`;
+            }
 
             let fullContent = "";
             try {
@@ -585,7 +689,7 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
                 (chunk) => {
                   sendSSE(res, "chunk", { modelName: debater.displayName, content: chunk });
                 },
-                { systemPrompt: debater.systemPrompt, maxTokens: 512 }
+                { systemPrompt: debater.systemPrompt }
               );
               fullContent = debateResult.content;
             } catch (e) {
@@ -594,7 +698,7 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
               sendSSE(res, "chunk", { modelName: debater.displayName, content: fullContent });
             }
 
-            debateContext += `\n[${debater.displayName}]: ${fullContent}\n`;
+            debateContext += `\n[${debater.displayName} — ${stance}]: ${fullContent}\n`;
 
             const assistantMessage = await storage.addMessage({
               conversationId,

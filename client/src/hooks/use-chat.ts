@@ -110,7 +110,7 @@ export interface RoutingResult {
     reason: string;
     enhancedPrompt: string;
     originalPrompt: string;
-    perModelPrompts?: Array<{ modelId: string; displayName: string; prompt: string }>;
+    perModelPrompts?: Array<{ modelId: string; displayName: string; prompt: string; stance?: string }>;
 }
 
 // Step 1: Route the prompt (get enhanced prompt + routing decision)
@@ -119,11 +119,12 @@ export async function routePrompt(
     content: string,
     mode: "single" | "multi" | "debate",
     selectedModelIds?: string[],
+    debateConfig?: DebateParticipant[],
 ): Promise<RoutingResult> {
     const res = await fetch(`/api/chat/conversations/${conversationId}/route`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, mode, selectedModelIds }),
+        body: JSON.stringify({ content, mode, selectedModelIds, debateConfig }),
         credentials: "include",
     });
 

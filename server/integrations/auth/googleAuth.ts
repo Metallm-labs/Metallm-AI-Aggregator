@@ -13,10 +13,15 @@ export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
-    createTableIfMissing: false,
+    createTableIfMissing: true,
     ttl: sessionTtl,
     tableName: "sessions",
     pool: pool as any,
+    errorLog: (err: Error) => {
+      // suppress noisy connection errors in console
+      if (process.env.NODE_ENV !== "production") return;
+      console.error("[session-store]", err.message);
+    },
   });
   return session({
     secret: process.env.SESSION_SECRET || "dev-secret-change-in-production",

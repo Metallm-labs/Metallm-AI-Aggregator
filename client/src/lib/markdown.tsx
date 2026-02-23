@@ -1,8 +1,9 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Copy, Check } from "lucide-react";
 
 interface MarkdownRendererProps {
     content: string;
@@ -299,8 +300,58 @@ function MermaidBlock({ chart }: { chart: string }) {
         </>
     );
 }
-// ─────────────────────────────────────────────────────────────────────────────
+// ── VS Code-style Code Block with header + copy button ───────────────────────
+function CodeBlock({ language, children }: { language: string; children: string }) {
+    const [copied, setCopied] = useState(false);
 
+    const handleCopy = async () => {
+        await navigator.clipboard.writeText(children);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const langLabel = language === "js" ? "javascript"
+        : language === "ts" ? "typescript"
+        : language === "py" ? "python"
+        : language === "sh" ? "bash"
+        : language;
+
+    return (
+        <div className="my-4 rounded-lg overflow-hidden border border-white/10" style={{ background: "#1e1e1e" }}>
+            {/* Header bar — VS Code tab style */}
+            <div className="flex items-center justify-between px-4 py-2" style={{ background: "#2d2d2d", borderBottom: "1px solid #3e3e3e" }}>
+                <span className="text-[11px] font-mono text-[#9cdcfe] tracking-wide">{langLabel}</span>
+                <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1 text-[11px] text-[#858585] hover:text-[#cccccc] transition-colors"
+                >
+                    {copied
+                        ? <><Check className="w-3 h-3 text-[#4ec9b0]" /><span className="text-[#4ec9b0]">Copied</span></>
+                        : <><Copy className="w-3 h-3" /><span>Copy</span></>}
+                </button>
+            </div>
+            {/* Code body */}
+            <SyntaxHighlighter
+                style={vscDarkPlus}
+                language={langLabel}
+                PreTag="div"
+                useInlineStyles
+                customStyle={{
+                    margin: 0,
+                    padding: "1rem",
+                    background: "#1e1e1e",
+                    fontSize: "0.8125rem",
+                    lineHeight: "1.6",
+                    overflowX: "auto",
+                    WebkitOverflowScrolling: "touch",
+                }}
+                codeTagProps={{ style: { fontFamily: "'Fira Code', 'Cascadia Code', Consolas, monospace" } }}
+            >
+                {children}
+            </SyntaxHighlighter>
+        </div>
+    );
+}
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
     return (
@@ -317,17 +368,15 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
                     }
 
                     return !inline && lang ? (
-                        <SyntaxHighlighter
-                            style={oneDark}
-                            language={lang}
-                            PreTag="div"
-                            className="rounded-lg !bg-black/40 !my-3"
+                        <CodeBlock language={lang}>
+                            {String(children).replace(/\n$/, "")}
+                        </CodeBlock>
+                    ) : (
+                        <code
+                            className="px-1.5 py-0.5 rounded text-[0.8em] font-mono"
+                            style={{ background: "#2d2d2d", color: "#9cdcfe", border: "1px solid #3e3e3e" }}
                             {...props}
                         >
-                            {String(children).replace(/\n$/, "")}
-                        </SyntaxHighlighter>
-                    ) : (
-                        <code className="bg-white/10 px-1.5 py-0.5 rounded text-sm" {...props}>
                             {children}
                         </code>
                     );
