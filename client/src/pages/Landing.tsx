@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import {
   Zap, Shield, Users, Clock, Brain, Target, ArrowRight, CheckCircle2,
   Sparkles, BarChart3, GraduationCap, FlaskConical, Rocket, ChevronDown,
-  Star, Play, TrendingUp, Globe, Lock, MessageSquare
+  Star, Play, TrendingUp, Globe, Lock, MessageSquare, Route, Wand2,
+  Swords, Search, Layers, GitMerge
 } from "lucide-react";
 import { motion, useInView, useScroll, useTransform, AnimatePresence } from "framer-motion";
 
@@ -96,13 +97,15 @@ function AnimatedCounter({ target, suffix = "" }: { target: number; suffix?: str
 /* ─── Model Logo Carousel ─── */
 function ModelLogoCarousel() {
   const models = [
-    { name: "Gemini", src: "/icons/gemini.svg" },
-    { name: "DeepSeek", src: "/icons/deepseek.svg" },
-    { name: "Meta LLaMA", src: "/icons/meta.svg" },
-    { name: "Mistral", src: "/icons/mistral.svg" },
-    { name: "Qwen", src: "/icons/qwen.svg" },
-    { name: "NVIDIA", src: "/icons/nvidia.svg" },
-    { name: "GLM", src: "/icons/glm.svg" },
+    { name: "Gemini Flash", src: "/icons/gemini.svg" },
+    { name: "DeepSeek R1", src: "/icons/deepseek.svg" },
+    { name: "LLaMA 3.3", src: "/icons/meta.svg" },
+    { name: "Gemma 3 27B", src: "/icons/google.svg" },
+    { name: "Devstral", src: "/icons/mistral.svg" },
+    { name: "Nemotron", src: "/icons/nvidia.svg" },
+    { name: "Qwen 2.5", src: "/icons/qwen.svg" },
+    { name: "Gemma 3 12B", src: "/icons/google.svg" },
+    { name: "GLM 4.5", src: "/icons/glm.svg" },
   ];
 
   return (
@@ -129,19 +132,19 @@ function ModelLogoCarousel() {
 /* ─── Testimonial data ─── */
 const testimonials = [
   {
-    quote: "MetaLLM cut my literature review from 3 days to 4 hours. The multi-model synthesis catches nuances no single AI would.",
+    quote: "The debate mode is insane — I pitted 3 models against each other on my thesis topic and got perspectives I never would have considered. Cut my lit review from 3 days to 4 hours.",
     name: "Sarah K.",
     role: "PhD Researcher, MIT",
     avatar: "SK",
   },
   {
-    quote: "As a founder, every decision costs time and money. MetaLLM gives me 5 expert-level perspectives in one query. Game changer.",
+    quote: "As a founder, prompt enhancement alone is worth it. I type a rough question and MetaLLM rewrites it into something an expert would ask. The multi-model synthesis is the cherry on top.",
     name: "Ahmed R.",
     role: "CEO, TechVenture",
     avatar: "AR",
   },
   {
-    quote: "I used to spend hours comparing ChatGPT vs Claude answers. Now MetaLLM does it instantly with a synthesized summary.",
+    quote: "Smart routing is magic — it sends my code questions to Devstral and my math to Nemotron automatically. I used to spend hours picking the right AI. Now MetaLLM just knows.",
     name: "Priya M.",
     role: "CS Student, Stanford",
     avatar: "PM",
@@ -151,24 +154,28 @@ const testimonials = [
 /* ─── FAQ data ─── */
 const faqs = [
   {
-    q: "What is MetaLLM and how does it work?",
-    a: "MetaLLM is an AI aggregator that sends your query to multiple leading AI models — GPT-4, Claude, Gemini, DeepSeek, and more — simultaneously. It then synthesizes all responses into one unified, comprehensive answer, saving you hours of tab-switching and manual comparison."
+    q: "What is MetaLLM and how is it different from ChatGPT?",
+    a: "MetaLLM is an AI aggregator that sends your query to 9 leading AI models — Gemini, DeepSeek, LLaMA, Devstral, Nemotron, Qwen, Gemma, and GLM — simultaneously. Unlike ChatGPT (one model, one perspective), MetaLLM gives you multi-model consensus, automatic prompt enhancement, smart routing to specialists, and an AI-powered debate mode."
   },
   {
-    q: "Who is MetaLLM designed for?",
-    a: "MetaLLM is built for anyone who values time and accuracy: university students working on research papers, academic researchers needing multi-perspective analysis, startup founders making rapid data-driven decisions, and professionals who want the best possible AI-assisted insights."
+    q: "How does Smart Routing work?",
+    a: "When you type a query, MetaLLM's AI router analyzes your intent and context. If it's a coding question, it routes to Devstral (Mistral's code specialist). Math goes to Nemotron (NVIDIA). Creative writing to Qwen. You can also override this and choose Multi-Model or Debate mode for broader analysis."
   },
   {
-    q: "How much time does MetaLLM save?",
-    a: "Users report saving 10× their typical research time. Instead of querying 5+ AI models separately, comparing responses, and synthesizing manually, MetaLLM does this entire workflow in seconds with a single query."
+    q: "What is Prompt Enhancement?",
+    a: "Before any AI model sees your question, MetaLLM automatically rewrites it into an expert-level prompt — adding context, constraints, specificity, and persona framing. In Multi-Model mode, each model gets a uniquely tailored version of your prompt optimized for its specialty. This dramatically improves response quality."
+  },
+  {
+    q: "How does Debate Mode work?",
+    a: "Debate Mode assigns each AI model a unique stance on your topic — 'strongly in favour', 'devil's advocate', 'ethical critic', etc. Models argue their positions over 2 structured rounds, responding directly to each other's arguments. It's like having a panel of expert debaters analyze your question from every angle."
   },
   {
     q: "Which AI models does MetaLLM support?",
-    a: "MetaLLM integrates with GPT-4 (OpenAI), Claude (Anthropic), Gemini (Google), DeepSeek, Mistral, Qwen, Meta LLaMA, NVIDIA NIM, and more. We continuously add new models as they become available."
+    a: "MetaLLM integrates 9 specialist models: Gemini Flash (Google, main assistant), DeepSeek R1 (deep reasoning), LLaMA 3.3 (Meta, general knowledge), Gemma 3 27B (technical/scientific), Devstral (Mistral, code), Nemotron (NVIDIA, data/math), Qwen 2.5 (creative writing), Gemma 3 12B (research/education), and GLM 4.5 (business/strategy)."
   },
   {
-    q: "Is my data secure on MetaLLM?",
-    a: "Absolutely. MetaLLM uses enterprise-grade encryption, secure OAuth authentication, and never stores your queries beyond your session history. Your intellectual property remains yours."
+    q: "Does MetaLLM support web search?",
+    a: "Yes! Toggle Live Web Search to ground AI responses in current data. MetaLLM searches the web, fetches and reads actual page content, and injects it into every model's context — so you get answers based on real-time information, not just training data."
   },
 ];
 
@@ -183,44 +190,44 @@ export default function Landing() {
 
   const features = [
     {
-      icon: <Zap className="w-6 h-6" />,
-      title: "10× Faster Research",
-      description: "Why query one AI when you can query them all? Get multi-model answers in the time it takes to type one prompt.",
+      icon: <Route className="w-6 h-6" />,
+      title: "Smart Routing",
+      description: "MetaLLM's AI router analyzes every query and automatically routes it to the best specialist model — code to Devstral, math to Nemotron, research to Gemma. Zero manual selection needed.",
       color: "from-amber-500/20 to-yellow-500/10",
       iconColor: "text-amber-400",
     },
     {
-      icon: <Brain className="w-6 h-6" />,
-      title: "Cognitive Load Reduction",
-      description: "Your brain shouldn't waste energy comparing tabs. MetaLLM synthesizes conflicting AI viewpoints into clear, actionable intelligence.",
+      icon: <Wand2 className="w-6 h-6" />,
+      title: "Prompt Enhancement",
+      description: "Your raw question is automatically rewritten into an expert-level prompt — adding context, constraints, and specificity — before any AI model sees it. Better prompts = dramatically better answers.",
       color: "from-purple-500/20 to-violet-500/10",
       iconColor: "text-purple-400",
     },
     {
-      icon: <Target className="w-6 h-6" />,
-      title: "Decision-Grade Accuracy",
-      description: "Single-model AI has blind spots. Multi-model consensus eliminates hallucinations and gives you answers you can trust.",
-      color: "from-emerald-500/20 to-green-500/10",
-      iconColor: "text-emerald-400",
-    },
-    {
-      icon: <Shield className="w-6 h-6" />,
-      title: "Bias Elimination",
-      description: "Every AI model has biases. Cross-referencing multiple models reveals the truth that any single model might miss.",
-      color: "from-cyan-500/20 to-blue-500/10",
-      iconColor: "text-cyan-400",
-    },
-    {
-      icon: <BarChart3 className="w-6 h-6" />,
-      title: "Role-Based Analysis",
-      description: "Get perspectives tailored to your context — whether you're a developer debugging code, a researcher analyzing data, or a founder evaluating markets.",
+      icon: <Swords className="w-6 h-6" />,
+      title: "AI Debate Mode",
+      description: "Pit multiple AI models against each other in structured debates. Each model is assigned a unique stance and argues from its specialty — producing rigorous, multi-perspective analysis you can't get anywhere else.",
       color: "from-rose-500/20 to-pink-500/10",
       iconColor: "text-rose-400",
     },
     {
-      icon: <Sparkles className="w-6 h-6" />,
-      title: "AI Model Intelligence",
-      description: "MetaLLM's orchestrator knows each model's strengths and automatically routes your query for optimal results.",
+      icon: <Layers className="w-6 h-6" />,
+      title: "Multi-Model Parallel Query",
+      description: "Send your question to 9 AI models simultaneously — each receives a prompt tailored to its specialty. DeepSeek for reasoning, Qwen for creative, GLM for business — all at once.",
+      color: "from-emerald-500/20 to-green-500/10",
+      iconColor: "text-emerald-400",
+    },
+    {
+      icon: <Search className="w-6 h-6" />,
+      title: "Live Web Search",
+      description: "Toggle real-time web search to ground AI responses in current data. MetaLLM fetches, reads, and injects live web content into every model's context — so answers are never outdated.",
+      color: "from-cyan-500/20 to-blue-500/10",
+      iconColor: "text-cyan-400",
+    },
+    {
+      icon: <GitMerge className="w-6 h-6" />,
+      title: "AI Synthesis Engine",
+      description: "After all models respond, the orchestrator synthesizes every answer into one unified, conflict-resolved analysis — highlighting key insights and delivering an actionable conclusion.",
       color: "from-amber-500/20 to-orange-500/10",
       iconColor: "text-amber-300",
     },
@@ -263,30 +270,36 @@ export default function Landing() {
   ];
 
   const stats = [
-    { value: 7, suffix: "+", label: "AI Models Integrated" },
+    { value: 9, suffix: "+", label: "Specialist AI Models" },
     { value: 10, suffix: "×", label: "Faster Than Manual Research" },
-    { value: 98, suffix: "%", label: "User Satisfaction Rate" },
+    { value: 3, suffix: "", label: "Modes: Single, Multi, Debate" },
     { value: 50000, suffix: "+", label: "Queries Processed" },
   ];
 
   const howItWorks = [
     {
       step: "01",
-      title: "Ask Your Question",
-      description: "Type any question, research query, or analysis request — just like you would with any AI chatbot.",
+      title: "Ask Anything",
+      description: "Type any question — research, code, analysis, creative writing. Choose Single, Multi-Model, or Debate mode.",
       icon: <MessageSquare className="w-6 h-6" />,
     },
     {
       step: "02",
-      title: "AI Models Analyze Simultaneously",
-      description: "MetaLLM sends your query to GPT-4, Claude, Gemini, DeepSeek and more — all at the same time.",
-      icon: <Globe className="w-6 h-6" />,
+      title: "Smart Route & Enhance",
+      description: "The AI router analyzes your intent and picks the best specialist model. Your prompt is automatically rewritten for maximum quality.",
+      icon: <Route className="w-6 h-6" />,
     },
     {
       step: "03",
-      title: "Get One Unified Answer",
-      description: "Our AI orchestrator synthesizes all responses, resolves conflicts, and delivers a comprehensive analysis you can trust.",
-      icon: <Sparkles className="w-6 h-6" />,
+      title: "Models Respond in Parallel",
+      description: "In Multi mode, all 9 models — Gemini, DeepSeek, LLaMA, Devstral, Nemotron, Qwen, Gemma, GLM — respond simultaneously with tailored prompts.",
+      icon: <Layers className="w-6 h-6" />,
+    },
+    {
+      step: "04",
+      title: "Unified Synthesized Answer",
+      description: "The orchestrator merges all responses into one conflict-resolved, citation-rich analysis — or delivers a structured debate with distinct perspectives.",
+      icon: <GitMerge className="w-6 h-6" />,
     },
   ];
 
@@ -389,8 +402,8 @@ export default function Landing() {
               className="max-w-2xl mx-auto text-lg sm:text-xl text-muted-foreground mb-10 leading-relaxed"
             >
               Every minute you spend switching between AI tools is a minute wasted.{" "}
-              <strong className="text-white">MetaLLM queries GPT-4, Claude, Gemini & more simultaneously</strong>{" "}
-              and synthesizes one accurate, comprehensive answer — so you can make decisions faster.
+              <strong className="text-white">MetaLLM auto-routes your query to the best AI, enhances your prompt, queries 9 models in parallel, and synthesizes one answer</strong>{" "}
+              — with debate mode, live web search, and real-time streaming.
             </motion.p>
 
             {/* CTA buttons */}
@@ -570,11 +583,11 @@ export default function Landing() {
               </div>
               {[
                 "One query, one platform",
-                "All models queried simultaneously",
-                "AI synthesizes & resolves conflicts",
-                "Get a unified, accurate answer",
-                "Multi-model consensus = confidence",
-                "Save 10× time on every question",
+                "AI auto-routes to the best model",
+                "Prompt auto-enhanced for better results",
+                "All 9 models queried simultaneously",
+                "AI synthesizes unified, accurate answer",
+                "Debate mode for multi-perspective analysis",
               ].map((item, i) => (
                 <div key={i} className="flex items-center gap-3 text-muted-foreground">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
