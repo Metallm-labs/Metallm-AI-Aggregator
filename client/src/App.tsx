@@ -13,6 +13,8 @@ import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import History from "@/pages/History";
 import QueryDetail from "@/pages/QueryDetail";
+import Terms from "@/pages/Terms";
+import Privacy from "@/pages/Privacy";
 
 // ─── Top-level error boundary ─────────────────────────────────────────────────
 class ErrorBoundary extends React.Component<
@@ -93,6 +95,10 @@ function Router() {
       <Route path="/login">
         {user ? <Redirect to="/dashboard" /> : <Login />}
       </Route>
+
+      {/* Public Legal Pages */}
+      <Route path="/terms" component={Terms} />
+      <Route path="/privacy" component={Privacy} />
 
       {/* Protected App Routes */}
       <Route path="/dashboard">

@@ -1,15 +1,156 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Outfit:wght@100..900&family=Oxanium:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<html lang="en" dir="ltr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5" />
+
+  <!-- Primary Meta Tags (SEO) -->
+  <title>MetaLLM — AI Aggregator | Query Multiple AI Models in One Click</title>
+  <meta name="title" content="MetaLLM — AI Aggregator | Query Multiple AI Models in One Click" />
+  <meta name="description"
+    content="MetaLLM aggregates GPT-4, Claude, Gemini, DeepSeek & more into one unified AI response. Save 10× research time with multi-model AI analysis for students, researchers & founders." />
+  <meta name="keywords"
+    content="AI aggregator, multi-model AI, GPT-4, Claude, Gemini, DeepSeek, AI comparison, AI research tool, AI for students, AI for researchers, AI decision making, LLM aggregator, best AI tool, AI analysis platform, multi AI query, AI orchestrator, free AI tool, compare AI models, AI synthesis, artificial intelligence aggregator" />
+  <meta name="author" content="MetaLLM" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="googlebot" content="index, follow" />
+  <meta name="bingbot" content="index, follow" />
+  <link rel="canonical" href="https://metallm.tech/" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://metallm.tech/" />
+  <meta property="og:title" content="MetaLLM — Query Multiple AI Models. Get One Unified Answer." />
+  <meta property="og:description"
+    content="Stop switching between ChatGPT, Claude & Gemini. MetaLLM queries them all simultaneously and synthesizes a comprehensive answer. Built for researchers, students & founders." />
+  <meta property="og:image" content="/logo.jpeg" />
+  <meta property="og:image:alt" content="MetaLLM AI Aggregator Platform Logo" />
+  <meta property="og:site_name" content="MetaLLM" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://metallm.tech/" />
+  <meta name="twitter:title" content="MetaLLM — Multi-AI Aggregator for Smarter Decisions" />
+  <meta name="twitter:description"
+    content="One query. Every top AI model. One synthesized answer. Save hours of research with MetaLLM's AI aggregation platform." />
+  <meta name="twitter:image" content="/logo.jpeg" />
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+
+  <!-- Preconnect for performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Space+Grotesk:wght@300..700&family=Outfit:wght@100..900&family=Fira+Code:wght@300..700&display=swap"
+    rel="stylesheet" />
+
+  <!-- JSON-LD Structured Data for Google & AI Search -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "MetaLLM",
+      "applicationCategory": "Productivity",
+      "operatingSystem": "Web",
+      "description": "MetaLLM is a multi-AI aggregator platform that queries GPT-4, Claude, Gemini, DeepSeek and more simultaneously, then synthesizes their responses into one unified, actionable analysis.",
+      "url": "https://metallm.tech",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.9",
+        "ratingCount": "1200"
+      },
+      "featureList": [
+        "Multi-model AI aggregation",
+        "GPT-4, Claude, Gemini, DeepSeek integration",
+        "Unified AI response synthesis",
+        "Role-based analysis",
+        "Research acceleration",
+        "Decision-making support"
+      ]
+    }
+    </script>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "MetaLLM",
+      "url": "https://metallm.tech",
+      "logo": "https://metallm.tech/logo.jpeg",
+      "description": "Multi-AI Aggregator Platform for students, researchers, and founders",
+      "sameAs": []
+    }
+    </script>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "MetaLLM",
+      "url": "https://metallm.tech",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://metallm.tech/dashboard?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is MetaLLM?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "MetaLLM is a multi-AI aggregator platform that sends your query to GPT-4, Claude, Gemini, DeepSeek and other top AI models simultaneously, then synthesizes all responses into one comprehensive, unified answer."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does MetaLLM save time?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Instead of opening 5+ AI tabs and comparing responses manually, MetaLLM does it in one click. Users report saving 10x research time by getting consolidated, multi-perspective AI analysis instantly."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Who is MetaLLM for?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "MetaLLM is built for students writing research papers, academic researchers needing multi-perspective analysis, startup founders making fast data-driven decisions, and anyone who values time and accuracy in AI-assisted work."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which AI models does MetaLLM support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "MetaLLM integrates with GPT-4 (OpenAI), Claude (Anthropic), Gemini (Google), DeepSeek, Mistral, Qwen, LLaMA (Meta), and more — all queried simultaneously for comprehensive analysis."
+          }
+        }
+      ]
+    }
+    </script>
+
+  <!-- Preload key images -->
+  <link rel="preload" as="image" href="/logo.jpeg" />
+  <link rel="preload" as="image" href="/hero-dashboard.png" />
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

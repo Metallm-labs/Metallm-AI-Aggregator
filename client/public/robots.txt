@@ -1,0 +1,39 @@
+# MetaLLM Robots.txt
+# https://metallm.tech
+
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /terms
+Allow: /privacy
+Disallow: /dashboard
+Disallow: /history
+Disallow: /query/
+Disallow: /api/
+
+Sitemap: https://metallm.tech/sitemap.xml
+
+# AI Crawlers
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
