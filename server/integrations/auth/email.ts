@@ -7,19 +7,21 @@ interface MailOptions {
     text?: string;
 }
 
-// Create reusable transporter object using the default SMTP transport
+// Create reusable transporter object using Zoho Mail SMTP
 // For development, we'll try to use a real account if provided, otherwise console.log
 const transporter = nodemailer.createTransport({
-    service: "gmail", // Use Gmail service
+    host: "smtp.zoho.com",  // use smtp.zoho.eu if your account is on the EU data centre
+    port: 587,
+    secure: false, // STARTTLS
     auth: {
-        user: process.env.GMAIL_USER || "", // Your Gmail address
-        pass: process.env.GMAIL_APP_PASSWORD || "", // Your Gmail App Password
+        user: process.env.ZOHO_USER || "",
+        pass: process.env.ZOHO_APP_PASSWORD || "",
     },
 });
 
 export async function sendEmail({ to, subject, html, text }: MailOptions): Promise<boolean> {
     // If no credentials are configured, log to console for development
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    if (!process.env.ZOHO_USER || !process.env.ZOHO_APP_PASSWORD) {
         console.log("⚠️  Email credentials not found. Logging email to console:");
         console.log("--- EMAIL START ---");
         console.log(`To: ${to}`);
@@ -31,7 +33,8 @@ export async function sendEmail({ to, subject, html, text }: MailOptions): Promi
 
     try {
         const info = await transporter.sendMail({
-            from: `"Metallm AI" <${process.env.GMAIL_USER}>`,
+            from: `"Metallm AI" <${process.env.ZOHO_USER}>`,
+
             to,
             subject,
             text,
