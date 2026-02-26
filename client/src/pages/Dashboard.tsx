@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatMessage, TypingIndicator } from "@/components/ChatMessage";
-import { ChatInput, CHAT_MODE_STORAGE_KEY, type ChatMode, type DebateParticipant } from "@/components/ChatInput";
-import { ModelSettings } from "@/components/ModelSettings";
+import { ChatInput, CHAT_MODE_STORAGE_KEY, type AttachmentPayload, type ChatMode, type DebateParticipant } from "@/components/ChatInput";
+import { MAX_MULTI_MODELS, ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { ModelIcon } from "@/components/ModelIcon";
 import { useAuth } from "@/hooks/use-auth";
@@ -62,6 +62,7 @@ export default function Dashboard() {
   const [pendingMode, setPendingMode] = useState<"single" | "multi" | "debate">("single");
   const [pendingContent, setPendingContent] = useState("");
   const [pendingWebSearch, setPendingWebSearch] = useState(false);
+  const [pendingAttachmentPayload, setPendingAttachmentPayload] = useState<AttachmentPayload | undefined>(undefined);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [mainModelId, setMainModelId] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
@@ -140,7 +141,11 @@ export default function Dashboard() {
         const data = await res.json();
         setAvailableModels(data.models);
         setMainModelId(data.mainModelId);
-        setSelectedMultiModelIds((prev) => prev.length > 0 ? prev : data.models.map((m: any) => m.id));
+        setSelectedMultiModelIds((prev) => {
+          const validPrev = prev.filter((id) => data.models.some((m: any) => m.id === id));
+          if (validPrev.length > 0) return validPrev.slice(0, MAX_MULTI_MODELS);
+          return data.models.slice(0, MAX_MULTI_MODELS).map((m: any) => m.id);
+        });
         setDebateParticipants((prev) => prev.length > 0 ? prev : [
           { modelId: data.models[0]?.id ?? "", customRole: data.models[0]?.role ?? "", customSystemPrompt: "" },
           { modelId: data.models[1]?.id ?? data.models[0]?.id ?? "", customRole: data.models[1]?.role ?? "", customSystemPrompt: "" },
@@ -258,12 +263,20 @@ export default function Dashboard() {
     setMessages([]);
     setStreamingMessages(new Map());
     setRoutingResult(null);
+    setPendingAttachmentPayload(undefined);
   }, []);
 
   // ============================================
   // === Step 1: Route prompt ===
   // ============================================
-  const handleSend = async (content: string, mode: "single" | "multi" | "debate" | "direct", enhancerEnabled = true, webSearch = false, directModelId?: string) => {
+  const handleSend = async (
+    content: string,
+    mode: "single" | "multi" | "debate" | "direct",
+    enhancerEnabled = true,
+    webSearch = false,
+    directModelId?: string,
+    attachmentPayload?: AttachmentPayload,
+  ) => {
     // Remap "direct" mode → "single" for internal routing
     const resolvedMode = mode === "direct" ? "single" : mode as "single" | "multi" | "debate";
 
@@ -274,8 +287,10 @@ export default function Dashboard() {
     setPendingContent(content);
     setPendingMode(resolvedMode);
     setPendingWebSearch(webSearch);
+    setPendingAttachmentPayload(attachmentPayload);
     setRoutingResult(null);
     setPerModelPrompts([]);
+    const effectiveSelectedModelIds = selectedMultiModelIds.slice(0, MAX_MULTI_MODELS);
 
     // Create conversation if needed (shared by both paths)
     let convId = activeConversationId;
@@ -289,13 +304,13 @@ export default function Dashboard() {
 
     // ── Direct mode: bypass routing, send to specific model ───────────────
     if (mode === "direct" && directModelId) {
-      handleApproveAndSend(content, "single", content, directModelId, convId, webSearch, selectedMultiModelIds, debateParticipants);
+      handleApproveAndSend(content, "single", content, directModelId, convId, webSearch, effectiveSelectedModelIds, debateParticipants, undefined, attachmentPayload);
       return;
     }
 
     // ── Enhancer OFF: skip routing, send directly ──────────────────────────
     if (!enhancerEnabled) {
-      handleApproveAndSend(content, resolvedMode, content, undefined, convId, webSearch, selectedMultiModelIds, debateParticipants);
+      handleApproveAndSend(content, resolvedMode, content, undefined, convId, webSearch, effectiveSelectedModelIds, debateParticipants, undefined, attachmentPayload);
       return;
     }
 
@@ -308,14 +323,14 @@ export default function Dashboard() {
         setIsRouting(false);
 
         if (result.routingType === "casual") {
-          handleApproveAndSend(content, resolvedMode, content, result.targetModel?.id, convId, webSearch, selectedMultiModelIds, debateParticipants);
+          handleApproveAndSend(content, resolvedMode, content, result.targetModel?.id, convId, webSearch, effectiveSelectedModelIds, debateParticipants, undefined, attachmentPayload);
         } else {
           setRoutingResult(result);
           setEditedEnhancedPrompt(result.enhancedPrompt);
           setSelectedModelId(result.targetModel?.id || "");
         }
       } else {
-        const result = await routePrompt(convId, content, resolvedMode, selectedMultiModelIds, resolvedMode === "debate" ? debateParticipants : undefined);
+        const result = await routePrompt(convId, content, resolvedMode, effectiveSelectedModelIds, resolvedMode === "debate" ? debateParticipants : undefined);
         setIsRouting(false);
         setRoutingResult(result);
         setEditedEnhancedPrompt(result.enhancedPrompt);
@@ -328,7 +343,7 @@ export default function Dashboard() {
       setIsRouting(false);
       const fallbackId = activeConvIdRef.current;
       if (fallbackId) {
-        handleApproveAndSend(content, resolvedMode, content, undefined, fallbackId, webSearch, selectedMultiModelIds, debateParticipants);
+        handleApproveAndSend(content, resolvedMode, content, undefined, fallbackId, webSearch, effectiveSelectedModelIds, debateParticipants, undefined, attachmentPayload);
       }
     }
   };
@@ -346,6 +361,7 @@ export default function Dashboard() {
     selectedModelIds?: string[],
     debateConfig?: DebateParticipant[],
     perModelPromptsArg?: Array<{ modelId: string; displayName: string; prompt: string }>,
+    attachmentPayload?: AttachmentPayload,
   ) => {
     setRoutingResult(null);
     setIsStreaming(true);
@@ -422,6 +438,7 @@ export default function Dashboard() {
         // onDone
         () => {
           streamingStateRef.current.delete(convId);
+          setPendingAttachmentPayload(undefined);
           if (activeConvIdRef.current === convId) {
             setIsStreaming(false);
             setTypingModel(null);
@@ -463,6 +480,8 @@ export default function Dashboard() {
         selectedModelIds,
         debateConfig,
         perModelPromptsArg,
+        attachmentPayload?.context,
+        attachmentPayload?.attachments,
       );
     } catch (error: any) {
       // Ignore abort errors (user clicked stop)
@@ -476,6 +495,7 @@ export default function Dashboard() {
         setStreamingMessages(new Map());
         setWebSearchStatus(null);
       }
+      setPendingAttachmentPayload(undefined);
     } finally {
       abortControllerRef.current = null;
     }
@@ -483,7 +503,18 @@ export default function Dashboard() {
 
   const handleSkipRouting = () => {
     setRoutingResult(null);
-    handleApproveAndSend(pendingContent, pendingMode, pendingContent, undefined, undefined, pendingWebSearch, selectedMultiModelIds, debateParticipants);
+    handleApproveAndSend(
+      pendingContent,
+      pendingMode,
+      pendingContent,
+      undefined,
+      undefined,
+      pendingWebSearch,
+      selectedMultiModelIds.slice(0, MAX_MULTI_MODELS),
+      debateParticipants,
+      undefined,
+      pendingAttachmentPayload
+    );
   };
 
   const handleRetry = async (messageIndex: number) => {
@@ -860,9 +891,10 @@ export default function Dashboard() {
                               routingResult?.routingType === "specialized" ? selectedModelId : routingResult?.targetModel?.id,
                               undefined,
                               pendingWebSearch,
-                              selectedMultiModelIds,
+                              selectedMultiModelIds.slice(0, MAX_MULTI_MODELS),
                               debateParticipants,
                               pendingMode === "multi" || pendingMode === "debate" ? perModelPrompts : undefined,
+                              pendingAttachmentPayload,
                             );
                           }}
                           className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium text-white bg-primary hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
@@ -932,7 +964,7 @@ export default function Dashboard() {
                 mode={currentChatMode}
                 availableModels={availableModels}
                 selectedMultiModelIds={selectedMultiModelIds}
-                onMultiModelsChange={setSelectedMultiModelIds}
+                onMultiModelsChange={(ids) => setSelectedMultiModelIds(ids.slice(0, MAX_MULTI_MODELS))}
                 debateParticipants={debateParticipants}
                 onDebateConfigChange={setDebateParticipants}
                 onClose={() => setShowSettings(false)}

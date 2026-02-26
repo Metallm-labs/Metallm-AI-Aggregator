@@ -1,19 +1,235 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown, Settings } from "lucide-react";
+import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown, Settings, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ModelIcon } from "@/components/ModelIcon";
+import { useToast } from "@/hooks/use-toast";
 
 export type ChatMode = "single" | "multi" | "debate" | "direct";
 export const CHAT_MODE_STORAGE_KEY = "metallm.chat.mode";
 export const CHAT_DIRECT_MODEL_STORAGE_KEY = "metallm.chat.directModelId";
+const MAX_ATTACHMENTS = 8;
+const MAX_ATTACHMENT_SIZE_MB = 25;
+const MAX_TOTAL_ATTACHMENT_SIZE_MB = 100;
+const MAX_ATTACHMENT_CONTEXT_CHARS = 70_000;
+const MAX_TEXT_FILE_CHARS = 12_000;
+const MAX_BINARY_SCAN_BYTES = 600_000;
+const MAX_IMAGE_DATA_URL_CHARS = 18_000;
+const MAX_IMAGE_PREVIEW_DATA_URL_CHARS = 2_500;
+const IMAGE_MAX_DIMENSION = 256;
+const IMAGE_JPEG_QUALITY = 0.65;
+
+const KNOWN_TEXT_MIME_TYPES = new Set([
+    "application/json",
+    "application/xml",
+    "application/javascript",
+    "application/x-javascript",
+    "application/typescript",
+    "application/x-sh",
+    "application/sql",
+    "application/x-yaml",
+    "application/yaml",
+    "application/x-httpd-php",
+    "application/x-python-code",
+    "application/x-ruby",
+    "application/x-java",
+    "application/x-c",
+    "application/x-c++",
+    "application/x-markdown",
+    "application/pdf",
+]);
+
+const KNOWN_TEXT_EXTENSIONS = new Set([
+    "txt", "md", "markdown", "json", "yaml", "yml", "xml", "csv", "tsv", "ini", "toml",
+    "js", "jsx", "ts", "tsx", "mjs", "cjs",
+    "py", "rb", "php", "java", "c", "cc", "cpp", "h", "hpp", "cs", "go", "rs", "swift", "kt",
+    "sh", "bash", "zsh", "ps1", "sql", "r", "scala", "lua", "dart",
+    "html", "css", "scss", "sass", "less",
+    "env", "gitignore", "dockerfile", "pdf",
+]);
+
+const getExtension = (name: string): string => {
+    const idx = name.lastIndexOf(".");
+    return idx === -1 ? "" : name.slice(idx + 1).toLowerCase();
+};
+
+const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const truncateText = (value: string, maxChars: number): { text: string; truncated: boolean } => {
+    if (value.length <= maxChars) return { text: value, truncated: false };
+    return { text: value.slice(0, maxChars), truncated: true };
+};
+
+const normalizeExtractedText = (value: string): string =>
+    value
+        .replace(/\0/g, " ")
+        .replace(/\r/g, "")
+        .replace(/[ \t]{3,}/g, "  ")
+        .replace(/\n{4,}/g, "\n\n")
+        .trim();
+
+const extractTextFromBinary = (bytes: Uint8Array): string => {
+    const decoded = new TextDecoder("latin1", { fatal: false }).decode(bytes);
+    const matches = decoded.match(/[ -~\n\r\t]{6,}/g) || [];
+    const joined = matches.join("\n");
+    return normalizeExtractedText(joined);
+};
+
+const isLikelyTextFile = (file: File): boolean => {
+    if (file.type.startsWith("text/")) return true;
+    if (KNOWN_TEXT_MIME_TYPES.has(file.type)) return true;
+    return KNOWN_TEXT_EXTENSIONS.has(getExtension(file.name));
+};
+
+const fileToDataURL = async (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+        reader.readAsDataURL(file);
+    });
+
+const downscaleImageToDataURL = async (
+    file: File,
+    maxDimension = IMAGE_MAX_DIMENSION,
+    quality = IMAGE_JPEG_QUALITY
+): Promise<string> => {
+    const original = await fileToDataURL(file);
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error(`Failed to load image ${file.name}`));
+        image.src = original;
+    });
+
+    const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
+    const targetW = Math.max(1, Math.round(img.width * scale));
+    const targetH = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return original;
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+    return canvas.toDataURL("image/jpeg", quality);
+};
+
+async function buildAttachmentContext(files: File[]) {
+    let totalChars = 0;
+    const sections: string[] = [];
+    const warnings: string[] = [];
+    const attachments: ChatAttachmentMeta[] = [];
+
+    for (const file of files) {
+        if (totalChars >= MAX_ATTACHMENT_CONTEXT_CHARS) {
+            warnings.push("Attachment context truncated due to overall context limit.");
+            break;
+        }
+
+        const attachmentMeta: ChatAttachmentMeta = {
+            name: file.name,
+            type: file.type || "application/octet-stream",
+            size: file.size,
+            isImage: file.type.startsWith("image/"),
+        };
+
+        const header = `### File: ${file.name}\nType: ${file.type || "unknown"} | Size: ${formatBytes(file.size)}\n`;
+        let body = "";
+        let truncated = false;
+
+        try {
+            if (file.type.startsWith("image/")) {
+                const previewDataUrl = await downscaleImageToDataURL(file, 96, 0.5);
+                if (previewDataUrl.length <= MAX_IMAGE_PREVIEW_DATA_URL_CHARS) {
+                    attachmentMeta.previewDataUrl = previewDataUrl;
+                }
+                const dataUrl = await downscaleImageToDataURL(file);
+                if (dataUrl.length > MAX_IMAGE_DATA_URL_CHARS) {
+                    warnings.push(`Image ${file.name} is too large for inline context after compression; included metadata only.`);
+                    body = "Image attached. Content omitted due to size limit.\n";
+                } else {
+                    body =
+                        "Image content (data URL for vision-capable models):\n" +
+                        dataUrl +
+                        "\n";
+                }
+            } else if (isLikelyTextFile(file)) {
+                if (file.type === "application/pdf" || getExtension(file.name) === "pdf") {
+                    const bytes = new Uint8Array(await file.slice(0, MAX_BINARY_SCAN_BYTES).arrayBuffer());
+                    const extracted = extractTextFromBinary(bytes);
+                    if (!extracted) {
+                        body = "PDF attached. Could not extract readable text in browser.\n";
+                    } else {
+                        const textCut = truncateText(extracted, MAX_TEXT_FILE_CHARS);
+                        body = `Extracted text:\n\`\`\`\n${textCut.text}\n\`\`\`\n`;
+                        truncated = textCut.truncated || file.size > MAX_BINARY_SCAN_BYTES;
+                    }
+                } else {
+                    const preview = await file.slice(0, MAX_TEXT_FILE_CHARS * 4).text();
+                    const normalized = normalizeExtractedText(preview);
+                    const textCut = truncateText(normalized, MAX_TEXT_FILE_CHARS);
+                    body = `Extracted text:\n\`\`\`\n${textCut.text}\n\`\`\`\n`;
+                    truncated = textCut.truncated || file.size > MAX_TEXT_FILE_CHARS * 4;
+                }
+            } else {
+                body = "Binary file attached. Content extraction is not supported for this format in browser.\n";
+            }
+        } catch {
+            body = "Failed to read this file for context.\n";
+            warnings.push(`Failed to extract content from ${file.name}.`);
+        }
+
+        if (truncated) {
+            body += "[Truncated due to file/context limits]\n";
+        }
+
+        let section = `${header}${body}`;
+        const remaining = MAX_ATTACHMENT_CONTEXT_CHARS - totalChars;
+        if (section.length > remaining) {
+            if (remaining > 500) {
+                section = `${section.slice(0, remaining - 60)}\n[Context truncated]\n`;
+                totalChars += section.length;
+                sections.push(section);
+            }
+            warnings.push(`Attachment context reached limit while processing ${file.name}.`);
+            break;
+        }
+
+        totalChars += section.length;
+        sections.push(section);
+        attachments.push(attachmentMeta);
+    }
+
+    return {
+        context: sections.join("\n"),
+        warnings,
+        attachments,
+    };
+}
 
 export interface DebateParticipant {
     modelId: string;
     customRole: string;
     customSystemPrompt: string;
+}
+
+export interface ChatAttachmentMeta {
+    name: string;
+    type: string;
+    size: number;
+    isImage: boolean;
+    previewDataUrl?: string;
+}
+
+export interface AttachmentPayload {
+    context: string;
+    attachments: ChatAttachmentMeta[];
 }
 
 interface AvailableModel {
@@ -25,7 +241,14 @@ interface AvailableModel {
 }
 
 interface ChatInputProps {
-    onSend: (content: string, mode: ChatMode, enhancerEnabled: boolean, webSearch?: boolean, directModelId?: string) => void;
+    onSend: (
+        content: string,
+        mode: ChatMode,
+        enhancerEnabled: boolean,
+        webSearch?: boolean,
+        directModelId?: string,
+        attachmentPayload?: AttachmentPayload
+    ) => void;
     onStop?: () => void;
     isLoading?: boolean;
     disabled?: boolean;
@@ -83,9 +306,11 @@ const getStoredDirectModelId = (storageScope?: string): string => {
 };
 
 export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [] }: ChatInputProps) {
+    const { toast } = useToast();
     const [content, setContent] = useState("");
     const [mode, setMode] = useState<ChatMode>(() => getStoredChatMode(storageScope));
     const [directModelId, setDirectModelIdState] = useState<string>(() => getStoredDirectModelId(storageScope));
+    const [isPreparingAttachments, setIsPreparingAttachments] = useState(false);
     const directModelIdRef = useRef<string>(directModelId); // always-current mirror of directModelId
     const setDirectModelId = (id: string) => {
         directModelIdRef.current = id;
@@ -157,27 +382,87 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const handleSubmit = (e?: React.FormEvent) => {
+    const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
-        if (!content.trim() || isLoading || disabled) return;
+        if (!content.trim() || isLoading || disabled || isPreparingAttachments) return;
         // Always read from ref — guards against any stale closure on the state value
         const currentDirectModelId = directModelIdRef.current;
         if (mode === "direct" && !currentDirectModelId) return;
 
-        const finalContent = attachedFiles.length > 0
-            ? `${content.trim()}\n\n[Attached files: ${attachedFiles.map(f => f.name).join(", ")}]`
-            : content.trim();
+        setIsPreparingAttachments(true);
+        try {
+            let attachmentPayload: AttachmentPayload | undefined;
+            if (attachedFiles.length > 0) {
+                const { context, warnings, attachments } = await buildAttachmentContext(attachedFiles);
+                if (warnings.length > 0) {
+                    toast({
+                        variant: "destructive",
+                        description: warnings[0],
+                    });
+                }
+                attachmentPayload = { context, attachments };
+            }
 
-        const enhancerEnabled = mode !== "direct";
-        onSend(finalContent, mode, enhancerEnabled, webSearchEnabled, mode === "direct" ? currentDirectModelId : undefined);
+            const finalContent = content.trim();
+            const enhancerEnabled = mode !== "direct";
+            onSend(
+                finalContent,
+                mode,
+                enhancerEnabled,
+                webSearchEnabled,
+                mode === "direct" ? currentDirectModelId : undefined,
+                attachmentPayload
+            );
 
-        setContent("");
-        setAttachedFiles([]);
+            setContent("");
+            setAttachedFiles([]);
+        } finally {
+            setIsPreparingAttachments(false);
+        }
     };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
-        setAttachedFiles(prev => [...prev, ...files]);
+        if (files.length === 0) return;
+
+        const maxBytesPerFile = MAX_ATTACHMENT_SIZE_MB * 1024 * 1024;
+        const maxTotalBytes = MAX_TOTAL_ATTACHMENT_SIZE_MB * 1024 * 1024;
+        const next = [...attachedFiles];
+        let rejectedCount = 0;
+        let rejectedBySize = 0;
+        let totalBytes = next.reduce((sum, file) => sum + file.size, 0);
+
+        for (const file of files) {
+            if (next.length >= MAX_ATTACHMENTS) {
+                rejectedCount++;
+                continue;
+            }
+            if (file.size > maxBytesPerFile) {
+                rejectedBySize++;
+                continue;
+            }
+            if (totalBytes + file.size > maxTotalBytes) {
+                rejectedBySize++;
+                continue;
+            }
+            next.push(file);
+            totalBytes += file.size;
+        }
+
+        setAttachedFiles(next);
+
+        if (rejectedCount > 0) {
+            toast({
+                variant: "destructive",
+                description: `Attachment limit reached (max ${MAX_ATTACHMENTS} files).`,
+            });
+        }
+        if (rejectedBySize > 0) {
+            toast({
+                variant: "destructive",
+                description: `Some files were too large. Max ${MAX_ATTACHMENT_SIZE_MB}MB per file, ${MAX_TOTAL_ATTACHMENT_SIZE_MB}MB total.`,
+            });
+        }
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
@@ -191,7 +476,7 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            handleSubmit();
+            void handleSubmit();
         }
     };
 
@@ -280,7 +565,7 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                                     : "Ask anything..."
                             }
                             className="min-h-[44px] max-h-[120px] bg-transparent border-0 resize-none focus-visible:ring-0 text-base placeholder:text-muted-foreground/50 py-2.5 px-4"
-                            disabled={isLoading || disabled}
+                            disabled={isLoading || disabled || isPreparingAttachments}
                             rows={1}
                         />
 
@@ -295,7 +580,7 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                                     multiple
                                     onChange={handleFileSelect}
                                     className="hidden"
-                                    accept="image/*,.pdf,.doc,.docx,.txt"
+                                    accept="*/*"
                                 />
                                 <div className="relative flex-shrink-0" ref={attachMenuRef}>
                                     <Button
@@ -306,8 +591,9 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                                             "w-8 h-8 text-muted-foreground hover:text-white transition-colors",
                                             (showAttachMenu || webSearchEnabled || attachedFiles.length > 0) && "text-primary"
                                         )}
+                                        disabled={isPreparingAttachments}
                                         onClick={() => setShowAttachMenu(v => !v)}
-                                        title="Attach files or enable web search"
+                                        title="Photos & Files or web search"
                                     >
                                         <Plus className="w-4 h-4" />
                                     </Button>
@@ -342,11 +628,12 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                                                         type="button"
                                                         onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
                                                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all text-sm hover:bg-white/5 text-muted-foreground hover:text-white"
+                                                        disabled={isPreparingAttachments}
                                                     >
                                                         <Paperclip className="w-4 h-4 flex-shrink-0" />
                                                         <div className="flex-1 min-w-0">
-                                                            <div className="font-medium text-xs">Attach File</div>
-                                                            <div className="text-[10px] opacity-60">Upload images, PDFs, docs</div>
+                                                            <div className="font-medium text-xs">Photos &amp; Files</div>
+                                                            <div className="text-[10px] opacity-60">Any file type • up to 8 files • content is extracted</div>
                                                         </div>
                                                     </button>
                                                 </div>
@@ -510,14 +797,14 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                                 <Button
                                     type="submit"
                                     size="icon"
-                                    disabled={!content.trim() || disabled || (mode === "direct" && !directModelId)}
+                                    disabled={!content.trim() || disabled || isPreparingAttachments || (mode === "direct" && !directModelId)}
                                     className={cn(
                                         "h-9 w-9 rounded-full text-white transition-all flex-shrink-0",
                                         content.trim() ? "bg-primary hover:bg-primary/90" : "bg-transparent hover:bg-white/5"
                                     )}
                                     variant="ghost"
                                 >
-                                    <Send className="w-4 h-4" />
+                                    {isPreparingAttachments ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                                 </Button>
                             )}
                             </div>

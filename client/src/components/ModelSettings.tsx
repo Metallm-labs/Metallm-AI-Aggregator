@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ModelIcon } from "@/components/ModelIcon";
 import type { ChatMode, DebateParticipant } from "@/components/ChatInput";
 
+export const MAX_MULTI_MODELS = 6;
+
 interface ServerModelConfig {
     id: string;
     displayName: string;
@@ -170,22 +172,37 @@ function MultiModeSettings({ availableModels, selectedIds, onSelectionChange }: 
     selectedIds: string[];
     onSelectionChange: (ids: string[]) => void;
 }) {
+    const { toast } = useToast();
     const toggle = (id: string) => {
         if (selectedIds.includes(id)) {
             if (selectedIds.length <= 1) return;
             onSelectionChange(selectedIds.filter(x => x !== id));
         } else {
+            if (selectedIds.length >= MAX_MULTI_MODELS) {
+                toast({
+                    variant: "destructive",
+                    description: `You can select up to ${MAX_MULTI_MODELS} models in All Models mode.`,
+                });
+                return;
+            }
             onSelectionChange([...selectedIds, id]);
         }
     };
-    const allSelected = selectedIds.length === availableModels.length;
+    const maxSelectable = Math.min(availableModels.length, MAX_MULTI_MODELS);
+    const allSelected = selectedIds.length >= maxSelectable;
     return (
         <div className="p-4 max-h-[55vh] overflow-y-auto">
             <div className="max-w-4xl mx-auto space-y-2">
                 <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs text-muted-foreground">Pick which models respond to your query.</p>
+                    <p className="text-xs text-muted-foreground">Pick which models respond to your query (max {MAX_MULTI_MODELS}).</p>
                     <button type="button"
-                        onClick={() => onSelectionChange(allSelected ? [availableModels[0].id] : availableModels.map(m => m.id))}
+                        onClick={() =>
+                            onSelectionChange(
+                                allSelected
+                                    ? [availableModels[0].id]
+                                    : availableModels.slice(0, MAX_MULTI_MODELS).map(m => m.id)
+                            )
+                        }
                         className="text-[10px] text-primary hover:text-primary/80 transition-colors">
                         {allSelected ? "Deselect all" : "Select all"}
                     </button>
@@ -213,7 +230,7 @@ function MultiModeSettings({ availableModels, selectedIds, onSelectionChange }: 
                     })}
                 </div>
                 <p className="text-[10px] text-muted-foreground/50 pt-1 text-center">
-                    {selectedIds.length} of {availableModels.length} models selected
+                    {selectedIds.length} selected (max {MAX_MULTI_MODELS})
                 </p>
             </div>
         </div>

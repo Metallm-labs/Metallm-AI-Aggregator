@@ -25,6 +25,47 @@ function getMainModel(): ModelConfig {
   return currentModels.find(m => m.id === currentMainModelId) || currentModels[0];
 }
 
+interface UserAttachmentMeta {
+  name: string;
+  type: string;
+  size: number;
+  isImage: boolean;
+  previewDataUrl?: string;
+}
+
+function sanitizeAttachmentContext(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.slice(0, 80_000);
+}
+
+function sanitizeAttachments(value: unknown): UserAttachmentMeta[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      const obj = item as Partial<UserAttachmentMeta> | null | undefined;
+      if (!obj || typeof obj !== "object") return null;
+      if (typeof obj.name !== "string" || !obj.name.trim()) return null;
+      if (typeof obj.type !== "string") return null;
+      if (typeof obj.size !== "number" || !Number.isFinite(obj.size) || obj.size < 0) return null;
+      if (typeof obj.isImage !== "boolean") return null;
+      const previewDataUrl =
+        typeof obj.previewDataUrl === "string" && obj.previewDataUrl.length <= 3_000
+          ? obj.previewDataUrl
+          : undefined;
+      return {
+        name: obj.name.slice(0, 300),
+        type: obj.type.slice(0, 120),
+        size: Math.round(obj.size),
+        isImage: obj.isImage,
+        previewDataUrl,
+      } as UserAttachmentMeta;
+    })
+    .filter((x): x is UserAttachmentMeta => !!x)
+    .slice(0, 12);
+}
+
 // SSE Helper
 function sendSSE(res: Response, event: string, data: any) {
   res.write(`event: ${event}\n`);
@@ -367,11 +408,27 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
       if (conversation.userId !== userId) return res.status(401).json({ message: "Unauthorized" });
 
-      const { content, mode, enhancedPrompt, targetModelId, webSearch, selectedModelIds, debateConfig, perModelPrompts } = req.body;
+      const {
+        content,
+        mode,
+        enhancedPrompt,
+        targetModelId,
+        webSearch,
+        selectedModelIds,
+        debateConfig,
+        perModelPrompts,
+        attachmentContext,
+        attachments,
+      } = req.body;
       if (!content) return res.status(400).json({ message: "Content is required" });
 
+      const cleanAttachmentContext = sanitizeAttachmentContext(attachmentContext);
+      const cleanAttachments = sanitizeAttachments(attachments);
       // The prompt to actually send to the model (user-approved enhanced prompt)
-      const promptToSend = enhancedPrompt || content;
+      const promptBase = enhancedPrompt || content;
+      const promptToSend = cleanAttachmentContext
+        ? `${promptBase}\n\n[Attached files with extracted content]\nUse this file/photo context when answering:\n${cleanAttachmentContext}`
+        : promptBase;
 
 
       // Check message count BEFORE saving the user message (so 0 = first ever message)
@@ -379,12 +436,16 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
       const messageCount = await storage.getMessageCount(conversationId);
       const isFirstMessage = messageCount === 0;
 
-      // Save user message (store the enhanced prompt if available, replacing the original)
+      // Save the clean user-visible message (without extracted attachment context)
       const userMessage = await storage.addMessage({
         conversationId,
         role: "user",
-        content: promptToSend,
+        content,
         modelName: null,
+        metadata: {
+          attachments: cleanAttachments.length > 0 ? cleanAttachments : undefined,
+          attachmentContext: cleanAttachmentContext,
+        },
       });
 
       // Setup SSE
@@ -442,8 +503,12 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
         const contextMessages: { role: string; content: string }[] = [];
         for (const m of history.slice(-10)) {
           const clean = m.content.replace(/^\[[^\]]+\]:\s*/, "");
+          const userAttachmentContext =
+            m.role === "user" && m.metadata && typeof (m.metadata as any).attachmentContext === "string"
+              ? `\n\n[Attached files context]\n${(m.metadata as any).attachmentContext}`
+              : "";
           if (m.role === "user") {
-            contextMessages.push({ role: "user", content: clean });
+            contextMessages.push({ role: "user", content: `${clean}${userAttachmentContext}` });
           } else if (m.modelName && m.modelName !== modelName) {
             // Another model's response → system-level note so the current model
             // knows about it but won't mistake it for its own words.
@@ -511,7 +576,8 @@ This chat runs inside "Metallm AI Aggregator", a platform where the user can swi
             modelId: targetModel.id,
             role: targetModel.role,
             provider: targetModel.provider,
-            enhancedPrompt: promptToSend !== content ? promptToSend : undefined,
+            enhancedPrompt: enhancedPrompt && enhancedPrompt !== content ? enhancedPrompt : undefined,
+            hasAttachmentContext: !!cleanAttachmentContext,
             webSearch: modelSources.length > 0,
             sources: modelSources.length > 0 ? modelSources : undefined,
           },

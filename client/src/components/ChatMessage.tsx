@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, Zap, Globe, ExternalLink, ChevronRight } from "lucide-react";
+import { User, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, Zap, Globe, ExternalLink, ChevronRight, Paperclip } from "lucide-react";
 import { MarkdownRenderer } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -15,6 +15,13 @@ function getFavicon(url: string): string {
     } catch {
         return "";
     }
+}
+
+function formatAttachmentSize(bytes?: number): string {
+    if (typeof bytes !== "number" || !Number.isFinite(bytes)) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Dynamic model colors configuration
@@ -66,6 +73,13 @@ export function ChatMessage({
     const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
     const [showSources, setShowSources] = useState(false);
     const isSummary = modelName === "Summary" || metadata?.isSummary;
+    const userAttachments = Array.isArray(metadata?.attachments) ? metadata.attachments as Array<{
+        name: string;
+        type: string;
+        size: number;
+        isImage?: boolean;
+        previewDataUrl?: string;
+    }> : [];
 
     const handleCopy = async () => {
         await navigator.clipboard.writeText(content);
@@ -176,6 +190,37 @@ export function ChatMessage({
                                 ) : (
                                     <div className="rounded-2xl bg-primary text-white rounded-br-sm px-4 py-3">
                                         <p className="text-base font-medium whitespace-pre-wrap leading-relaxed">{content}</p>
+                                        {userAttachments.length > 0 && (
+                                            <div className="mt-2.5 space-y-2">
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                    {userAttachments.map((file, index) => {
+                                                        if (file.isImage && file.previewDataUrl) {
+                                                            return (
+                                                                <div key={`${file.name}-${index}`} className="rounded-lg overflow-hidden border border-white/20 bg-black/10">
+                                                                    <img
+                                                                        src={file.previewDataUrl}
+                                                                        alt={file.name}
+                                                                        className="w-full h-20 object-cover"
+                                                                    />
+                                                                    <div className="px-2 py-1 text-[10px] truncate bg-black/20">
+                                                                        {file.name}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <div key={`${file.name}-${index}`} className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-black/10 px-2 py-1.5">
+                                                                <Paperclip className="w-3 h-3 flex-shrink-0" />
+                                                                <div className="min-w-0">
+                                                                    <div className="text-[11px] truncate">{file.name}</div>
+                                                                    <div className="text-[10px] text-white/70">{formatAttachmentSize(file.size)}</div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )
                             ) : (
