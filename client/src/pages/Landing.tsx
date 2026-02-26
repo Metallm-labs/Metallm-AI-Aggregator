@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  Zap, Shield, Users, Clock, Brain, Target, ArrowRight, CheckCircle2,
-  Sparkles, BarChart3, GraduationCap, FlaskConical, Rocket, ChevronDown,
-  Star, Play, TrendingUp, Globe, Lock, MessageSquare, Route, Wand2,
+  Zap,  Clock,  ArrowRight, CheckCircle2,
+  Sparkles,  GraduationCap, FlaskConical, Rocket, ChevronDown,
+  Star, Play, TrendingUp,  Lock, MessageSquare, Route, Wand2,
   Swords, Search, Layers, GitMerge
 } from "lucide-react";
 import { motion, useInView, useScroll, useTransform, AnimatePresence } from "framer-motion";
@@ -106,6 +106,7 @@ function TypingText({ texts, className = "" }: { texts: string[]; className?: st
 
 /* ─── Neural Network Brain Canvas ─── */
 function NeuralNetworkCanvas() {
+  const [isDesktop, setIsDesktop] = useState(() => (typeof window === "undefined" ? true : window.innerWidth >= 1024));
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef({ x: -1000, y: -1000 });
   const animFrameRef = useRef<number>(0);
@@ -115,6 +116,13 @@ function NeuralNetworkCanvas() {
   const initedRef = useRef(false);
 
   useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktop) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -550,7 +558,7 @@ function NeuralNetworkCanvas() {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, []);
+  }, [isDesktop]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -577,10 +585,12 @@ function NeuralNetworkCanvas() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleMouseLeave}
     >
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
-      />
+      {isDesktop ? (
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full"
+        />
+      ) : null}
     </div>
   );
 }
@@ -703,6 +713,7 @@ export default function Landing() {
   const { scrollYProgress } = useScroll();
   const heroParallax = useTransform(scrollYProgress, [0, 0.3], [0, -60]);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
+  const isMobile = useIsMobile();
 
   const features = [
     {
@@ -837,12 +848,15 @@ export default function Landing() {
       <nav className="fixed w-full z-50 top-0 left-0 border-b border-white/5 bg-background/70 backdrop-blur-xl" role="navigation" aria-label="Main navigation">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <a href="/" className="flex items-center gap-3 group" aria-label="MetaLLM Home">
-            <motion.img
-              src="/logo.jpeg"
+            <img
+              src="/logo-96.jpg"
               alt="MetaLLM Logo - AI Aggregator Platform"
               className="w-10 h-10 rounded-lg ring-1 ring-amber-500/20 group-hover:ring-amber-400/50 transition-all"
-              whileHover={{ scale: 1.05, rotate: 2 }}
-              transition={{ type: "spring", stiffness: 300 }}
+              width={40}
+              height={40}
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
             />
             <span className="text-xl font-bold font-display tracking-tight">
               Meta<span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-300">LLM</span>
@@ -927,17 +941,23 @@ export default function Landing() {
               <span className="text-xs sm:text-sm lg:text-base font-medium text-muted-foreground">
                 MetaLLM can{" "}
               </span>
-              <TypingText
-                texts={[
-                  "route your query to the best AI model.",
-                  "enhance your prompts automatically.",
-                  "query 9 models in parallel.",
-                  "synthesize a unified answer.",
-                  "run AI debates for deep analysis.",
-                  "search the web in real-time.",
-                ]}
-                className="text-xs sm:text-sm lg:text-base font-semibold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-300"
-              />
+              {isMobile ? (
+                <span className="text-xs sm:text-sm lg:text-base font-semibold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-300">
+                  query 9 models in parallel.
+                </span>
+              ) : (
+                <TypingText
+                  texts={[
+                    "route your query to the best AI model.",
+                    "enhance your prompts automatically.",
+                    "query 9 models in parallel.",
+                    "synthesize a unified answer.",
+                    "run AI debates for deep analysis.",
+                    "search the web in real-time.",
+                  ]}
+                  className="text-xs sm:text-sm lg:text-base font-semibold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-300"
+                />
+              )}
             </motion.div>
 
             <motion.p
@@ -1422,7 +1442,7 @@ export default function Landing() {
       <section className="py-24 relative overflow-hidden" aria-labelledby="cta-heading" ref={ctaReveal.ref}>
         <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-amber-500/8 rounded-full blur-[200px]" />
-          <FloatingParticles />
+          {!isMobile && <FloatingParticles />}
         </div>
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
@@ -1433,10 +1453,13 @@ export default function Landing() {
           >
             <motion.div variants={fadeUp} className="mb-6">
               <img
-                src="/logo.jpeg"
+                src="/logo-96.jpg"
                 alt="MetaLLM Logo"
                 className="w-20 h-20 mx-auto rounded-2xl ring-2 ring-amber-500/20 shadow-xl shadow-amber-500/10 mb-8"
                 loading="lazy"
+                decoding="async"
+                width={80}
+                height={80}
               />
             </motion.div>
             <motion.h2 variants={fadeUp} id="cta-heading" className="text-3xl sm:text-4xl md:text-5xl font-bold font-display mb-6">
@@ -1476,7 +1499,7 @@ export default function Landing() {
             {/* Brand */}
             <div className="md:col-span-1">
               <a href="/" className="flex items-center gap-3 mb-4">
-                <img src="/logo.jpeg" alt="MetaLLM" className="w-10 h-10 rounded-lg" loading="lazy" />
+                <img src="/logo-96.jpg" alt="MetaLLM" className="w-10 h-10 rounded-lg" loading="lazy" decoding="async" width={40} height={40} />
                 <span className="text-xl font-bold font-display">
                   Meta<span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-300">LLM</span>
                 </span>

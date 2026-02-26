@@ -8,7 +8,7 @@ export default function Terms() {
             <nav className="fixed w-full z-50 top-0 left-0 border-b border-white/5 bg-background/70 backdrop-blur-xl">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center">
                     <a href="/" className="flex items-center gap-3 group">
-                        <img src="/logo.jpeg" alt="MetaLLM Logo" className="w-10 h-10 rounded-lg ring-1 ring-amber-500/20" />
+                        <img src="/logo-96.jpg" alt="MetaLLM Logo" className="w-10 h-10 rounded-lg ring-1 ring-amber-500/20" width={40} height={40} decoding="async" />
                         <span className="text-xl font-bold font-display tracking-tight">
                             Meta<span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-300">LLM</span>
                         </span>

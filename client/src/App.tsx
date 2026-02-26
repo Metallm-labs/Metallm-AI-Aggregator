@@ -1,20 +1,20 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2, AlertTriangle } from "lucide-react";
-import React from "react";
+import React, { Suspense, lazy } from "react";
 
-import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
-import Login from "@/pages/Login";
-import Dashboard from "@/pages/Dashboard";
-import History from "@/pages/History";
-import QueryDetail from "@/pages/QueryDetail";
-import Terms from "@/pages/Terms";
-import Privacy from "@/pages/Privacy";
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Login = lazy(() => import("@/pages/Login"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const History = lazy(() => import("@/pages/History"));
+const QueryDetail = lazy(() => import("@/pages/QueryDetail"));
+const Terms = lazy(() => import("@/pages/Terms"));
+const Privacy = lazy(() => import("@/pages/Privacy"));
 
 // ─── Top-level error boundary ─────────────────────────────────────────────────
 class ErrorBoundary extends React.Component<
@@ -74,9 +74,30 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 function Router() {
-  const { user, isLoading } = useAuth();
+  const [location] = useLocation();
+  const isPublicRoute =
+    location === "/" ||
+    location === "/login" ||
+    location === "/terms" ||
+    location === "/privacy";
+  const [authEnabled, setAuthEnabled] = React.useState(!isPublicRoute);
 
-  if (isLoading) {
+  React.useEffect(() => {
+    if (!isPublicRoute) {
+      setAuthEnabled(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setAuthEnabled(true), 1200);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isPublicRoute]);
+
+  const { user, isLoading } = useAuth({ enabled: authEnabled });
+
+  if (isLoading && !isPublicRoute) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -123,9 +144,17 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
-          <ErrorBoundary>
-            <Router />
-          </ErrorBoundary>
+          <Suspense
+            fallback={
+              <div className="h-screen w-screen flex items-center justify-center bg-background">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            }
+          >
+            <ErrorBoundary>
+              <Router />
+            </ErrorBoundary>
+          </Suspense>
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>

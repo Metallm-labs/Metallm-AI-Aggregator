@@ -25,11 +25,13 @@ async function logout(): Promise<void> {
   window.location.href = "/api/logout";
 }
 
-export function useAuth() {
+export function useAuth(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
   const queryClient = useQueryClient();
   const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
+    enabled,
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });

@@ -232,10 +232,13 @@ export default function Login() {
                 {/* Logo */}
                 <a href="/" className="flex items-center gap-3 group">
                     <motion.img
-                        src="/logo.jpeg"
+                        src="/logo-96.jpg"
                         alt="MetaLLM Logo"
                         className="w-11 h-11 rounded-lg ring-1 ring-amber-500/20 group-hover:ring-amber-400/50 transition-all"
                         whileHover={{ scale: 1.06, rotate: 2 }}
+                        width={44}
+                        height={44}
+                        decoding="async"
                     />
                     <span className="text-xl font-bold font-display tracking-tight">
                         Meta<span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-300">LLM</span>
@@ -319,7 +322,7 @@ export default function Login() {
                     {/* Mobile logo */}
                     <div className="lg:hidden text-center mb-8">
                         <a href="/" className="inline-flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
-                            <img src="/logo.jpeg" alt="MetaLLM Logo" className="w-10 h-10 rounded-lg ring-1 ring-amber-500/20" />
+                            <img src="/logo-96.jpg" alt="MetaLLM Logo" className="w-10 h-10 rounded-lg ring-1 ring-amber-500/20" width={40} height={40} decoding="async" />
                             <span className="text-xl font-bold font-display tracking-tight">
                                 Meta<span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-300">LLM</span>
                             </span>
