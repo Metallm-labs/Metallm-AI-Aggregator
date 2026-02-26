@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ModelIcon } from "@/components/ModelIcon";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 export type ChatMode = "single" | "multi" | "debate" | "direct";
 export const CHAT_MODE_STORAGE_KEY = "metallm.chat.mode";
@@ -17,7 +18,7 @@ const MAX_ATTACHMENT_CONTEXT_CHARS = 70_000;
 const MAX_TEXT_FILE_CHARS = 12_000;
 const MAX_BINARY_SCAN_BYTES = 600_000;
 const MAX_IMAGE_DATA_URL_CHARS = 18_000;
-const MAX_IMAGE_PREVIEW_DATA_URL_CHARS = 2_500;
+const MAX_IMAGE_PREVIEW_DATA_URL_CHARS = 18_000;
 const IMAGE_MAX_DIMENSION = 256;
 const IMAGE_JPEG_QUALITY = 0.65;
 
@@ -120,6 +121,20 @@ const downscaleImageToDataURL = async (
     return canvas.toDataURL("image/jpeg", quality);
 };
 
+const buildBestPreviewDataUrl = async (file: File): Promise<string | undefined> => {
+    const candidates = [
+        { dim: 240, quality: 0.9 },
+        { dim: 200, quality: 0.85 },
+        { dim: 170, quality: 0.8 },
+        { dim: 140, quality: 0.75 },
+    ];
+    for (const c of candidates) {
+        const url = await downscaleImageToDataURL(file, c.dim, c.quality);
+        if (url.length <= MAX_IMAGE_PREVIEW_DATA_URL_CHARS) return url;
+    }
+    return undefined;
+};
+
 async function buildAttachmentContext(files: File[]) {
     let totalChars = 0;
     const sections: string[] = [];
@@ -145,10 +160,8 @@ async function buildAttachmentContext(files: File[]) {
 
         try {
             if (file.type.startsWith("image/")) {
-                const previewDataUrl = await downscaleImageToDataURL(file, 96, 0.5);
-                if (previewDataUrl.length <= MAX_IMAGE_PREVIEW_DATA_URL_CHARS) {
-                    attachmentMeta.previewDataUrl = previewDataUrl;
-                }
+                const previewDataUrl = await buildBestPreviewDataUrl(file);
+                if (previewDataUrl) attachmentMeta.previewDataUrl = previewDataUrl;
                 const dataUrl = await downscaleImageToDataURL(file);
                 if (dataUrl.length > MAX_IMAGE_DATA_URL_CHARS) {
                     warnings.push(`Image ${file.name} is too large for inline context after compression; included metadata only.`);
@@ -318,6 +331,8 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
     };
     const [webSearchEnabled, setWebSearchEnabled] = useState(false);
     const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+    const [attachedImagePreviews, setAttachedImagePreviews] = useState<Array<{ index: number; name: string; url: string }>>([]);
+    const [previewImage, setPreviewImage] = useState<{ name: string; url: string } | null>(null);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [showModeMenu, setShowModeMenu] = useState(false);
     const [showModelPicker, setShowModelPicker] = useState(false);
@@ -381,6 +396,22 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
+
+    // Create object URLs for input-bar image previews and clean them up safely.
+    useEffect(() => {
+        const previews = attachedFiles
+            .map((file, index) =>
+                file.type.startsWith("image/")
+                    ? { index, name: file.name, url: URL.createObjectURL(file) }
+                    : null
+            )
+            .filter((x): x is { index: number; name: string; url: string } => !!x);
+
+        setAttachedImagePreviews(previews);
+        return () => {
+            previews.forEach((p) => URL.revokeObjectURL(p.url));
+        };
+    }, [attachedFiles]);
 
     const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -542,13 +573,44 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                                     </div>
                                 )}
                                 {attachedFiles.map((file, index) => (
-                                    <div key={index} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
-                                        {getFileIcon(file)}
-                                        <span className="truncate max-w-[120px]">{file.name}</span>
-                                        <button type="button" onClick={() => removeFile(index)} className="hover:text-white">
-                                            <X className="w-3 h-3" />
-                                        </button>
-                                    </div>
+                                    (() => {
+                                        const preview = attachedImagePreviews.find((p) => p.index === index);
+                                        if (preview) {
+                                            return (
+                                                <div key={index} className="relative rounded-lg overflow-hidden border border-white/15 bg-white/5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPreviewImage({ name: preview.name, url: preview.url })}
+                                                        className="block hover:opacity-90 transition-opacity"
+                                                        title="Open image"
+                                                    >
+                                                        <img
+                                                            src={preview.url}
+                                                            alt={preview.name}
+                                                            className="w-16 h-16 object-cover"
+                                                        />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeFile(index)}
+                                                        className="absolute top-1 right-1 rounded-full bg-black/60 p-0.5 text-white hover:bg-black/80"
+                                                        title="Remove"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            );
+                                        }
+                                        return (
+                                            <div key={index} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground">
+                                                {getFileIcon(file)}
+                                                <span className="truncate max-w-[120px]">{file.name}</span>
+                                                <button type="button" onClick={() => removeFile(index)} className="hover:text-white">
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        );
+                                    })()
                                 ))}
                             </div>
                         )}
@@ -812,6 +874,20 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                     </div>
                 </div>
             </form>
+            <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+                <DialogContent className="max-w-5xl w-[95vw] p-3 bg-black/95 border-white/10">
+                    {previewImage && (
+                        <div className="w-full">
+                            <div className="text-xs text-muted-foreground mb-2 truncate">{previewImage.name}</div>
+                            <img
+                                src={previewImage.url}
+                                alt={previewImage.name}
+                                className="w-full max-h-[80vh] object-contain rounded-md"
+                            />
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </motion.div>
     );
 }

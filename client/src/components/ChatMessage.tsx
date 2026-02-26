@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { ModelIcon } from "@/components/ModelIcon";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 // Extract hostname for favicon
 function getFavicon(url: string): string {
@@ -72,6 +73,7 @@ export function ChatMessage({
     const [editContent, setEditContent] = useState(content);
     const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
     const [showSources, setShowSources] = useState(false);
+    const [previewImage, setPreviewImage] = useState<{ name: string; url: string } | null>(null);
     const isSummary = modelName === "Summary" || metadata?.isSummary;
     const userAttachments = Array.isArray(metadata?.attachments) ? metadata.attachments as Array<{
         name: string;
@@ -190,37 +192,6 @@ export function ChatMessage({
                                 ) : (
                                     <div className="rounded-2xl bg-primary text-white rounded-br-sm px-4 py-3">
                                         <p className="text-base font-medium whitespace-pre-wrap leading-relaxed">{content}</p>
-                                        {userAttachments.length > 0 && (
-                                            <div className="mt-2.5 space-y-2">
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                                    {userAttachments.map((file, index) => {
-                                                        if (file.isImage && file.previewDataUrl) {
-                                                            return (
-                                                                <div key={`${file.name}-${index}`} className="rounded-lg overflow-hidden border border-white/20 bg-black/10">
-                                                                    <img
-                                                                        src={file.previewDataUrl}
-                                                                        alt={file.name}
-                                                                        className="w-full h-20 object-cover"
-                                                                    />
-                                                                    <div className="px-2 py-1 text-[10px] truncate bg-black/20">
-                                                                        {file.name}
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return (
-                                                            <div key={`${file.name}-${index}`} className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-black/10 px-2 py-1.5">
-                                                                <Paperclip className="w-3 h-3 flex-shrink-0" />
-                                                                <div className="min-w-0">
-                                                                    <div className="text-[11px] truncate">{file.name}</div>
-                                                                    <div className="text-[10px] text-white/70">{formatAttachmentSize(file.size)}</div>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
                                 )
                             ) : (
@@ -241,6 +212,39 @@ export function ChatMessage({
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {/* User attachments preview (outside bubble) */}
+                {isUser && isExpanded && userAttachments.length > 0 && (
+                    <div className="mt-2 w-full flex flex-wrap gap-2 justify-end">
+                        {userAttachments.map((file, index) => {
+                            if (file.isImage && file.previewDataUrl) {
+                                return (
+                                    <div key={`${file.name}-${index}`} className="w-[132px] rounded-lg overflow-hidden border border-white/15 bg-card/60">
+                                        <button type="button" onClick={() => setPreviewImage({ name: file.name, url: file.previewDataUrl! })} className="block w-full hover:opacity-90 transition-opacity">
+                                            <img
+                                                src={file.previewDataUrl}
+                                                alt={file.name}
+                                                className="w-full h-24 object-cover"
+                                            />
+                                        </button>
+                                        <div className="px-2 py-1 text-[10px] truncate text-muted-foreground">
+                                            {file.name}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return (
+                                <div key={`${file.name}-${index}`} className="max-w-[220px] flex items-center gap-1.5 rounded-lg border border-white/15 bg-card/60 px-2 py-1.5">
+                                    <Paperclip className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+                                    <div className="min-w-0">
+                                        <div className="text-[11px] truncate text-white">{file.name}</div>
+                                        <div className="text-[10px] text-muted-foreground">{formatAttachmentSize(file.size)}</div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Collapsed preview */}
                 {!isExpanded && isCollapsible && (
@@ -381,6 +385,21 @@ export function ChatMessage({
                         {formatTime(timestamp)}
                     </div>
                 )}
+
+                <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+                    <DialogContent className="max-w-5xl w-[95vw] p-3 bg-black/95 border-white/10">
+                        {previewImage && (
+                            <div className="w-full">
+                                <div className="text-xs text-muted-foreground mb-2 truncate">{previewImage.name}</div>
+                                <img
+                                    src={previewImage.url}
+                                    alt={previewImage.name}
+                                    className="w-full max-h-[80vh] object-contain rounded-md"
+                                />
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
             </div>
         </motion.div>
     );

@@ -51,7 +51,7 @@ function sanitizeAttachments(value: unknown): UserAttachmentMeta[] {
       if (typeof obj.size !== "number" || !Number.isFinite(obj.size) || obj.size < 0) return null;
       if (typeof obj.isImage !== "boolean") return null;
       const previewDataUrl =
-        typeof obj.previewDataUrl === "string" && obj.previewDataUrl.length <= 3_000
+        typeof obj.previewDataUrl === "string" && obj.previewDataUrl.length <= 20_000
           ? obj.previewDataUrl
           : undefined;
       return {
