@@ -20,6 +20,47 @@ function patchConversationTitle(
     );
 }
 
+function sortMessagesChronologically(items: Message[]): Message[] {
+    return [...items].sort((a, b) => {
+        const ta = new Date(a.createdAt).getTime();
+        const tb = new Date(b.createdAt).getTime();
+        if (ta !== tb) return ta - tb;
+        return a.id - b.id;
+    });
+}
+
+function patchConversationMessage(
+    queryClient: ReturnType<typeof useQueryClient>,
+    conversationId: number,
+    message: Message
+) {
+    queryClient.setQueryData<ConversationWithMessages>(
+        ["/api/chat/conversations", conversationId],
+        (old) => {
+            if (!old) {
+                const existingConversation = queryClient
+                    .getQueryData<Conversation[]>(["/api/chat/conversations"])
+                    ?.find((c) => c.id === conversationId);
+                if (!existingConversation) return old;
+                return {
+                    ...existingConversation,
+                    messages: [message],
+                };
+            }
+            const current = Array.isArray(old.messages) ? old.messages : [];
+            const index = current.findIndex((m) => m.id === message.id);
+            const next =
+                index === -1
+                    ? [...current, message]
+                    : current.map((m, i) => (i === index ? message : m));
+            return {
+                ...old,
+                messages: sortMessagesChronologically(next),
+            };
+        }
+    );
+}
+
 // GET /api/chat/conversations
 export function useConversations() {
     return useQuery<Conversation[]>({
@@ -211,6 +252,7 @@ export function useSendMessage() {
                         const data = JSON.parse(line.slice(6));
                         switch (currentEvent) {
                             case "user_message":
+                                patchConversationMessage(queryClient, conversationId, data as Message);
                                 onUserMessage(data);
                                 break;
                             case "model_start":
@@ -220,6 +262,7 @@ export function useSendMessage() {
                                 onChunk(data.modelName, data.content);
                                 break;
                             case "model_complete":
+                                patchConversationMessage(queryClient, conversationId, data.message as Message);
                                 onModelComplete(data.modelName, data.message);
                                 break;
                             case "web_sources":

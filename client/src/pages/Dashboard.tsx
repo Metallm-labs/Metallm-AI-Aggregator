@@ -37,6 +37,17 @@ interface AvailableModel {
   provider: string;
 }
 
+const POST_STREAM_SYNC_GRACE_MS = 4_000;
+
+function sortMessagesChronologically(items: Message[]): Message[] {
+  return [...items].sort((a, b) => {
+    const ta = new Date(a.createdAt).getTime();
+    const tb = new Date(b.createdAt).getTime();
+    if (ta !== tb) return ta - tb;
+    return a.id - b.id;
+  });
+}
+
 const getInitialChatMode = (storageScope?: string): ChatMode => {
   if (typeof window === "undefined") return "single";
   const key = storageScope ? `${CHAT_MODE_STORAGE_KEY}:${storageScope}` : CHAT_MODE_STORAGE_KEY;
@@ -82,6 +93,7 @@ export default function Dashboard() {
   const scrollRAFRef = useRef<number>(0);
   const activeConvIdRef = useRef<number | null>(activeConversationId);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const streamSettlingUntilRef = useRef(0);
 
   // Persists streaming state per conv so switching away & back restores it
   const streamingStateRef = useRef<Map<number, {
@@ -170,16 +182,30 @@ export default function Dashboard() {
   }, []);
 
   // Sync messages
+  const upsertLocalMessage = useCallback((message: Message) => {
+    setMessages((prev) => {
+      const idx = prev.findIndex((m) => m.id === message.id);
+      if (idx === -1) return sortMessagesChronologically([...prev, message]);
+      const next = [...prev];
+      next[idx] = message;
+      return sortMessagesChronologically(next);
+    });
+  }, []);
+
   useEffect(() => {
     if (conversationData?.messages) {
       setMessages((prev) => {
         const fromServer = conversationData.messages;
         const prevIds = new Set(prev.map((m) => m.id));
+        const serverIds = new Set(fromServer.map((m) => m.id));
         const serverIsSubsetOfPrev = fromServer.every((m) => prevIds.has(m.id));
+        const missingLocalMessages = prev.some((m) => !serverIds.has(m.id));
+        const inPostStreamGrace = Date.now() < streamSettlingUntilRef.current;
         const shouldProtectLocal =
           isStreaming ||
           isRouting ||
-          (fromServer.length < prev.length && serverIsSubsetOfPrev);
+          (fromServer.length < prev.length && serverIsSubsetOfPrev) ||
+          (inPostStreamGrace && missingLocalMessages);
 
         const next = shouldProtectLocal
           ? (() => {
@@ -189,12 +215,7 @@ export default function Dashboard() {
               for (const msg of prev) {
                 if (!merged.has(msg.id)) merged.set(msg.id, msg);
               }
-              return Array.from(merged.values()).sort((a, b) => {
-                const ta = new Date(a.createdAt).getTime();
-                const tb = new Date(b.createdAt).getTime();
-                if (ta !== tb) return ta - tb;
-                return a.id - b.id;
-              });
+              return sortMessagesChronologically(Array.from(merged.values()));
             })()
           : fromServer;
 
@@ -255,6 +276,7 @@ export default function Dashboard() {
     setTypingModel(null);
     setStreamingMessages(new Map());
     setWebSearchStatus(null);
+    streamSettlingUntilRef.current = Date.now() + POST_STREAM_SYNC_GRACE_MS;
   }, []);
 
   // Handle new chat
@@ -367,6 +389,7 @@ export default function Dashboard() {
     setIsStreaming(true);
     setStreamingMessages(new Map());
     setShowModelDropdown(false);
+    streamSettlingUntilRef.current = 0;
 
     const convId = explicitConvId || activeConversationId || activeConvIdRef.current;
     if (!convId) {
@@ -424,13 +447,13 @@ export default function Dashboard() {
             }
           }
           if (activeConvIdRef.current === convId) {
-            setMessages((prev) => [...prev, message]);
+            upsertLocalMessage(message);
           }
         },
         // onUserMessage
         (message) => {
           if (activeConvIdRef.current === convId) {
-            setMessages((prev) => [...prev, message]);
+            upsertLocalMessage(message);
           }
         },
         // onTitleUpdate — already patched in cache by use-chat.ts
@@ -439,6 +462,7 @@ export default function Dashboard() {
         () => {
           streamingStateRef.current.delete(convId);
           setPendingAttachmentPayload(undefined);
+          streamSettlingUntilRef.current = Date.now() + POST_STREAM_SYNC_GRACE_MS;
           if (activeConvIdRef.current === convId) {
             setIsStreaming(false);
             setTypingModel(null);
@@ -495,6 +519,7 @@ export default function Dashboard() {
         setStreamingMessages(new Map());
         setWebSearchStatus(null);
       }
+      streamSettlingUntilRef.current = Date.now() + POST_STREAM_SYNC_GRACE_MS;
       setPendingAttachmentPayload(undefined);
     } finally {
       abortControllerRef.current = null;
