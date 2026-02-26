@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,6 +65,522 @@ function FloatingParticles() {
           }}
         />
       ))}
+    </div>
+  );
+}
+
+/* ─── Typing text animation ─── */
+function TypingText({ texts, className = "" }: { texts: string[]; className?: string }) {
+  const [currentTextIndex, setCurrentTextIndex] = useState(0);
+  const [displayedText, setDisplayedText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const currentFullText = texts[currentTextIndex];
+    let timeout: ReturnType<typeof setTimeout>;
+
+    if (!isDeleting && displayedText.length < currentFullText.length) {
+      timeout = setTimeout(() => {
+        setDisplayedText(currentFullText.slice(0, displayedText.length + 1));
+      }, 60 + Math.random() * 40);
+    } else if (!isDeleting && displayedText.length === currentFullText.length) {
+      timeout = setTimeout(() => setIsDeleting(true), 2200);
+    } else if (isDeleting && displayedText.length > 0) {
+      timeout = setTimeout(() => {
+        setDisplayedText(currentFullText.slice(0, displayedText.length - 1));
+      }, 30);
+    } else if (isDeleting && displayedText.length === 0) {
+      setIsDeleting(false);
+      setCurrentTextIndex((prev) => (prev + 1) % texts.length);
+    }
+    return () => clearTimeout(timeout);
+  }, [displayedText, isDeleting, currentTextIndex, texts]);
+
+  return (
+    <span className={className}>
+      {displayedText}
+      <span className="inline-block w-[3px] h-[1em] bg-amber-400 ml-1 align-middle animate-blink" />
+    </span>
+  );
+}
+
+/* ─── Neural Network Brain Canvas ─── */
+function NeuralNetworkCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mouseRef = useRef({ x: -1000, y: -1000 });
+  const animFrameRef = useRef<number>(0);
+  const neuronsRef = useRef<any[]>([]);
+  const connectionsRef = useRef<any[]>([]);
+  const pulsesRef = useRef<any[]>([]);
+  const initedRef = useRef(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let width = 0;
+    let height = 0;
+
+    const resize = () => {
+      const rect = canvas.parentElement?.getBoundingClientRect();
+      if (!rect) return;
+      const dpr = window.devicePixelRatio || 1;
+      width = rect.width;
+      height = rect.height;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (!initedRef.current || neuronsRef.current.length === 0) {
+        initNetwork();
+        initedRef.current = true;
+      } else {
+        // Re-position neurons on resize
+        repositionNeurons();
+      }
+    };
+
+    // Color palette inspired by the brain favicon (gold + green circuit tones)
+    const neuronColors = [
+      { r: 212, g: 175, b: 55 },   // gold
+      { r: 180, g: 160, b: 40 },   // dark gold
+      { r: 34, g: 197, b: 94 },    // green
+      { r: 50, g: 160, b: 80 },    // dark green
+      { r: 139, g: 92, b: 246 },   // purple accent
+      { r: 251, g: 191, b: 36 },   // amber
+    ];
+
+    // Brain silhouette points (normalized 0-1, brain shaped)
+    // We define multiple regions for left and right hemispheres + stem
+    const brainPoints = (() => {
+      const pts: { x: number; y: number; region: string }[] = [];
+
+      // Left hemisphere — bumpy outline
+      const leftOutline = [
+        { x: 0.48, y: 0.12 }, { x: 0.40, y: 0.10 }, { x: 0.32, y: 0.13 },
+        { x: 0.25, y: 0.18 }, { x: 0.20, y: 0.25 }, { x: 0.17, y: 0.30 },
+        { x: 0.15, y: 0.38 }, { x: 0.16, y: 0.45 }, { x: 0.18, y: 0.50 },
+        { x: 0.15, y: 0.55 }, { x: 0.17, y: 0.62 }, { x: 0.20, y: 0.68 },
+        { x: 0.25, y: 0.73 }, { x: 0.30, y: 0.76 }, { x: 0.35, y: 0.78 },
+        { x: 0.40, y: 0.80 }, { x: 0.45, y: 0.82 }, { x: 0.48, y: 0.85 },
+      ];
+      // Right hemisphere — mirror
+      const rightOutline = leftOutline.map(p => ({ x: 1 - p.x, y: p.y }));
+
+      // Internal nodes for left hemisphere
+      const leftInner = [
+        { x: 0.35, y: 0.25 }, { x: 0.28, y: 0.35 }, { x: 0.32, y: 0.45 },
+        { x: 0.25, y: 0.55 }, { x: 0.30, y: 0.65 }, { x: 0.38, y: 0.55 },
+        { x: 0.42, y: 0.40 }, { x: 0.38, y: 0.30 }, { x: 0.33, y: 0.50 },
+        { x: 0.40, y: 0.70 }, { x: 0.36, y: 0.60 }, { x: 0.30, y: 0.42 },
+        { x: 0.23, y: 0.45 }, { x: 0.35, y: 0.35 }, { x: 0.42, y: 0.60 },
+      ];
+      // Internal nodes for right hemisphere
+      const rightInner = leftInner.map(p => ({ x: 1 - p.x, y: p.y }));
+
+      // Center / corpus callosum
+      const center = [
+        { x: 0.48, y: 0.30 }, { x: 0.50, y: 0.40 }, { x: 0.52, y: 0.30 },
+        { x: 0.50, y: 0.50 }, { x: 0.50, y: 0.60 }, { x: 0.48, y: 0.70 },
+        { x: 0.52, y: 0.70 }, { x: 0.50, y: 0.20 },
+      ];
+
+      // Brain stem
+      const stem = [
+        { x: 0.50, y: 0.85 }, { x: 0.48, y: 0.90 }, { x: 0.52, y: 0.90 },
+        { x: 0.50, y: 0.95 },
+      ];
+
+      // Scattered ambient neurons outside the brain
+      const ambient: { x: number; y: number }[] = [];
+      for (let i = 0; i < 18; i++) {
+        ambient.push({ x: Math.random(), y: Math.random() });
+      }
+
+      // Left-side particle field so desktop hero reaches the screen edge
+      const leftEdgeAmbient: { x: number; y: number }[] = [];
+      for (let i = 0; i < 46; i++) {
+        leftEdgeAmbient.push({
+          x: Math.pow(Math.random(), 1.8) * 0.34,
+          y: Math.random(),
+        });
+      }
+
+      // Mid-left fillers to blend text side into the brain silhouette
+      const leftMidAmbient: { x: number; y: number }[] = [];
+      for (let i = 0; i < 20; i++) {
+        leftMidAmbient.push({
+          x: 0.2 + Math.random() * 0.28,
+          y: Math.random(),
+        });
+      }
+
+      leftOutline.forEach(p => pts.push({ ...p, region: "left-outline" }));
+      rightOutline.forEach(p => pts.push({ ...p, region: "right-outline" }));
+      leftInner.forEach(p => pts.push({ ...p, region: "left-inner" }));
+      rightInner.forEach(p => pts.push({ ...p, region: "right-inner" }));
+      center.forEach(p => pts.push({ ...p, region: "center" }));
+      stem.forEach(p => pts.push({ ...p, region: "stem" }));
+      ambient.forEach(p => pts.push({ ...p, region: "ambient" }));
+      leftEdgeAmbient.forEach(p => pts.push({ ...p, region: "left-edge" }));
+      leftMidAmbient.forEach(p => pts.push({ ...p, region: "left-mid" }));
+
+      return pts;
+    })();
+
+    interface Neuron {
+      baseX: number; baseY: number;
+      x: number; y: number;
+      size: number;
+      color: typeof neuronColors[0];
+      baseAlpha: number;
+      fireLevel: number; // 0..1, how bright/fired it is
+      region: string;
+      phase: number;
+    }
+
+    interface Connection {
+      from: number; to: number;
+      alpha: number;
+    }
+
+    interface Pulse {
+      fromX: number; fromY: number;
+      toX: number; toY: number;
+      progress: number; // 0..1
+      speed: number;
+      color: typeof neuronColors[0];
+      alpha: number;
+    }
+
+    const initNetwork = () => {
+      const neurons: Neuron[] = [];
+      const isDesktop = width >= 1024;
+      const cx = width * (isDesktop ? 0.48 : 0.55);
+      const cy = height * 0.5;
+      const scaleX = isDesktop ? width * 0.95 : Math.min(width, height) * 0.85;
+      const scaleY = Math.min(width, height) * (isDesktop ? 0.92 : 0.85);
+
+      brainPoints.forEach((pt, _i) => {
+        const jitterX = (Math.random() - 0.5) * 0.03;
+        const jitterY = (Math.random() - 0.5) * 0.03;
+        const bx = cx + (pt.x - 0.5 + jitterX) * scaleX;
+        const by = cy + (pt.y - 0.5 + jitterY) * scaleY;
+        const isAmbient = pt.region === "ambient" || pt.region === "left-edge" || pt.region === "left-mid";
+        const isLeftEdge = pt.region === "left-edge";
+        neurons.push({
+          baseX: bx, baseY: by,
+          x: bx, y: by,
+          size: isLeftEdge ? 0.9 + Math.random() * 1.2 : (isAmbient ? 1 + Math.random() * 1.5 : 2 + Math.random() * 3),
+          color: neuronColors[Math.floor(Math.random() * neuronColors.length)],
+          baseAlpha: isLeftEdge
+            ? 0.12 + Math.random() * 0.12
+            : (isAmbient ? 0.15 + Math.random() * 0.15 : 0.3 + Math.random() * 0.3),
+          fireLevel: 0,
+          region: pt.region,
+          phase: Math.random() * Math.PI * 2,
+        });
+      });
+
+      // Build connections — connect nearby neurons, favor same-region
+      const connections: Connection[] = [];
+      const MAX_DIST = Math.min(scaleX, scaleY) * 0.22;
+      for (let i = 0; i < neurons.length; i++) {
+        for (let j = i + 1; j < neurons.length; j++) {
+          const dx = neurons[i].baseX - neurons[j].baseX;
+          const dy = neurons[i].baseY - neurons[j].baseY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const sameRegion = neurons[i].region === neurons[j].region;
+          const isAmbient = neurons[i].region === "ambient" || neurons[j].region === "ambient" || neurons[i].region === "left-edge" || neurons[j].region === "left-edge" || neurons[i].region === "left-mid" || neurons[j].region === "left-mid";
+          const hasLeftEdge = neurons[i].region === "left-edge" || neurons[j].region === "left-edge";
+          const threshold = hasLeftEdge
+            ? MAX_DIST * 0.44
+            : (sameRegion ? MAX_DIST : (isAmbient ? MAX_DIST * 0.5 : MAX_DIST * 0.7));
+          if (dist < threshold) {
+            connections.push({
+              from: i,
+              to: j,
+              alpha: hasLeftEdge ? 0.035 + Math.random() * 0.03 : 0.06 + Math.random() * 0.06,
+            });
+          }
+        }
+      }
+
+      neuronsRef.current = neurons;
+      connectionsRef.current = connections;
+      pulsesRef.current = [];
+    };
+
+    const repositionNeurons = () => {
+      const neurons = neuronsRef.current;
+      const isDesktop = width >= 1024;
+      const cx = width * (isDesktop ? 0.48 : 0.55);
+      const cy = height * 0.5;
+      const scaleX = isDesktop ? width * 0.95 : Math.min(width, height) * 0.85;
+      const scaleY = Math.min(width, height) * (isDesktop ? 0.92 : 0.85);
+
+      brainPoints.forEach((pt, i) => {
+        if (i >= neurons.length) return;
+        const jitterX = (Math.random() - 0.5) * 0.03;
+        const jitterY = (Math.random() - 0.5) * 0.03;
+        neurons[i].baseX = cx + (pt.x - 0.5 + jitterX) * scaleX;
+        neurons[i].baseY = cy + (pt.y - 0.5 + jitterY) * scaleY;
+        neurons[i].x = neurons[i].baseX;
+        neurons[i].y = neurons[i].baseY;
+      });
+
+      // Rebuild connections
+      const connections: Connection[] = [];
+      const MAX_DIST = Math.min(scaleX, scaleY) * 0.22;
+      for (let i = 0; i < neurons.length; i++) {
+        for (let j = i + 1; j < neurons.length; j++) {
+          const dx = neurons[i].baseX - neurons[j].baseX;
+          const dy = neurons[i].baseY - neurons[j].baseY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const sameRegion = neurons[i].region === neurons[j].region;
+          const isAmbient = neurons[i].region === "ambient" || neurons[j].region === "ambient" || neurons[i].region === "left-edge" || neurons[j].region === "left-edge" || neurons[i].region === "left-mid" || neurons[j].region === "left-mid";
+          const hasLeftEdge = neurons[i].region === "left-edge" || neurons[j].region === "left-edge";
+          const threshold = hasLeftEdge
+            ? MAX_DIST * 0.44
+            : (sameRegion ? MAX_DIST : (isAmbient ? MAX_DIST * 0.5 : MAX_DIST * 0.7));
+          if (dist < threshold) {
+            connections.push({
+              from: i,
+              to: j,
+              alpha: hasLeftEdge ? 0.035 + Math.random() * 0.03 : 0.06 + Math.random() * 0.06,
+            });
+          }
+        }
+      }
+      connectionsRef.current = connections;
+    };
+
+    resize();
+    window.addEventListener("resize", resize);
+
+    let time = 0;
+    let lastPulseTime = 0;
+    const CURSOR_RADIUS = 180;
+
+    const animate = () => {
+      time += 0.006;
+      ctx.clearRect(0, 0, width, height);
+
+      const neurons = neuronsRef.current;
+      const connections = connectionsRef.current;
+      const pulses = pulsesRef.current;
+      const mx = mouseRef.current.x;
+      const my = mouseRef.current.y;
+
+      // Auto-fire random pulses periodically
+      if (time - lastPulseTime > 0.15 && connections.length > 0) {
+        lastPulseTime = time;
+        const ci = Math.floor(Math.random() * connections.length);
+        const conn = connections[ci];
+        const fromN = neurons[conn.from];
+        const toN = neurons[conn.to];
+        if (fromN && toN) {
+          const direction = Math.random() > 0.5;
+          pulses.push({
+            fromX: direction ? fromN.x : toN.x,
+            fromY: direction ? fromN.y : toN.y,
+            toX: direction ? toN.x : fromN.x,
+            toY: direction ? toN.y : fromN.y,
+            progress: 0,
+            speed: 0.008 + Math.random() * 0.012,
+            color: neuronColors[Math.floor(Math.random() * 3)], // gold/green bias
+            alpha: 0.6 + Math.random() * 0.4,
+          });
+        }
+      }
+
+      // Draw connections (dendrites/axons — organic neural arcs)
+      for (const conn of connections) {
+        const nA = neurons[conn.from];
+        const nB = neurons[conn.to];
+        if (!nA || !nB) continue;
+        const isAmbientConn = nA.region === "ambient" || nB.region === "ambient" || nA.region === "left-edge" || nB.region === "left-edge" || nA.region === "left-mid" || nB.region === "left-mid";
+
+        // Check if cursor is near this connection
+        const midX = (nA.x + nB.x) / 2;
+        const midY = (nA.y + nB.y) / 2;
+        const dxM = midX - mx;
+        const dyM = midY - my;
+        const distM = Math.sqrt(dxM * dxM + dyM * dyM);
+        const cursorBoost = distM < CURSOR_RADIUS ? (1 - distM / CURSOR_RADIUS) * 0.15 : 0;
+
+        ctx.beginPath();
+        const dx = nB.x - nA.x;
+        const dy = nB.y - nA.y;
+
+        if (isAmbientConn) {
+          ctx.moveTo(nA.x, nA.y);
+          ctx.lineTo(nB.x, nB.y);
+        } else {
+          const normalX = -dy;
+          const normalY = dx;
+          const normalLen = Math.max(1, Math.sqrt(normalX * normalX + normalY * normalY));
+          const curve = Math.min(24, Math.sqrt(dx * dx + dy * dy) * 0.22);
+          const controlX = (nA.x + nB.x) / 2 + (normalX / normalLen) * curve;
+          const controlY = (nA.y + nB.y) / 2 + (normalY / normalLen) * curve;
+          ctx.moveTo(nA.x, nA.y);
+          ctx.quadraticCurveTo(controlX, controlY, nB.x, nB.y);
+        }
+        ctx.strokeStyle = `rgba(212, 175, 55, ${conn.alpha + cursorBoost})`;
+        ctx.lineWidth = isAmbientConn ? 0.45 : 0.7;
+        ctx.stroke();
+      }
+
+      // Update & draw neurons
+      for (let i = 0; i < neurons.length; i++) {
+        const n = neurons[i];
+
+        // Gentle floating
+        const floatX = Math.sin(time * 1.5 + n.phase) * 2;
+        const floatY = Math.cos(time * 1.2 + n.phase * 1.3) * 2;
+        n.x = n.baseX + floatX;
+        n.y = n.baseY + floatY;
+
+        // Cursor interaction — fire neurons near cursor
+        const dx = n.x - mx;
+        const dy = n.y - my;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < CURSOR_RADIUS && dist > 0) {
+          const intensity = (1 - dist / CURSOR_RADIUS);
+          n.fireLevel = Math.min(1, n.fireLevel + intensity * 0.08);
+          // Spawn pulses from fired neurons
+          if (n.fireLevel > 0.5 && Math.random() < 0.03) {
+            // Find a connected neuron
+            const relatedConns = connections.filter(c => c.from === i || c.to === i);
+            if (relatedConns.length > 0) {
+              const rc = relatedConns[Math.floor(Math.random() * relatedConns.length)];
+              const targetIdx = rc.from === i ? rc.to : rc.from;
+              const target = neurons[targetIdx];
+              if (target) {
+                pulses.push({
+                  fromX: n.x, fromY: n.y,
+                  toX: target.x, toY: target.y,
+                  progress: 0,
+                  speed: 0.015 + Math.random() * 0.01,
+                  color: n.color,
+                  alpha: 0.8,
+                });
+              }
+            }
+          }
+        }
+
+        // Decay fire level
+        n.fireLevel *= 0.96;
+
+        const alpha = Math.min(1, n.baseAlpha + n.fireLevel * 0.7 + Math.sin(time * 2 + n.phase) * 0.05);
+        const { r, g, b } = n.color;
+
+        // Outer glow when fired
+        if (n.fireLevel > 0.1) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.size * 4 + n.fireLevel * 8, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${n.fireLevel * 0.12})`;
+          ctx.fill();
+        }
+
+        // Neuron body glow
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.size * 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.12})`;
+        ctx.fill();
+
+        // Neuron core
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.fill();
+
+        // Bright center when firing
+        if (n.fireLevel > 0.2) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.size * 0.5, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 255, ${n.fireLevel * 0.6})`;
+          ctx.fill();
+        }
+      }
+
+      // Update & draw pulses (signal traveling along connections)
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const p = pulses[i];
+        p.progress += p.speed;
+        if (p.progress >= 1) {
+          pulses.splice(i, 1);
+          continue;
+        }
+
+        const x = p.fromX + (p.toX - p.fromX) * p.progress;
+        const y = p.fromY + (p.toY - p.fromY) * p.progress;
+        const fadeAlpha = p.alpha * (1 - Math.abs(p.progress - 0.5) * 2) * 0.8;
+        const { r, g, b } = p.color;
+
+        // Pulse glow
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${fadeAlpha * 0.3})`;
+        ctx.fill();
+
+        // Pulse core
+        ctx.beginPath();
+        ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${fadeAlpha})`;
+        ctx.fill();
+
+        // Bright center
+        ctx.beginPath();
+        ctx.arc(x, y, 1, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${fadeAlpha * 0.8})`;
+        ctx.fill();
+      }
+
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      window.removeEventListener("resize", resize);
+      cancelAnimationFrame(animFrameRef.current);
+    };
+  }, []);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    mouseRef.current = { x: -1000, y: -1000 };
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const touch = e.touches[0];
+    mouseRef.current = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+  }, []);
+
+  return (
+    <div
+      className="relative w-full h-full"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleMouseLeave}
+    >
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full"
+      />
     </div>
   );
 }
@@ -357,26 +873,32 @@ export default function Landing() {
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* HERO SECTION                                                           */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <section className="relative pt-28 pb-16 lg:pt-40 lg:pb-24 overflow-hidden" aria-labelledby="hero-heading">
-        {/* Background effects */}
+      <section className="hero-section relative min-h-screen overflow-hidden flex items-center" aria-labelledby="hero-heading">
+        {/* Background gradient blurs */}
         <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          <div className="absolute top-20 right-1/4 w-[500px] h-[500px] bg-amber-500/10 rounded-full blur-[150px] animate-pulse" />
-          <div className="absolute top-40 left-1/4 w-[400px] h-[400px] bg-purple-600/10 rounded-full blur-[120px]" />
-          <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-emerald-500/8 rounded-full blur-[100px]" />
-          <FloatingParticles />
+          <div className="absolute top-20 right-1/4 w-[500px] h-[500px] bg-amber-500/8 rounded-full blur-[150px]" />
+          <div className="absolute top-40 left-1/4 w-[400px] h-[400px] bg-purple-600/6 rounded-full blur-[120px]" />
+          <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-emerald-500/5 rounded-full blur-[100px]" />
         </div>
 
-        <motion.div style={{ y: heroParallax }} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center max-w-4xl mx-auto">
+        {/* Neural Network Canvas — covers the ENTIRE hero background */}
+        <div className="absolute inset-0 z-0">
+          <NeuralNetworkCanvas />
+        </div>
+
+        {/* Content layer */}
+        <motion.div style={{ y: heroParallax }} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full pt-20 lg:pt-0">
+          {/* Text — left side, vertically centered */}
+          <div className="hero-text-side w-full lg:w-[50%] xl:w-[45%] text-left">
             {/* Trust badge */}
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-amber-500/20 bg-amber-500/5 mb-8"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-500/20 bg-amber-500/5 mb-5 lg:mb-6"
             >
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span className="text-sm text-amber-300/90 font-medium">Trusted by 5,000+ researchers & founders</span>
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[11px] sm:text-xs text-amber-300/90 font-medium">Trusted by 5,000+ researchers & founders</span>
             </motion.div>
 
             <motion.h1
@@ -384,53 +906,71 @@ export default function Landing() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.1 }}
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold font-display tracking-tight mb-6 leading-[1.1]"
+              className="hero-heading text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold font-display tracking-tight mb-3 lg:mb-5 leading-[1.1]"
             >
               <span className="bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-white/50">
                 Stop Guessing.
               </span>
               <br />
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400" style={{ textShadow: "0 0 40px rgba(212,175,55,0.3)" }}>
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400">
                 Start Knowing.
               </span>
             </motion.h1>
+
+            {/* Typing animation */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.15 }}
+              className="mb-3 lg:mb-5 min-h-[24px] sm:min-h-[28px] lg:min-h-[32px]"
+            >
+              <span className="text-xs sm:text-sm lg:text-base font-medium text-muted-foreground">
+                MetaLLM can{" "}
+              </span>
+              <TypingText
+                texts={[
+                  "route your query to the best AI model.",
+                  "enhance your prompts automatically.",
+                  "query 9 models in parallel.",
+                  "synthesize a unified answer.",
+                  "run AI debates for deep analysis.",
+                  "search the web in real-time.",
+                ]}
+                className="text-xs sm:text-sm lg:text-base font-semibold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-300"
+              />
+            </motion.div>
 
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.2 }}
-              className="max-w-2xl mx-auto text-lg sm:text-xl text-muted-foreground mb-10 leading-relaxed"
+              className="hero-description max-w-md text-xs sm:text-sm lg:text-base text-muted-foreground/90 mb-5 lg:mb-8 leading-relaxed"
             >
-              Every minute you spend switching between AI tools is a minute wasted.{" "}
-              <strong className="text-white">MetaLLM auto-routes your query to the best AI, enhances your prompt, queries 9 models in parallel, and synthesizes one answer</strong>{" "}
-              — with debate mode, live web search, and real-time streaming.
+              Every minute switching between AI tools is wasted.{" "}
+              <strong className="text-white/90">MetaLLM auto-routes to the best AI, queries 9 models in parallel, and synthesizes one answer</strong>{" "}
+              — with debate mode & live web search.
             </motion.p>
 
-            {/* CTA buttons */}
+            {/* Text-based CTA links — no filled buttons */}
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.3 }}
-              className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6"
+              className="flex flex-col sm:flex-row items-start gap-3 sm:gap-6 mb-4"
             >
-              <a href="/login">
-                <Button
-                  size="lg"
-                  className="w-full sm:w-auto h-14 px-10 text-lg bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-bold shadow-xl shadow-amber-500/30 hover:shadow-amber-400/50 transition-all duration-300 group"
-                >
-                  Start Free — No Credit Card
-                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                </Button>
+              <a
+                href="/login"
+                className="group inline-flex items-center gap-2 text-sm sm:text-base font-semibold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-300 hover:from-amber-200 hover:to-yellow-200 transition-all duration-300"
+              >
+                Start Free — No Credit Card
+                <ArrowRight className="w-4 h-4 text-amber-400 group-hover:translate-x-1 transition-transform" />
               </a>
-              <a href="#how-it-works">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full sm:w-auto h-14 px-10 text-lg border-white/10 hover:bg-white/5 hover:border-amber-500/30 transition-all duration-300"
-                >
-                  <Play className="w-5 h-5 mr-2" />
-                  See How It Works
-                </Button>
+              <a
+                href="#how-it-works"
+                className="group inline-flex items-center gap-2 text-sm sm:text-base font-medium text-muted-foreground hover:text-white transition-colors duration-300"
+              >
+                <Play className="w-3.5 h-3.5" />
+                See How It Works
               </a>
             </motion.div>
 
@@ -438,41 +978,18 @@ export default function Landing() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.7, delay: 0.5 }}
-              className="text-sm text-muted-foreground/60"
+              className="text-[10px] sm:text-xs text-muted-foreground/50"
             >
-              Free forever for basic use · No credit card required · 2-minute setup
+              Free forever · No credit card · 2-minute setup
             </motion.p>
           </div>
-
-          {/* Hero Dashboard Image */}
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ delay: 0.5, duration: 1, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-16 relative mx-auto max-w-5xl"
-          >
-            <div className="rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-amber-500/10 relative group">
-              <img
-                src="/hero-dashboard.png"
-                alt="MetaLLM AI Aggregator Dashboard - Multiple AI models synthesizing unified analysis"
-                className="w-full h-auto transition-transform duration-700 group-hover:scale-[1.02]"
-                loading="eager"
-                width={1200}
-                height={675}
-              />
-              {/* Animated shimmer overlay */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-500/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1500" />
-            </div>
-            {/* Glow effect */}
-            <div className="absolute -inset-6 bg-gradient-to-t from-amber-500/15 via-purple-500/5 to-transparent blur-3xl -z-10 rounded-full opacity-60" />
-          </motion.div>
         </motion.div>
 
         {/* Scroll indicator */}
         <motion.div
           animate={{ y: [0, 8, 0] }}
           transition={{ duration: 2, repeat: Infinity }}
-          className="hidden lg:flex justify-center mt-12"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 hidden lg:flex"
         >
           <ChevronDown className="w-6 h-6 text-muted-foreground/40" />
         </motion.div>

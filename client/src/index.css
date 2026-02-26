@@ -222,3 +222,63 @@ html {
 .animate-pulse-glow {
   animation: pulse-glow 3s ease-in-out infinite;
 }
+
+/* ─── Typing Cursor Blink ─── */
+@keyframes blink {
+
+  0%,
+  50% {
+    opacity: 1;
+  }
+
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+/* ─── Hero Section Responsive ─── */
+.hero-section {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-top: 4rem;
+}
+
+/* On mobile, hero fills viewport, text left-aligned, vertically centered */
+@media (max-width: 1023px) {
+  .hero-section {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    padding-top: 4.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .hero-text-side {
+    text-align: left;
+  }
+
+  .hero-heading {
+    font-size: clamp(1.5rem, 6vw, 2.5rem);
+  }
+
+  .hero-description {
+    font-size: clamp(0.7rem, 3vw, 0.875rem);
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .hero-heading {
+    font-size: clamp(2rem, 5vw, 2.75rem);
+  }
+
+  .hero-description {
+    font-size: clamp(0.8rem, 2.5vw, 0.95rem);
+  }
+}
