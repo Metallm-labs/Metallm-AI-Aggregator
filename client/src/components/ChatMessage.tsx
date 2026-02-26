@@ -81,6 +81,7 @@ export function ChatMessage({
         size: number;
         isImage?: boolean;
         previewDataUrl?: string;
+        fullDataUrl?: string;
     }> : [];
 
     const handleCopy = async () => {
@@ -220,7 +221,11 @@ export function ChatMessage({
                             if (file.isImage && file.previewDataUrl) {
                                 return (
                                     <div key={`${file.name}-${index}`} className="w-[132px] rounded-lg overflow-hidden border border-white/15 bg-card/60">
-                                        <button type="button" onClick={() => setPreviewImage({ name: file.name, url: file.previewDataUrl! })} className="block w-full hover:opacity-90 transition-opacity">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreviewImage({ name: file.name, url: file.fullDataUrl || file.previewDataUrl! })}
+                                            className="block w-full hover:opacity-90 transition-opacity"
+                                        >
                                             <img
                                                 src={file.previewDataUrl}
                                                 alt={file.name}

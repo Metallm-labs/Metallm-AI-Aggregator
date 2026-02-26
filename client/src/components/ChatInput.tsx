@@ -19,6 +19,7 @@ const MAX_TEXT_FILE_CHARS = 12_000;
 const MAX_BINARY_SCAN_BYTES = 600_000;
 const MAX_IMAGE_DATA_URL_CHARS = 18_000;
 const MAX_IMAGE_PREVIEW_DATA_URL_CHARS = 18_000;
+const MAX_IMAGE_FULL_DATA_URL_CHARS = 6_000_000;
 const IMAGE_MAX_DIMENSION = 256;
 const IMAGE_JPEG_QUALITY = 0.65;
 
@@ -96,10 +97,13 @@ const fileToDataURL = async (file: File): Promise<string> =>
         reader.readAsDataURL(file);
     });
 
+type DataUrlFormat = "image/jpeg" | "image/png" | "image/webp";
+
 const downscaleImageToDataURL = async (
     file: File,
     maxDimension = IMAGE_MAX_DIMENSION,
-    quality = IMAGE_JPEG_QUALITY
+    quality = IMAGE_JPEG_QUALITY,
+    format: DataUrlFormat = "image/jpeg",
 ): Promise<string> => {
     const original = await fileToDataURL(file);
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -118,7 +122,10 @@ const downscaleImageToDataURL = async (
     const ctx = canvas.getContext("2d");
     if (!ctx) return original;
     ctx.drawImage(img, 0, 0, targetW, targetH);
-    return canvas.toDataURL("image/jpeg", quality);
+    if (format === "image/png") {
+        return canvas.toDataURL("image/png");
+    }
+    return canvas.toDataURL(format, quality);
 };
 
 const buildBestPreviewDataUrl = async (file: File): Promise<string | undefined> => {
@@ -129,9 +136,46 @@ const buildBestPreviewDataUrl = async (file: File): Promise<string | undefined> 
         { dim: 140, quality: 0.75 },
     ];
     for (const c of candidates) {
-        const url = await downscaleImageToDataURL(file, c.dim, c.quality);
+        const url = await downscaleImageToDataURL(file, c.dim, c.quality, "image/jpeg");
         if (url.length <= MAX_IMAGE_PREVIEW_DATA_URL_CHARS) return url;
     }
+    return undefined;
+};
+
+const buildBestFullViewDataUrl = async (file: File): Promise<string | undefined> => {
+    const original = await fileToDataURL(file);
+    if (original.length <= MAX_IMAGE_FULL_DATA_URL_CHARS) return original;
+
+    const sourceType = file.type.toLowerCase();
+    const primaryFormat: DataUrlFormat =
+        sourceType === "image/png"
+            ? "image/png"
+            : sourceType === "image/webp"
+                ? "image/webp"
+                : "image/jpeg";
+    const fallbackFormats: DataUrlFormat[] = [];
+    if (primaryFormat !== "image/webp") fallbackFormats.push("image/webp");
+    if (primaryFormat !== "image/jpeg") fallbackFormats.push("image/jpeg");
+    if (primaryFormat !== "image/png") fallbackFormats.push("image/png");
+    const formats: DataUrlFormat[] = [primaryFormat, ...fallbackFormats];
+
+    const candidates = [
+        { dim: 4096, quality: 0.99 },
+        { dim: 3200, quality: 0.98 },
+        { dim: 2560, quality: 0.97 },
+        { dim: 2160, quality: 0.96 },
+        { dim: 1920, quality: 0.95 },
+        { dim: 1600, quality: 0.94 },
+        { dim: 1400, quality: 0.92 },
+    ];
+
+    for (const format of formats) {
+        for (const c of candidates) {
+            const url = await downscaleImageToDataURL(file, c.dim, c.quality, format);
+            if (url.length <= MAX_IMAGE_FULL_DATA_URL_CHARS) return url;
+        }
+    }
+
     return undefined;
 };
 
@@ -160,6 +204,12 @@ async function buildAttachmentContext(files: File[]) {
 
         try {
             if (file.type.startsWith("image/")) {
+                const fullDataUrl = await buildBestFullViewDataUrl(file);
+                if (fullDataUrl) {
+                    attachmentMeta.fullDataUrl = fullDataUrl;
+                } else {
+                    warnings.push(`Could not store high-detail full view for ${file.name}; using preview quality in chat history.`);
+                }
                 const previewDataUrl = await buildBestPreviewDataUrl(file);
                 if (previewDataUrl) attachmentMeta.previewDataUrl = previewDataUrl;
                 const dataUrl = await downscaleImageToDataURL(file);
@@ -238,6 +288,7 @@ export interface ChatAttachmentMeta {
     size: number;
     isImage: boolean;
     previewDataUrl?: string;
+    fullDataUrl?: string;
 }
 
 export interface AttachmentPayload {

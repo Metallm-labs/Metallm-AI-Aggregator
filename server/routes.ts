@@ -31,6 +31,7 @@ interface UserAttachmentMeta {
   size: number;
   isImage: boolean;
   previewDataUrl?: string;
+  fullDataUrl?: string;
 }
 
 function sanitizeAttachmentContext(value: unknown): string | undefined {
@@ -54,12 +55,17 @@ function sanitizeAttachments(value: unknown): UserAttachmentMeta[] {
         typeof obj.previewDataUrl === "string" && obj.previewDataUrl.length <= 20_000
           ? obj.previewDataUrl
           : undefined;
+      const fullDataUrl =
+        typeof obj.fullDataUrl === "string" && obj.fullDataUrl.length <= 6_000_000
+          ? obj.fullDataUrl
+          : undefined;
       return {
         name: obj.name.slice(0, 300),
         type: obj.type.slice(0, 120),
         size: Math.round(obj.size),
         isImage: obj.isImage,
         previewDataUrl,
+        fullDataUrl,
       } as UserAttachmentMeta;
     })
     .filter((x): x is UserAttachmentMeta => !!x)
