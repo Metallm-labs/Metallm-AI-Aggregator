@@ -91,6 +91,7 @@ export default function Dashboard() {
   // Keep ref in sync; restore saved streaming state when switching back to a conv
   useEffect(() => {
     activeConvIdRef.current = activeConversationId;
+    setMessages([]);
     setRoutingResult(null);
     // Only reset routing when switching convs by the user, not during a send flow
     if (!pendingRoutingRef.current) {
@@ -151,9 +152,37 @@ export default function Dashboard() {
   // Sync messages
   useEffect(() => {
     if (conversationData?.messages) {
-      setMessages(conversationData.messages);
+      setMessages((prev) => {
+        // Passive/background refetches must never remove already-rendered messages,
+        // otherwise chat flickers when storage lags behind live UI state.
+        const merged = new Map<number, Message>();
+        for (const msg of conversationData.messages) merged.set(msg.id, msg);
+        for (const msg of prev) {
+          if (!merged.has(msg.id)) merged.set(msg.id, msg);
+        }
+
+        const next = Array.from(merged.values()).sort((a, b) => {
+          const ta = new Date(a.createdAt).getTime();
+          const tb = new Date(b.createdAt).getTime();
+          if (ta !== tb) return ta - tb;
+          return a.id - b.id;
+        });
+
+        // Avoid unnecessary re-renders when there is no effective change.
+        if (
+          next.length === prev.length &&
+          next.every((m, i) =>
+            m.id === prev[i]?.id &&
+            m.content === prev[i]?.content &&
+            m.modelName === prev[i]?.modelName
+          )
+        ) {
+          return prev;
+        }
+        return next;
+      });
     }
-  }, [conversationData]);
+  }, [conversationData, isStreaming, isRouting]);
 
   // Track whether the user is near the bottom so we know whether to auto-scroll
   const handleScrollAreaScroll = useCallback(() => {
