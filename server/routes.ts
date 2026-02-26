@@ -1,5 +1,7 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./integrations/auth";
 import { api } from "@shared/routes";
@@ -33,6 +35,40 @@ interface UserAttachmentMeta {
   previewDataUrl?: string;
   fullDataUrl?: string;
 }
+
+type RuntimeMode = "single" | "direct" | "multi" | "debate";
+
+interface HistoryMessage {
+  id: number;
+  role: string;
+  content: string;
+  modelName: string | null;
+  metadata?: any;
+}
+
+const CONTEXT_HISTORY_LIMIT = 10;
+const OTHER_MODEL_SUMMARY_LIMIT = 700;
+const METALLM_DOC_PATH = resolve(process.cwd(), "metallm.md");
+const METALLM_DOC_FALLBACK = `# Metallm AI Aggregator
+Metallm is a multi-model AI chat platform where users can switch between single routing, direct model chat, multi-model comparison, and debate mode in one conversation.
+
+Core behavior:
+- Users can switch modes and models without creating a new chat.
+- Responses from multiple models can exist in one shared conversation timeline.
+- File/image attachments can appear as extracted context on user turns.
+- The active model must identify itself correctly and must not impersonate other models.
+`;
+
+function loadMetallmPlatformGuide(): string {
+  try {
+    const raw = readFileSync(METALLM_DOC_PATH, "utf8").trim();
+    return raw || METALLM_DOC_FALLBACK;
+  } catch {
+    return METALLM_DOC_FALLBACK;
+  }
+}
+
+const METALLM_PLATFORM_GUIDE = loadMetallmPlatformGuide();
 
 function sanitizeAttachmentContext(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -70,6 +106,179 @@ function sanitizeAttachments(value: unknown): UserAttachmentMeta[] {
     })
     .filter((x): x is UserAttachmentMeta => !!x)
     .slice(0, 12);
+}
+
+function normalizeMessageContent(content: string): string {
+  return content.replace(/^\[[^\]]+\]:\s*/, "").trim();
+}
+
+function getAttachmentContextFromMetadata(metadata: unknown): string {
+  if (!metadata || typeof metadata !== "object") return "";
+  const context = (metadata as any).attachmentContext;
+  if (typeof context !== "string") return "";
+  const trimmed = context.trim();
+  if (!trimmed) return "";
+  return `\n\n[Attached files context]\n${trimmed}`;
+}
+
+function buildContextMessagesForModel(
+  history: HistoryMessage[],
+  activeModelName: string
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const contextMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+
+  for (const message of history.slice(-CONTEXT_HISTORY_LIMIT)) {
+    const clean = normalizeMessageContent(message.content);
+    if (!clean) continue;
+
+    if (message.role === "user") {
+      const userAttachmentContext = getAttachmentContextFromMetadata(message.metadata);
+      contextMessages.push({ role: "user", content: `${clean}${userAttachmentContext}` });
+      continue;
+    }
+
+    if (message.role !== "assistant") continue;
+
+    if (message.modelName && message.modelName !== activeModelName) {
+      contextMessages.push({
+        role: "user",
+        content:
+          `[System note: A different AI model "${message.modelName}" answered earlier in this same chat. ` +
+          `This is context only, not your own prior response.]\n\n` +
+          `${message.modelName}'s reply: ${clean.slice(0, OTHER_MODEL_SUMMARY_LIMIT)}${clean.length > OTHER_MODEL_SUMMARY_LIMIT ? "..." : ""}`,
+      });
+      contextMessages.push({
+        role: "assistant",
+        content: "(Understood. That was another model's response in this shared chat.)",
+      });
+    } else {
+      contextMessages.push({ role: "assistant", content: clean });
+    }
+  }
+
+  return contextMessages;
+}
+
+function listPriorModelNames(history: HistoryMessage[], currentModelName: string): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const message of history) {
+    if (message.role !== "assistant") continue;
+    if (!message.modelName || message.modelName === currentModelName) continue;
+    if (seen.has(message.modelName)) continue;
+    seen.add(message.modelName);
+    names.push(message.modelName);
+  }
+  return names;
+}
+
+function describeMode(mode: RuntimeMode): string {
+  if (mode === "direct") return "Direct mode: user explicitly selected one model.";
+  if (mode === "single") return "Smart route mode: one model is chosen to answer this turn.";
+  if (mode === "multi") return "Multi mode: several models answer the same user turn.";
+  return "Debate mode: multiple models argue with different stances.";
+}
+
+function buildMetallmSystemPrompt(
+  basePrompt: string,
+  model: Pick<ModelConfig, "id" | "displayName" | "provider" | "role">,
+  mode: RuntimeMode,
+  history: HistoryMessage[]
+): string {
+  const priorModels = listPriorModelNames(history, model.displayName);
+  const priorModelText = priorModels.length > 0 ? priorModels.join(", ") : "None yet";
+
+  return `${basePrompt}
+
+METALLM RUNTIME CONTEXT (authoritative):
+- Platform: Metallm AI Aggregator.
+- Current mode: ${mode}. ${describeMode(mode)}
+- You are currently: ${model.displayName} (id: ${model.id}, provider: ${model.provider}, specialty: ${model.role}).
+- Other models that already responded earlier in this same conversation: ${priorModelText}.
+- This is a shared multi-model conversation. Never claim to be a different model.
+- If asked which model the user is talking to, answer with your exact model identity above.
+- If asked what platform this is, answer: Metallm AI Aggregator.
+- Treat "Metallm", "MetaLLM", "MetalLM", and close misspellings as this platform by default.
+- If the user asks about platform, mode, features, models, memory, or your role/job in this chat, answer from this runtime context first.
+- Do not switch to external "MetaLLM" research definitions unless the user explicitly asks about papers, publications, or external projects.
+
+METALLM PLATFORM GUIDE:
+${METALLM_PLATFORM_GUIDE}`;
+}
+
+function resolveRuntimeMode(mode: unknown, targetModelId: unknown): RuntimeMode {
+  if (mode === "multi") return "multi";
+  if (mode === "debate") return "debate";
+  if (typeof targetModelId === "string" && targetModelId.trim()) return "direct";
+  return "single";
+}
+
+function resolvePrimaryModelForRequest(targetModelId: unknown): ModelConfig {
+  if (typeof targetModelId === "string" && targetModelId.trim()) {
+    return currentModels.find((m) => m.id === targetModelId) || getMainModel();
+  }
+  return getMainModel();
+}
+
+function isMetallmHardGuardrailQuestion(content: string): boolean {
+  const normalized = content
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const asksIdentity = /\b(who are you|what are you|your job|your role|which model|what model)\b/.test(normalized);
+  const asksPlatformNow = /\b(which platform|what platform|platform you are in)\b/.test(normalized);
+  const asksModeNow = /\b(which mode|what mode|mode are we in|current mode)\b/.test(normalized);
+  const asksBroadProductInfo = /\b(what is metallm|what is matellm|how .* work|how metallm work|key feature|features|explain metallm|describe metallm)\b/.test(normalized);
+
+  if (asksBroadProductInfo) return false;
+  return asksIdentity || asksPlatformNow || asksModeNow;
+}
+
+function shouldForceMetallmFocus(content: string): boolean {
+  const normalized = content
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return /\b(meta\s*llm|metallm|matellm|metal\s*lm)\b/.test(normalized);
+}
+
+function buildMetallmContextAnswer(
+  runtimeMode: RuntimeMode,
+  model: Pick<ModelConfig, "displayName" | "id" | "role">,
+  history: HistoryMessage[]
+): string {
+  const priorModels = listPriorModelNames(history, model.displayName);
+  const priorText = priorModels.length > 0 ? priorModels.join(", ") : "None yet";
+  const modeLabel =
+    runtimeMode === "direct"
+      ? "Direct mode (single selected model)"
+      : runtimeMode === "single"
+        ? "Smart Route mode"
+        : runtimeMode === "multi"
+          ? "Multi mode"
+          : "Debate mode";
+
+  return [
+    `You are in **Metallm AI Aggregator**.`,
+    ``,
+    `Current mode: **${modeLabel}**.`,
+    `Current active model for this reply: **${model.displayName}** (${model.id}).`,
+    `Model specialty: **${model.role}**.`,
+    ``,
+    `Other models used earlier in this same chat: ${priorText}.`,
+    ``,
+    `How Metallm works (short):`,
+    `- One conversation can include multiple models.`,
+    `- You can switch mode/model without losing shared chat history.`,
+    `- Attachments are stored in user-message metadata and can be reused as context in later turns.`,
+    `- Models must identify themselves correctly and not impersonate other models.`,
+    ``,
+    `My job in this chat: answer as ${model.displayName} using the shared conversation context inside Metallm.`,
+  ].join("\n");
 }
 
 // SSE Helper
@@ -432,9 +641,12 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
       const cleanAttachments = sanitizeAttachments(attachments);
       // The prompt to actually send to the model (user-approved enhanced prompt)
       const promptBase = enhancedPrompt || content;
-      const promptToSend = cleanAttachmentContext
+      const promptWithAttachments = cleanAttachmentContext
         ? `${promptBase}\n\n[Attached files with extracted content]\nUse this file/photo context when answering:\n${cleanAttachmentContext}`
         : promptBase;
+      const promptToSend = shouldForceMetallmFocus(content)
+        ? `[IMPORTANT: The user is asking about the Metallm platform in this chat. Use the provided runtime/platform context. Do not answer about external "MetaLLM" projects unless explicitly requested.]\n\n${promptWithAttachments}`
+        : promptWithAttachments;
 
 
       // Check message count BEFORE saving the user message (so 0 = first ever message)
@@ -462,8 +674,9 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
 
       sendSSE(res, "user_message", userMessage);
 
-      // Get conversation history for context (last 10 messages only)
+      // Get conversation history for context
       const history = await storage.getMessages(conversationId, 12);
+      const historyForContext = history.filter((m) => m.id !== userMessage.id) as HistoryMessage[];
 
       // =============================================
       // === TITLE: instant — first 3-4 words of user message ===
@@ -484,6 +697,40 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
         })();
       }
 
+      const runtimeMode = resolveRuntimeMode(mode, targetModelId);
+      const primaryModel = resolvePrimaryModelForRequest(targetModelId);
+
+      // Hard guardrail for platform identity questions so models don't drift to
+      // external "MetaLLM" definitions or generic provider/platform answers.
+      if (runtimeMode === "single" || runtimeMode === "direct") {
+        if (isMetallmHardGuardrailQuestion(content)) {
+          const modelName = primaryModel.displayName;
+          sendSSE(res, "model_start", { modelName, role: primaryModel.role, provider: primaryModel.provider });
+          const fixedAnswer = buildMetallmContextAnswer(runtimeMode, primaryModel, historyForContext);
+          sendSSE(res, "chunk", { modelName, content: fixedAnswer });
+
+          const assistantMessage = await storage.addMessage({
+            conversationId,
+            role: "assistant",
+            content: fixedAnswer,
+            modelName,
+            metadata: {
+              modelId: primaryModel.id,
+              role: primaryModel.role,
+              provider: primaryModel.provider,
+              isMetallmContextAnswer: true,
+              webSearch: false,
+              hasAttachmentContext: !!cleanAttachmentContext,
+            },
+          });
+          sendSSE(res, "model_complete", { modelName, message: assistantMessage });
+          await titlePromise;
+          sendSSE(res, "done", {});
+          res.end();
+          return;
+        }
+      }
+
       // ===========================================
       // === SINGLE MODE ===
       // ============================================
@@ -501,46 +748,14 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
 
         // directMode = user explicitly picked a model; skip grounding/thinking formatting
         const isDirectMode = !!targetModelId;
-
-        // Build context messages — annotate assistant messages from OTHER models
-        // so the current model won't adopt their identity.
-        // Messages from other models are injected as brief system notes rather than
-        // being presented as the current model's own assistant turns.
-        const contextMessages: { role: string; content: string }[] = [];
-        for (const m of history.slice(-10)) {
-          const clean = m.content.replace(/^\[[^\]]+\]:\s*/, "");
-          const userAttachmentContext =
-            m.role === "user" && m.metadata && typeof (m.metadata as any).attachmentContext === "string"
-              ? `\n\n[Attached files context]\n${(m.metadata as any).attachmentContext}`
-              : "";
-          if (m.role === "user") {
-            contextMessages.push({ role: "user", content: `${clean}${userAttachmentContext}` });
-          } else if (m.modelName && m.modelName !== modelName) {
-            // Another model's response → system-level note so the current model
-            // knows about it but won't mistake it for its own words.
-            contextMessages.push({
-              role: "user",
-              content: `[System note: The user's previous message was answered by a different AI model named "${m.modelName}". Here is a summary of that response for context — it is NOT your response, do not claim it as yours.]\n\n${m.modelName}'s reply: ${clean.slice(0, 500)}${clean.length > 500 ? "..." : ""}`,
-            });
-            // Follow with an empty assistant ack so turn order stays valid
-            contextMessages.push({ role: "assistant", content: "(Understood, that was another model's response.)" });
-          } else {
-            // This model's own previous response
-            contextMessages.push({ role: "assistant", content: clean });
-          }
-        }
-
-        // In direct mode, explain the multi-model aggregator context clearly
-        const systemPrompt = isDirectMode
-          ? `${targetModel.systemPrompt}
-
-IMPORTANT CONTEXT — Multi-Model Aggregator:
-This chat runs inside "Metallm AI Aggregator", a platform where the user can switch between multiple AI models mid-conversation. The user chose to talk to YOU (${modelName}) right now. Other AI models (like Gemini Flash, Nemotron, DeepSeek, LLaMA, etc.) may have responded to earlier messages in the same conversation — their responses appear as system notes in the history. Key rules:
-1. You ARE ${modelName}. Never claim to be a different model.
-2. Acknowledge that other models' responses exist in the history when relevant, but clearly distinguish them from your own.
-3. If the user asks "which model am I talking to" or "how many models are in this chat", explain that this is a multi-model platform and they are currently talking to ${modelName}. Other models responded to earlier messages.
-4. Do NOT say "there is only one model" — multiple models have participated in this conversation.`
-          : targetModel.systemPrompt;
+        const runtimeMode: RuntimeMode = isDirectMode ? "direct" : "single";
+        const contextMessages = buildContextMessagesForModel(historyForContext, modelName);
+        const systemPrompt = buildMetallmSystemPrompt(
+          targetModel.systemPrompt,
+          targetModel,
+          runtimeMode,
+          historyForContext
+        );
 
         let fullContent = "";
         let modelSources: WebSource[] = [];
@@ -603,6 +818,13 @@ This chat runs inside "Metallm AI Aggregator", a platform where the user can swi
           : currentModels;
         const promises = modelsToRun.map(async (model) => {
           sendSSE(res, "model_start", { modelName: model.displayName, role: model.role, provider: model.provider });
+          const contextMessages = buildContextMessagesForModel(historyForContext, model.displayName);
+          const systemPrompt = buildMetallmSystemPrompt(
+            model.systemPrompt,
+            model,
+            "multi",
+            historyForContext
+          );
 
           // Use per-model tailored prompt if provided, else fall back to the general enhanced prompt
           const modelPrompt = Array.isArray(perModelPrompts)
@@ -614,12 +836,12 @@ This chat runs inside "Metallm AI Aggregator", a platform where the user can swi
           try {
             const result = await callModelStream(
               model,
-              [{ role: "user", content: modelPrompt }],
+              [...contextMessages, { role: "user", content: modelPrompt }],
               (chunk) => {
                 sendSSE(res, "chunk", { modelName: model.displayName, content: chunk });
               },
               {
-                systemPrompt: model.systemPrompt,
+                systemPrompt,
                 maxTokens: 4096,
                 webSearch: !!webSearch,
                 onStatus: (event, data) => {
@@ -682,13 +904,19 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
         let summaryContent = "";
         try {
           const mainModel = getMainModel();
+          const summarySystemPrompt = buildMetallmSystemPrompt(
+            mainModel.systemPrompt,
+            mainModel,
+            "multi",
+            historyForContext
+          );
           summaryContent = (await callModelStream(
             mainModel,
             [{ role: "user", content: summaryPrompt }],
             (chunk) => {
               sendSSE(res, "chunk", { modelName: summaryModelName, content: chunk });
             },
-            { maxTokens: 4096 }
+            { maxTokens: 4096, systemPrompt: summarySystemPrompt }
           )).content;
         } catch (e) {
           console.error("Summary error:", e);
@@ -736,6 +964,13 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
 
             const stance = perModelEntry?.stance || debater.role;
             sendSSE(res, "model_start", { modelName: debater.displayName, round: round + 1, stance });
+            const contextMessages = buildContextMessagesForModel(historyForContext, debater.displayName);
+            const debateSystemPrompt = buildMetallmSystemPrompt(
+              debater.systemPrompt,
+              debater,
+              "debate",
+              historyForContext
+            );
 
             let debatePrompt: string;
             if (round === 0 && perModelEntry?.prompt) {
@@ -757,11 +992,11 @@ Round ${round + 1} — Respond directly to the most recent arguments above. Chal
             try {
               const debateResult = await callModelStream(
                 debater,
-                [{ role: "user", content: debatePrompt }],
+                [...contextMessages, { role: "user", content: debatePrompt }],
                 (chunk) => {
                   sendSSE(res, "chunk", { modelName: debater.displayName, content: chunk });
                 },
-                { systemPrompt: debater.systemPrompt }
+                { systemPrompt: debateSystemPrompt }
               );
               fullContent = debateResult.content;
             } catch (e) {
