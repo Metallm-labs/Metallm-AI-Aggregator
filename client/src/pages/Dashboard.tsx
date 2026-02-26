@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatMessage, TypingIndicator } from "@/components/ChatMessage";
-import { ChatInput, type ChatMode, type DebateParticipant } from "@/components/ChatInput";
+import { ChatInput, CHAT_MODE_STORAGE_KEY, type ChatMode, type DebateParticipant } from "@/components/ChatInput";
 import { ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { ModelIcon } from "@/components/ModelIcon";
@@ -36,6 +36,15 @@ interface AvailableModel {
   iconUrl?: string;
   provider: string;
 }
+
+const getInitialChatMode = (storageScope?: string): ChatMode => {
+  if (typeof window === "undefined") return "single";
+  const key = storageScope ? `${CHAT_MODE_STORAGE_KEY}:${storageScope}` : CHAT_MODE_STORAGE_KEY;
+  const stored = window.localStorage.getItem(key);
+  return stored === "single" || stored === "multi" || stored === "debate" || stored === "direct"
+    ? stored
+    : "single";
+};
 
 export default function Dashboard() {
   const { user, isLoading: authLoading } = useAuth();
@@ -118,6 +127,12 @@ export default function Dashboard() {
     fetchModels();
   }, []);
 
+  // Restore mode for the authenticated user scope
+  useEffect(() => {
+    if (!user?.id) return;
+    setCurrentChatMode(getInitialChatMode(user.id));
+  }, [user?.id]);
+
   const fetchModels = async () => {
     try {
       const res = await fetch("/api/models", { credentials: "include" });
@@ -153,20 +168,30 @@ export default function Dashboard() {
   useEffect(() => {
     if (conversationData?.messages) {
       setMessages((prev) => {
-        // Passive/background refetches must never remove already-rendered messages,
-        // otherwise chat flickers when storage lags behind live UI state.
-        const merged = new Map<number, Message>();
-        for (const msg of conversationData.messages) merged.set(msg.id, msg);
-        for (const msg of prev) {
-          if (!merged.has(msg.id)) merged.set(msg.id, msg);
-        }
+        const fromServer = conversationData.messages;
+        const prevIds = new Set(prev.map((m) => m.id));
+        const serverIsSubsetOfPrev = fromServer.every((m) => prevIds.has(m.id));
+        const shouldProtectLocal =
+          isStreaming ||
+          isRouting ||
+          (fromServer.length < prev.length && serverIsSubsetOfPrev);
 
-        const next = Array.from(merged.values()).sort((a, b) => {
-          const ta = new Date(a.createdAt).getTime();
-          const tb = new Date(b.createdAt).getTime();
-          if (ta !== tb) return ta - tb;
-          return a.id - b.id;
-        });
+        const next = shouldProtectLocal
+          ? (() => {
+              // Keep already-rendered messages while backend catches up to avoid flicker.
+              const merged = new Map<number, Message>();
+              for (const msg of fromServer) merged.set(msg.id, msg);
+              for (const msg of prev) {
+                if (!merged.has(msg.id)) merged.set(msg.id, msg);
+              }
+              return Array.from(merged.values()).sort((a, b) => {
+                const ta = new Date(a.createdAt).getTime();
+                const tb = new Date(b.createdAt).getTime();
+                if (ta !== tb) return ta - tb;
+                return a.id - b.id;
+              });
+            })()
+          : fromServer;
 
         // Avoid unnecessary re-renders when there is no effective change.
         if (
@@ -174,6 +199,7 @@ export default function Dashboard() {
           next.every((m, i) =>
             m.id === prev[i]?.id &&
             m.content === prev[i]?.content &&
+            m.role === prev[i]?.role &&
             m.modelName === prev[i]?.modelName
           )
         ) {
@@ -921,6 +947,7 @@ export default function Dashboard() {
           onStop={handleStop}
           isLoading={isStreaming || isRouting}
           disabled={convLoading}
+          storageScope={user.id}
           availableModels={availableModels}
           onModeChange={setCurrentChatMode}
           onSettingsClick={() => setShowSettings(v => !v)}

@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { ModelIcon } from "@/components/ModelIcon";
 
 export type ChatMode = "single" | "multi" | "debate" | "direct";
+export const CHAT_MODE_STORAGE_KEY = "metallm.chat.mode";
+export const CHAT_DIRECT_MODEL_STORAGE_KEY = "metallm.chat.directModelId";
 
 export interface DebateParticipant {
     modelId: string;
@@ -27,6 +29,7 @@ interface ChatInputProps {
     onStop?: () => void;
     isLoading?: boolean;
     disabled?: boolean;
+    storageScope?: string;
     availableModels?: AvailableModel[];
     onModeChange?: (mode: ChatMode) => void;
     onSettingsClick?: () => void;
@@ -62,11 +65,28 @@ const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; descr
     },
 };
 
-export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [] }: ChatInputProps) {
+const isValidChatMode = (value: string | null): value is ChatMode =>
+    value === "single" || value === "multi" || value === "debate" || value === "direct";
+
+const getStorageKey = (baseKey: string, storageScope?: string): string =>
+    storageScope ? `${baseKey}:${storageScope}` : baseKey;
+
+const getStoredChatMode = (storageScope?: string): ChatMode => {
+    if (typeof window === "undefined") return "single";
+    const stored = window.localStorage.getItem(getStorageKey(CHAT_MODE_STORAGE_KEY, storageScope));
+    return isValidChatMode(stored) ? stored : "single";
+};
+
+const getStoredDirectModelId = (storageScope?: string): string => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem(getStorageKey(CHAT_DIRECT_MODEL_STORAGE_KEY, storageScope)) ?? "";
+};
+
+export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [] }: ChatInputProps) {
     const [content, setContent] = useState("");
-    const [mode, setMode] = useState<ChatMode>("single");
-    const [directModelId, setDirectModelIdState] = useState<string>("");
-    const directModelIdRef = useRef<string>(""); // always-current mirror of directModelId
+    const [mode, setMode] = useState<ChatMode>(() => getStoredChatMode(storageScope));
+    const [directModelId, setDirectModelIdState] = useState<string>(() => getStoredDirectModelId(storageScope));
+    const directModelIdRef = useRef<string>(directModelId); // always-current mirror of directModelId
     const setDirectModelId = (id: string) => {
         directModelIdRef.current = id;
         setDirectModelIdState(id);
@@ -82,21 +102,38 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels
     const modeMenuRef = useRef<HTMLDivElement>(null);
     const modelPickerRef = useRef<HTMLDivElement>(null);
 
+    // Reload scoped preferences when authenticated user changes
+    useEffect(() => {
+        const storedMode = getStoredChatMode(storageScope);
+        const storedDirectModelId = getStoredDirectModelId(storageScope);
+        setMode(storedMode);
+        setDirectModelId(storedDirectModelId);
+    }, [storageScope]);
+
     // Notify parent when mode changes
     useEffect(() => {
-        onModeChange?.(mode);
-    }, [mode]);
-
-    // Clear directModelId when leaving direct mode so re-entering always re-defaults to first model
-    useEffect(() => {
-        if (mode !== "direct") {
-            setDirectModelId("");
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(getStorageKey(CHAT_MODE_STORAGE_KEY, storageScope), mode);
         }
-    }, [mode]);
+        onModeChange?.(mode);
+    }, [mode, onModeChange, storageScope]);
 
-    // Auto-set first model when switching to direct mode
+    // Persist direct model preference across refresh/login
     useEffect(() => {
-        if (mode === "direct" && !directModelId && availableModels.length > 0) {
+        if (typeof window === "undefined") return;
+        const key = getStorageKey(CHAT_DIRECT_MODEL_STORAGE_KEY, storageScope);
+        if (directModelId) {
+            window.localStorage.setItem(key, directModelId);
+        } else {
+            window.localStorage.removeItem(key);
+        }
+    }, [directModelId, storageScope]);
+
+    // Ensure direct mode always has a valid selected model
+    useEffect(() => {
+        if (mode !== "direct" || availableModels.length === 0) return;
+        const hasSelectedModel = availableModels.some((m) => m.id === directModelId);
+        if (!hasSelectedModel) {
             setDirectModelId(availableModels[0].id);
         }
     }, [mode, availableModels, directModelId]);
@@ -491,4 +528,3 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, availableModels
         </motion.div>
     );
 }
-
