@@ -11,6 +11,12 @@ export interface WebSource {
     url: string;
 }
 
+export interface TokenUsage {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+}
+
 // ================================
 // === Web Content Fetching (used when user explicitly enables Web Search) ===
 // ================================
@@ -361,7 +367,7 @@ async function callGeminiStream(
         systemPrompt?: string;
         directMode?: boolean;
     }
-): Promise<{ content: string; sources: WebSource[] }> {
+): Promise<{ content: string; sources: WebSource[]; tokenUsage?: TokenUsage }> {
     const contents = messages.map(m => ({
         role: m.role === "user" ? "user" : "model",
         parts: [{ text: m.content }],
@@ -393,6 +399,43 @@ async function callGeminiStream(
     let fullContent = "";
     const sources: WebSource[] = [];
     const seenUrls = new Set<string>();
+    let lastUsageMetadata: any = null;
+
+    // Count actual input tokens BEFORE streaming — Gemini's usageMetadata.promptTokenCount
+    // does NOT include systemInstruction tokens, so we use countTokens API for accuracy.
+    let countedInputTokens: number | null = null;
+    try {
+        // Log what we're sending so we can debug
+        const sysPromptLen = options?.systemPrompt?.length ?? 0;
+        console.log(`[Gemini] countTokens: systemPrompt length=${sysPromptLen} chars, contents count=${contents.length}`);
+
+        const countResult = await gemini.models.countTokens({
+            model: modelId,
+            contents,
+            ...(systemInstruction ? { systemInstruction } : {}),
+        } as any);
+        console.log("[Gemini] countTokens raw result:", JSON.stringify(countResult));
+        countedInputTokens = (countResult as any).totalTokens ?? null;
+
+        // If countTokens didn't include systemInstruction, count it separately
+        if (systemInstruction && countedInputTokens !== null) {
+            const sysCountResult = await gemini.models.countTokens({
+                model: modelId,
+                contents: [{ role: "user", parts: [{ text: options!.systemPrompt! }] }],
+            } as any);
+            const sysTokens = (sysCountResult as any).totalTokens ?? 0;
+            console.log(`[Gemini] System instruction separately counted: ${sysTokens} tokens`);
+            // If the original count is suspiciously low (same as without system prompt), add system tokens
+            if (countedInputTokens < sysTokens) {
+                countedInputTokens = countedInputTokens + sysTokens;
+                console.log(`[Gemini] Adjusted input tokens with system prompt: ${countedInputTokens}`);
+            }
+        }
+
+        console.log(`[Gemini] countTokens final: ${countedInputTokens} input tokens`);
+    } catch (e) {
+        console.warn("[Gemini] countTokens failed, will use stream metadata:", e);
+    }
 
     const result = await gemini.models.generateContentStream({
         model: modelId,
@@ -407,6 +450,11 @@ async function callGeminiStream(
         if (text) {
             onChunk(text);
             fullContent += text;
+        }
+
+        // Capture usageMetadata from chunks (typically present on the last chunk)
+        if ((chunk as any).usageMetadata) {
+            lastUsageMetadata = (chunk as any).usageMetadata;
         }
 
         // Extract Google Search grounding sources from every chunk that has them.
@@ -449,7 +497,59 @@ async function callGeminiStream(
         console.log(`[Gemini] Extracted ${sources.length} web sources`);
     }
 
-    return { content: fullContent, sources };
+    // Extract FULL token usage.
+    // We use countTokens API result for accurate input count (includes systemInstruction).
+    // usageMetadata gives us output (candidatesTokenCount + thoughtsTokenCount).
+    let tokenUsage: TokenUsage | undefined;
+    try {
+        const um = lastUsageMetadata
+            ?? (result as any).response?.usageMetadata
+            ?? (result as any)._response?.usageMetadata
+            ?? (result as any).usageMetadata;
+        if (um) {
+            console.log("[Gemini] Raw usageMetadata:", JSON.stringify(um));
+
+            const rawPrompt = um.promptTokenCount ?? um.prompt_token_count ?? 0;
+            const rawCandidates = um.candidatesTokenCount ?? um.candidates_token_count ?? 0;
+            const thoughtTokens = um.thoughtsTokenCount ?? um.thoughts_token_count ?? 0;
+            const cachedTokens = um.cachedContentTokenCount ?? um.cached_content_token_count ?? 0;
+
+            // Use countTokens result for accurate input (includes system instruction + messages)
+            // Fall back to raw promptTokenCount if countTokens failed
+            const inputTokens = countedInputTokens ?? rawPrompt;
+
+            // Output = visible generated text + thinking tokens
+            const outputTokens = rawCandidates + thoughtTokens;
+
+            // Total = input + output
+            const totalTokens = inputTokens + outputTokens;
+
+            tokenUsage = {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens,
+            };
+            console.log(
+                `[Gemini] FULL token usage: input=${inputTokens} (countTokens=${countedInputTokens}, rawPrompt=${rawPrompt}), ` +
+                `output=${outputTokens} (visible=${rawCandidates}, thinking=${thoughtTokens}), ` +
+                `total=${totalTokens}, cached=${cachedTokens}`
+            );
+        } else if (countedInputTokens) {
+            // No usageMetadata but we have countTokens result — at least report input
+            tokenUsage = {
+                promptTokens: countedInputTokens,
+                completionTokens: 0,
+                totalTokens: countedInputTokens,
+            };
+            console.warn(`[Gemini] No usageMetadata — using countTokens only: input=${countedInputTokens}`);
+        } else {
+            console.warn("[Gemini] No usageMetadata and countTokens failed — token count unavailable");
+        }
+    } catch (e) {
+        console.warn("[Gemini] Could not extract token usage:", e);
+    }
+
+    return { content: fullContent, sources, tokenUsage };
 }
 
 // ================================
@@ -465,7 +565,7 @@ async function callOpenRouterStream(
         systemPrompt?: string;
         webSearch?: boolean;
     }
-): Promise<{ content: string; sources: WebSource[] }> {
+): Promise<{ content: string; sources: WebSource[]; tokenUsage?: TokenUsage }> {
     const apiKey = process.env["AI-INTEGRATIONS-OPEN-ROUTER-API-KEY"];
     if (!apiKey) throw new Error("OpenRouter API key not configured");
 
@@ -477,6 +577,8 @@ async function callOpenRouterStream(
         max_tokens: options?.maxTokens || 4096,
         temperature: options?.temperature ?? 0.7,
         stream: true,
+        // Request usage stats in streaming response
+        stream_options: { include_usage: true },
     };
     // Add web search plugin when enabled
     if (options?.webSearch) {
@@ -507,6 +609,7 @@ async function callOpenRouterStream(
     let fullContent = "";
     const sources: WebSource[] = [];
     const seenUrls = new Set<string>();
+    let tokenUsage: TokenUsage | undefined;
 
     while (true) {
         const { done, value } = await reader.read();
@@ -539,13 +642,28 @@ async function callOpenRouterStream(
                         }
                     }
                 }
+                // Capture actual token usage from model API response (present in the final stream chunk)
+                if (data.usage) {
+                    tokenUsage = {
+                        promptTokens: data.usage.prompt_tokens ?? 0,
+                        completionTokens: data.usage.completion_tokens ?? 0,
+                        totalTokens: data.usage.total_tokens ?? (data.usage.prompt_tokens ?? 0) + (data.usage.completion_tokens ?? 0),
+                    };
+                    console.log("[OpenRouter] Raw usage from API:", JSON.stringify(data.usage));
+                }
             } catch {
                 // skip malformed lines
             }
         }
     }
 
-    return { content: fullContent, sources };
+    if (tokenUsage) {
+        console.log(`[OpenRouter] Token usage: prompt=${tokenUsage.promptTokens}, completion=${tokenUsage.completionTokens}, total=${tokenUsage.totalTokens}`);
+    } else {
+        console.log(`[OpenRouter] No token usage data returned from API for model ${modelId}`);
+    }
+
+    return { content: fullContent, sources, tokenUsage };
 }
 
 // ================================
@@ -577,7 +695,7 @@ export async function callModelStream(
         webSearch?: boolean; // User-toggled web search — only affects OpenRouter
         directMode?: boolean; // Bypass routing formatting; respond naturally
     }
-): Promise<{ content: string; sources: WebSource[] }> {
+): Promise<{ content: string; sources: WebSource[]; tokenUsage?: TokenUsage }> {
     const onStatus = options?.onStatus;
     const userWantsWebSearch = options?.webSearch === true;
 
@@ -635,7 +753,7 @@ export async function callModelStream(
                 systemPrompt: finalSystemPrompt,
                 webSearch: false, // We injected context manually
             });
-            return { content: result.content, sources: [...webSources, ...result.sources] };
+            return { content: result.content, sources: [...webSources, ...result.sources], tokenUsage: result.tokenUsage };
         }
         throw lastError!;
     } else {
@@ -681,6 +799,7 @@ export async function callModelStream(
         return {
             content: result.content,
             sources: webSources.length > 0 ? webSources : result.sources,
+            tokenUsage: result.tokenUsage,
         };
     }
 }

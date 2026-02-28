@@ -2,6 +2,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Conversation, Message, ConversationWithMessages } from "@shared/schema";
 import type { ChatAttachmentMeta, DebateParticipant } from "@/components/ChatInput";
 
+// Token usage data returned from model APIs
+export interface TokenUsage {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+}
+
 // Helper: directly patch a conversation's title in the cache
 function patchConversationTitle(
     queryClient: ReturnType<typeof useQueryClient>,
@@ -187,7 +194,7 @@ export function useSendMessage() {
         mode: "single" | "multi" | "debate",
         onChunk: (modelName: string, content: string) => void,
         onModelStart: (modelName: string, extra?: any) => void,
-        onModelComplete: (modelName: string, message: Message) => void,
+        onModelComplete: (modelName: string, message: Message, tokenUsage?: TokenUsage) => void,
         onUserMessage: (message: Message) => void,
         onTitleUpdate?: (title: string) => void,
         onDone?: () => void,
@@ -263,7 +270,7 @@ export function useSendMessage() {
                                 break;
                             case "model_complete":
                                 patchConversationMessage(queryClient, conversationId, data.message as Message);
-                                onModelComplete(data.modelName, data.message);
+                                onModelComplete(data.modelName, data.message, data.tokenUsage as TokenUsage | undefined);
                                 break;
                             case "web_sources":
                                 onWebSources?.(data.modelName, data.sources ?? []);

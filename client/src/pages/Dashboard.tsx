@@ -7,10 +7,11 @@ import { MAX_MULTI_MODELS, ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { ModelIcon } from "@/components/ModelIcon";
 import { useAuth } from "@/hooks/use-auth";
-import { useConversation, useCreateConversation, useSendMessage, routePrompt, type RoutingResult } from "@/hooks/use-chat";
+import { useConversation, useCreateConversation, useSendMessage, routePrompt, type RoutingResult, type TokenUsage } from "@/hooks/use-chat";
 import { Loader2, MessageSquare, Zap, Edit3, Send, X, Sparkles, ChevronDown, Globe, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Message } from "@shared/schema";
+import { TokenCounter, type ModelTokenUsage } from "@/components/TokenCounter";
 
 interface StreamingMessage {
   modelName: string;
@@ -84,6 +85,8 @@ export default function Dashboard() {
   const [debateParticipants, setDebateParticipants] = useState<DebateParticipant[]>([]);
   const [perModelPrompts, setPerModelPrompts] = useState<Array<{ modelId: string; displayName: string; prompt: string; stance?: string }>>([]); 
   const [webSearchStatus, setWebSearchStatus] = useState<WebSearchStatus | null>(null);
+  // Token usage tracking per model for the active conversation
+  const [tokensByModel, setTokensByModel] = useState<Map<string, ModelTokenUsage>>(new Map());
   // Remember the last send params so retry/edit replays the exact same model
   const lastSendModeRef = useRef<"single" | "multi" | "debate" | "direct">("single");
   const lastSendDirectModelIdRef = useRef<string | undefined>(undefined);
@@ -102,6 +105,8 @@ export default function Dashboard() {
     typingModel: string | null;
     webSearchStatus: WebSearchStatus | null;
   }>>(new Map());
+  // Persists token usage per conversation so switching away & back restores it
+  const tokenTrackingRef = useRef<Map<number, Map<string, ModelTokenUsage>>>(new Map());
 
   const { data: conversationData, isLoading: convLoading } = useConversation(activeConversationId);
   const createConversation = useCreateConversation();
@@ -127,11 +132,14 @@ export default function Dashboard() {
       setIsStreaming(saved?.isStreaming ?? false);
       setTypingModel(saved?.typingModel ?? null);
       setWebSearchStatus(saved?.webSearchStatus ?? null);
+      // Restore token tracking for this conversation
+      setTokensByModel(tokenTrackingRef.current.get(activeConversationId) ?? new Map());
     } else {
       setStreamingMessages(new Map());
       setIsStreaming(false);
       setTypingModel(null);
       setWebSearchStatus(null);
+      setTokensByModel(new Map());
     }
   }, [activeConversationId]);
 
@@ -171,6 +179,7 @@ export default function Dashboard() {
   // Handle conversation deletion
   const handleConversationDeleted = useCallback((deletedId: number) => {
     streamingStateRef.current.delete(deletedId);
+    tokenTrackingRef.current.delete(deletedId);
     if (activeConvIdRef.current === deletedId) {
       setActiveConversationId(null);
       setMessages([]);
@@ -178,6 +187,7 @@ export default function Dashboard() {
       setIsStreaming(false);
       setTypingModel(null);
       setRoutingResult(null);
+      setTokensByModel(new Map());
     }
   }, []);
 
@@ -236,6 +246,39 @@ export default function Dashboard() {
     }
   }, [conversationData, isStreaming, isRouting]);
 
+  // Reconstruct token usage from saved message metadata when loading a conversation
+  useEffect(() => {
+    if (!conversationData?.messages || !activeConversationId) return;
+    // Don't overwrite live streaming token data
+    if (isStreaming) return;
+    // If we already have token data from live streaming for this conversation, keep it
+    if (tokenTrackingRef.current.has(activeConversationId) && tokenTrackingRef.current.get(activeConversationId)!.size > 0) return;
+
+    const restoredTokens = new Map<string, ModelTokenUsage>();
+    for (const msg of conversationData.messages) {
+      if (msg.role !== "assistant" || !msg.modelName) continue;
+      const meta = msg.metadata as any;
+      const tu = meta?.tokenUsage;
+      if (!tu) continue;
+      const promptTokens = tu.promptTokens ?? 0;
+      const completionTokens = tu.completionTokens ?? 0;
+      const totalTokens = tu.totalTokens ?? 0;
+      if (totalTokens === 0 && promptTokens === 0 && completionTokens === 0) continue;
+
+      const existing = restoredTokens.get(msg.modelName);
+      restoredTokens.set(msg.modelName, {
+        modelName: msg.modelName,
+        promptTokens: (existing?.promptTokens ?? 0) + promptTokens,
+        completionTokens: (existing?.completionTokens ?? 0) + completionTokens,
+        totalTokens: (existing?.totalTokens ?? 0) + totalTokens,
+      });
+    }
+    if (restoredTokens.size > 0) {
+      tokenTrackingRef.current.set(activeConversationId, restoredTokens);
+      setTokensByModel(new Map(restoredTokens));
+    }
+  }, [conversationData, activeConversationId, isStreaming]);
+
   // Track whether the user is near the bottom so we know whether to auto-scroll
   const handleScrollAreaScroll = useCallback(() => {
     const el = scrollAreaRef.current;
@@ -286,6 +329,7 @@ export default function Dashboard() {
     setStreamingMessages(new Map());
     setRoutingResult(null);
     setPendingAttachmentPayload(undefined);
+    setTokensByModel(new Map());
   }, []);
 
   // ============================================
@@ -435,7 +479,7 @@ export default function Dashboard() {
           }
         },
         // onModelComplete
-        (modelName, message) => {
+        (modelName, message, tokenUsage) => {
           const s = streamingStateRef.current.get(convId);
           if (s) {
             const newMessages = new Map(s.messages);
@@ -448,6 +492,22 @@ export default function Dashboard() {
           }
           if (activeConvIdRef.current === convId) {
             upsertLocalMessage(message);
+          }
+          // Track token usage for this model
+          if (tokenUsage && (tokenUsage.totalTokens > 0 || tokenUsage.promptTokens > 0 || tokenUsage.completionTokens > 0)) {
+            const convTokens = tokenTrackingRef.current.get(convId) ?? new Map<string, ModelTokenUsage>();
+            const existing = convTokens.get(modelName);
+            const updated: ModelTokenUsage = {
+              modelName,
+              promptTokens: (existing?.promptTokens ?? 0) + tokenUsage.promptTokens,
+              completionTokens: (existing?.completionTokens ?? 0) + tokenUsage.completionTokens,
+              totalTokens: (existing?.totalTokens ?? 0) + tokenUsage.totalTokens,
+            };
+            convTokens.set(modelName, updated);
+            tokenTrackingRef.current.set(convId, convTokens);
+            if (activeConvIdRef.current === convId) {
+              setTokensByModel(new Map(convTokens));
+            }
           }
         },
         // onUserMessage
@@ -624,6 +684,9 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
+      {/* Token Counter - floating top-right */}
+      <TokenCounter tokensByModel={tokensByModel} />
+
       <Sidebar
         activeConversationId={activeConversationId}
         onSelectConversation={setActiveConversationId}

@@ -16,6 +16,7 @@ import {
   analyzeAndRoute,
   type ModelConfig,
   type WebSource,
+  type TokenUsage,
 } from "./openrouter";
 
 // In-memory model config store
@@ -759,6 +760,7 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
 
         let fullContent = "";
         let modelSources: WebSource[] = [];
+        let tokenUsage: TokenUsage | undefined;
         try {
           const result = await callModelStream(
             targetModel,
@@ -778,6 +780,7 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
           );
           fullContent = result.content;
           modelSources = result.sources;
+          tokenUsage = result.tokenUsage;
           // Stream any sources to client immediately so UI can show them
           if (modelSources.length > 0) {
             sendSSE(res, "web_sources", { modelName, sources: modelSources });
@@ -801,9 +804,10 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
             hasAttachmentContext: !!cleanAttachmentContext,
             webSearch: modelSources.length > 0,
             sources: modelSources.length > 0 ? modelSources : undefined,
+            tokenUsage: tokenUsage ?? undefined,
           },
         });
-        sendSSE(res, "model_complete", { modelName, message: assistantMessage });
+        sendSSE(res, "model_complete", { modelName, message: assistantMessage, tokenUsage });
 
         // ===========================================
         // === MULTI MODE ===
@@ -833,6 +837,7 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
 
           let fullContent = "";
           let multiSources: WebSource[] = [];
+          let multiTokenUsage: TokenUsage | undefined;
           try {
             const result = await callModelStream(
               model,
@@ -851,6 +856,7 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
             );
             fullContent = result.content;
             multiSources = result.sources;
+            multiTokenUsage = result.tokenUsage;
             if (multiSources.length > 0) {
               sendSSE(res, "web_sources", { modelName: model.displayName, sources: multiSources });
             }
@@ -877,9 +883,10 @@ Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored o
               isMultiModelResponse: true,
               webSearch: multiSources.length > 0,
               sources: multiSources.length > 0 ? multiSources : undefined,
+              tokenUsage: multiTokenUsage ?? undefined,
             },
           });
-          sendSSE(res, "model_complete", { modelName: model.displayName, message: assistantMessage });
+          sendSSE(res, "model_complete", { modelName: model.displayName, message: assistantMessage, tokenUsage: multiTokenUsage });
         });
 
         await Promise.all(promises);
@@ -989,6 +996,7 @@ Round ${round + 1} — Respond directly to the most recent arguments above. Chal
             }
 
             let fullContent = "";
+            let debateTokenUsage: TokenUsage | undefined;
             try {
               const debateResult = await callModelStream(
                 debater,
@@ -999,6 +1007,7 @@ Round ${round + 1} — Respond directly to the most recent arguments above. Chal
                 { systemPrompt: debateSystemPrompt }
               );
               fullContent = debateResult.content;
+              debateTokenUsage = debateResult.tokenUsage;
             } catch (e) {
               console.error(`${debater.displayName} debate error:`, e);
               fullContent = `[${debater.displayName}] Error in debate round.`;
@@ -1012,9 +1021,9 @@ Round ${round + 1} — Respond directly to the most recent arguments above. Chal
               role: "assistant",
               content: fullContent,
               modelName: debater.displayName,
-              metadata: { modelId: debater.id, role: debater.role, debateRound: round + 1 },
+              metadata: { modelId: debater.id, role: debater.role, debateRound: round + 1, tokenUsage: debateTokenUsage ?? undefined },
             });
-            sendSSE(res, "model_complete", { modelName: debater.displayName, message: assistantMessage });
+            sendSSE(res, "model_complete", { modelName: debater.displayName, message: assistantMessage, tokenUsage: debateTokenUsage });
           }
         }
       }

@@ -623,7 +623,7 @@ function AnimatedCounter({ target, suffix = "" }: { target: number; suffix?: str
 /* ─── Model Logo Carousel ─── */
 function ModelLogoCarousel() {
   const models = [
-    { name: "Gemini Flash", src: "/icons/gemini.svg" },
+    { name: "Gemini", src: "/icons/gemini.svg" },
     { name: "DeepSeek R1", src: "/icons/deepseek.svg" },
     { name: "LLaMA 3.3", src: "/icons/meta.svg" },
     { name: "Gemma 3 27B", src: "/icons/google.svg" },
@@ -697,7 +697,7 @@ const faqs = [
   },
   {
     q: "Which AI models does MetaLLM support?",
-    a: "MetaLLM integrates 9 specialist models: Gemini Flash (Google, main assistant), DeepSeek R1 (deep reasoning), LLaMA 3.3 (Meta, general knowledge), Gemma 3 27B (technical/scientific), Devstral (Mistral, code), Nemotron (NVIDIA, data/math), Qwen 2.5 (creative writing), Gemma 3 12B (research/education), and GLM 4.5 (business/strategy)."
+    a: "MetaLLM integrates 9 specialist models: Gemini (Google, main assistant), DeepSeek R1 (deep reasoning), LLaMA 3.3 (Meta, general knowledge), Gemma 3 27B (technical/scientific), Devstral (Mistral, code), Nemotron (NVIDIA, data/math), Qwen 2.5 (creative writing), Gemma 3 12B (research/education), and GLM 4.5 (business/strategy)."
   },
   {
     q: "Does MetaLLM support web search?",
