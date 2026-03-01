@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Coins, X, TrendingUp, Zap, DollarSign } from "lucide-react";
+import { Coins, X, TrendingUp, Zap, DollarSign, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ModelTokenUsage {
@@ -12,6 +12,7 @@ export interface ModelTokenUsage {
 
 export interface TokenCounterProps {
   tokensByModel: Map<string, ModelTokenUsage>;
+  onExportChat?: () => void;
 }
 
 // ── Model Pricing (per 1M tokens in USD) ──
@@ -75,7 +76,7 @@ function formatTokenCount(count: number): string {
   return count.toString();
 }
 
-export function TokenCounter({ tokensByModel }: TokenCounterProps) {
+export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const models = Array.from(tokensByModel.values());
@@ -95,28 +96,45 @@ export function TokenCounter({ tokensByModel }: TokenCounterProps) {
 
   return (
     <>
-      {/* Floating icon button */}
-      <motion.button
+      {/* Floating pill: token count + export chat */}
+      <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "fixed top-4 right-4 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full",
-          "bg-card/90 backdrop-blur-xl border border-white/10 shadow-lg shadow-black/20",
-          "hover:border-primary/30 hover:bg-card transition-all cursor-pointer",
-          "text-xs font-medium",
-          isOpen && "border-primary/40 bg-primary/5"
-        )}
-        title="Token usage"
+        className="fixed top-4 right-4 z-50 flex items-center gap-0.5"
       >
-        <Coins className="w-3.5 h-3.5 text-yellow-400" />
-        <span className="text-white/80">{formatTokenCount(totalTokens)}</span>
-        {totalCost > 0 && (
-          <span className="text-emerald-400/80 text-[10px] ml-0.5">{formatCost(totalCost)}</span>
-        )}
-      </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.96 }}
+          onClick={() => setIsOpen(!isOpen)}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-l-full",
+            "bg-card/90 backdrop-blur-xl border border-white/10 shadow-lg shadow-black/20",
+            "hover:border-primary/30 hover:bg-card transition-all cursor-pointer",
+            "text-xs font-medium border-r-0",
+            isOpen && "border-primary/40 bg-primary/5"
+          )}
+          title="Token usage"
+        >
+          <Coins className="w-3.5 h-3.5 text-yellow-400" />
+          <span className="text-white/80">{formatTokenCount(totalTokens)}</span>
+          {totalCost > 0 && (
+            <span className="text-emerald-400/80 text-[10px] ml-0.5">{formatCost(totalCost)}</span>
+          )}
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.96 }}
+          onClick={() => { onExportChat?.(); }}
+          className={cn(
+            "flex items-center justify-center w-8 h-[30px] rounded-r-full",
+            "bg-card/90 backdrop-blur-xl border border-white/10 shadow-lg shadow-black/20",
+            "hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all cursor-pointer"
+          )}
+          title="Export chat as Markdown"
+        >
+          <Download className="w-3.5 h-3.5 text-emerald-400" />
+        </motion.button>
+      </motion.div>
 
       {/* Detailed panel */}
       <AnimatePresence>
@@ -148,12 +166,21 @@ export function TokenCounter({ tokensByModel }: TokenCounterProps) {
                     <p className="text-[10px] text-muted-foreground">Active chat session</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-                >
-                  <X className="w-4 h-4 text-muted-foreground" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { onExportChat?.(); setIsOpen(false); }}
+                    className="p-1.5 rounded-lg hover:bg-emerald-500/10 transition-colors text-muted-foreground hover:text-emerald-400"
+                    title="Export chat as Markdown"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsOpen(false)}
+                    className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                  >
+                    <X className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </div>
               </div>
 
               {/* Summary cards */}

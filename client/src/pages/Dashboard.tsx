@@ -90,6 +90,20 @@ export default function Dashboard() {
   // Remember the last send params so retry/edit replays the exact same model
   const lastSendModeRef = useRef<"single" | "multi" | "debate" | "direct">("single");
   const lastSendDirectModelIdRef = useRef<string | undefined>(undefined);
+  // Debate rounds
+  const [debateRounds, setDebateRounds] = useState(1);
+  const debateRoundsRef = useRef(1);
+  // Between-rounds dialog
+  const [betweenRoundState, setBetweenRoundState] = useState<{
+    currentRound: number;
+    totalRounds: number;
+    originalContent: string;
+    convId: number;
+    selectedModelIds: string[];
+    debateConfig: DebateParticipant[];
+    webSearch: boolean;
+  } | null>(null);
+  const [betweenRoundInput, setBetweenRoundInput] = useState("");
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -114,6 +128,9 @@ export default function Dashboard() {
   // Prevents the activeConversationId effect from wiping isRouting when we
   // create a new conversation mid-send (the effect fires after setActiveConversationId)
   const pendingRoutingRef = useRef(false);
+
+  // Keep debateRoundsRef in sync
+  useEffect(() => { debateRoundsRef.current = debateRounds; }, [debateRounds]);
 
   // Keep ref in sync; restore saved streaming state when switching back to a conv
   useEffect(() => {
@@ -333,6 +350,48 @@ export default function Dashboard() {
     setTokensByModel(new Map());
   }, []);
 
+  // Export current conversation as Markdown
+  const exportChat = useCallback(async () => {
+    if (messages.length === 0) return;
+    const lines: string[] = [
+      `# Chat Export`,
+      `*Exported ${new Date().toLocaleString()}*`,
+      ``,
+      `---`,
+      ``,
+    ];
+    for (const m of messages) {
+      if (m.role === "user") {
+        lines.push(`## You`, ``, m.content, ``, `---`, ``);
+      } else {
+        lines.push(`## ${m.modelName ?? "Assistant"}`, ``, m.content, ``, `---`, ``);
+      }
+    }
+    const text = lines.join("\n");
+    const filename = `chat-${new Date().toISOString().slice(0, 10)}.md`;
+    if ("showSaveFilePicker" in window) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: "Markdown file", accept: { "text/markdown": [".md"] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        return;
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+      }
+    }
+    const blob = new Blob([text], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [messages]);
+
   // ============================================
   // === Step 1: Route prompt ===
   // ============================================
@@ -429,6 +488,7 @@ export default function Dashboard() {
     debateConfig?: DebateParticipant[],
     perModelPromptsArg?: Array<{ modelId: string; displayName: string; prompt: string }>,
     attachmentPayload?: AttachmentPayload,
+    roundNumber = 1,
   ) => {
     setRoutingResult(null);
     setIsStreaming(true);
@@ -540,6 +600,18 @@ export default function Dashboard() {
             setStreamingMessages(new Map());
             setWebSearchStatus(null);
           }
+          // ── Debate rounds: show between-round dialog if more rounds remain ──
+          if (mode === "debate" && roundNumber < debateRoundsRef.current) {
+            setBetweenRoundState({
+              currentRound: roundNumber,
+              totalRounds: debateRoundsRef.current,
+              originalContent,
+              convId,
+              selectedModelIds: selectedModelIds ?? [],
+              debateConfig: debateConfig ?? [],
+              webSearch: webSearch ?? false,
+            });
+          }
         },
         enhancedPrompt,
         targetModelId,
@@ -612,6 +684,30 @@ export default function Dashboard() {
       pendingAttachmentPayload
     );
   };
+
+  // Continue to next debate round (called from between-round dialog)
+  const handleContinueDebateRound = useCallback((userInput: string) => {
+    if (!betweenRoundState) return;
+    const { currentRound, totalRounds, convId, selectedModelIds, debateConfig, webSearch } = betweenRoundState;
+    setBetweenRoundState(null);
+    setBetweenRoundInput("");
+    const roundContent = userInput.trim()
+      ? userInput.trim()
+      : `Continue the debate — Round ${currentRound + 1} of ${totalRounds}. Build on the arguments presented so far.`;
+    handleApproveAndSend(
+      roundContent,
+      "debate",
+      roundContent,
+      undefined,
+      convId,
+      webSearch,
+      selectedModelIds,
+      debateConfig,
+      undefined,
+      undefined,
+      currentRound + 1,
+    );
+  }, [betweenRoundState]);
 
   const handleRetry = async (messageIndex: number) => {
     if (!activeConversationId) return;
@@ -696,7 +792,98 @@ export default function Dashboard() {
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       {/* Token Counter - floating top-right */}
-      <TokenCounter tokensByModel={tokensByModel} />
+      <TokenCounter tokensByModel={tokensByModel} onExportChat={exportChat} />
+
+      {/* Between-rounds dialog */}
+      <AnimatePresence>
+        {betweenRoundState && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[150] flex items-center justify-center p-4"
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div
+              initial={{ scale: 0.92, y: 16 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, y: 16 }}
+              transition={{ type: "spring", damping: 26, stiffness: 300 }}
+              className="relative w-full max-w-lg bg-card border border-orange-500/25 rounded-2xl shadow-2xl shadow-orange-500/10 overflow-hidden"
+            >
+              {/* Dialog header */}
+              <div className="px-5 py-4 border-b border-white/10 bg-gradient-to-r from-orange-500/10 to-amber-500/5">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-1.5">
+                    {Array.from({ length: betweenRoundState.totalRounds }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={cn(
+                          "w-2 h-2 rounded-full transition-all",
+                          i < betweenRoundState.currentRound
+                            ? "bg-orange-400"
+                            : "bg-white/15"
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-sm font-semibold text-white">
+                    Round {betweenRoundState.currentRound} of {betweenRoundState.totalRounds} Complete
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground/70">
+                  Add guidance, a question, or instructions — or skip to let models continue on their own.
+                </p>
+              </div>
+
+              {/* Input */}
+              <div className="p-5">
+                <label className="block text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  Your input for Round {betweenRoundState.currentRound + 1} (optional)
+                </label>
+                <textarea
+                  value={betweenRoundInput}
+                  onChange={(e) => setBetweenRoundInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleContinueDebateRound(betweenRoundInput);
+                    }
+                  }}
+                  placeholder="e.g. 'Focus on the economic impact' or 'Challenge the assumptions made so far'..."
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 placeholder:text-muted-foreground/35 focus:outline-none focus:border-orange-500/40 resize-none transition-colors"
+                  rows={3}
+                  autoFocus
+                />
+                <div className="flex items-center justify-between mt-4">
+                  <button
+                    onClick={() => { setBetweenRoundState(null); setBetweenRoundInput(""); }}
+                    className="text-xs text-muted-foreground hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
+                  >
+                    End debate here
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleContinueDebateRound("")}
+                      className="text-xs text-muted-foreground hover:text-white px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 transition-all"
+                    >
+                      Skip → continue
+                    </button>
+                    <button
+                      onClick={() => handleContinueDebateRound(betweenRoundInput)}
+                      disabled={!betweenRoundInput.trim()}
+                      className="text-xs font-medium text-white px-4 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                    >
+                      <Send className="w-3 h-3" />
+                      Send & Round {betweenRoundState.currentRound + 1}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Sidebar
         activeConversationId={activeConversationId}
@@ -1066,6 +1253,8 @@ export default function Dashboard() {
                 onMultiModelsChange={(ids) => setSelectedMultiModelIds(ids.slice(0, MAX_MULTI_MODELS))}
                 debateParticipants={debateParticipants}
                 onDebateConfigChange={setDebateParticipants}
+                debateRounds={debateRounds}
+                onDebateRoundsChange={setDebateRounds}
                 onClose={() => setShowSettings(false)}
                 onSave={fetchModels}
               />

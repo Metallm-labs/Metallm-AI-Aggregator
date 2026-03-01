@@ -33,6 +33,8 @@ interface ModelSettingsProps {
     onMultiModelsChange: (ids: string[]) => void;
     debateParticipants: DebateParticipant[];
     onDebateConfigChange: (p: DebateParticipant[]) => void;
+    debateRounds?: number;
+    onDebateRoundsChange?: (rounds: number) => void;
     onClose: () => void;
     onSave?: () => void;
 }
@@ -238,10 +240,12 @@ function MultiModeSettings({ availableModels, selectedIds, onSelectionChange }: 
 }
 
 // ─── Debate mode: 2-participant config ────────────────────────────────────────
-function DebateModeSettings({ availableModels, participants, onChange }: {
+function DebateModeSettings({ availableModels, participants, onChange, debateRounds = 1, onRoundsChange }: {
     availableModels: AvailableModel[];
     participants: DebateParticipant[];
     onChange: (p: DebateParticipant[]) => void;
+    debateRounds?: number;
+    onRoundsChange?: (rounds: number) => void;
 }) {
     const updateParticipant = (idx: number, field: keyof DebateParticipant, value: string) => {
         onChange(participants.map((p, i) => i === idx ? { ...p, [field]: value } : p));
@@ -254,6 +258,43 @@ function DebateModeSettings({ availableModels, participants, onChange }: {
                 <p className="text-xs text-muted-foreground mb-3">
                     Configure two debaters with their own model, role, and optional system prompt.
                 </p>
+
+                {/* ── Rounds selector ── */}
+                <div className="mb-4 p-3 rounded-lg bg-orange-500/5 border border-orange-500/20">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <label className="text-[10px] font-bold text-orange-400 uppercase tracking-wider block mb-0.5">
+                                Debate Rounds
+                            </label>
+                            <p className="text-[10px] text-muted-foreground/60">
+                                After each round you can add guidance before the next one starts.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            {[1, 2, 3, 4, 5].map((n) => (
+                                <button
+                                    key={n}
+                                    type="button"
+                                    onClick={() => onRoundsChange?.(n)}
+                                    className={cn(
+                                        "w-8 h-8 rounded-lg text-xs font-bold transition-all border",
+                                        debateRounds === n
+                                            ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-500/20"
+                                            : "bg-white/5 border-white/10 text-muted-foreground hover:border-orange-500/40 hover:text-orange-300"
+                                    )}
+                                >
+                                    {n}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    {debateRounds > 1 && (
+                        <p className="text-[10px] text-orange-300/70 mt-2 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
+                            Between rounds you can inject guidance or let models continue automatically.
+                        </p>
+                    )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {[0, 1].map(idx => {
                         const p = participants[idx];
@@ -315,7 +356,7 @@ const PANEL_ICON: Partial<Record<ChatMode, JSX.Element>> = {
 
 export function ModelSettings({
     mode, availableModels, selectedMultiModelIds, onMultiModelsChange,
-    debateParticipants, onDebateConfigChange, onClose, onSave,
+    debateParticipants, onDebateConfigChange, debateRounds, onDebateRoundsChange, onClose, onSave,
 }: ModelSettingsProps) {
     return (
         <div className="bg-card/30 backdrop-blur-sm">
@@ -332,7 +373,7 @@ export function ModelSettings({
             </div>
             {mode === "single" && <SingleModeSettings onClose={onClose} onSave={onSave} />}
             {mode === "multi" && <MultiModeSettings availableModels={availableModels} selectedIds={selectedMultiModelIds} onSelectionChange={onMultiModelsChange} />}
-            {mode === "debate" && <DebateModeSettings availableModels={availableModels} participants={debateParticipants} onChange={onDebateConfigChange} />}
+            {mode === "debate" && <DebateModeSettings availableModels={availableModels} participants={debateParticipants} onChange={onDebateConfigChange} debateRounds={debateRounds} onRoundsChange={onDebateRoundsChange} />}
         </div>
     );
 }
