@@ -1,8 +1,8 @@
 {
-  "defaultMainModelId": "gemini-3-flash",
+  "defaultMainModelId": "gemini-2.5-flash",
   "models": [
     {
-      "id": "gemini-3-flash",
+      "id": "gemini-2.5-flash",
       "displayName": "Gemini",
       "role": "Main AI Assistant",
       "systemPrompt": "You are Gemini, Google's fastest and most capable AI model. You provide intelligent, accurate, and well-structured responses. You excel at understanding context, following instructions precisely, and generating high-quality content across all domains.",
