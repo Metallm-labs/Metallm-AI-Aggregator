@@ -130,8 +130,27 @@ export function useDeleteConversation() {
             if (!res.ok) throw new Error("Failed to delete conversation");
             return id;
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations"] });
+        // Optimistic update: remove from list immediately so sidebar doesn't flicker
+        onMutate: async (id: number) => {
+            await queryClient.cancelQueries({ queryKey: ["/api/chat/conversations"] });
+            const previous = queryClient.getQueryData<Conversation[]>(["/api/chat/conversations"]);
+            queryClient.setQueryData<Conversation[]>(
+                ["/api/chat/conversations"],
+                (old) => old?.filter((c) => c.id !== id) ?? []
+            );
+            // Drop the individual conversation cache too
+            queryClient.removeQueries({ queryKey: ["/api/chat/conversations", id] });
+            return { previous };
+        },
+        onError: (_err, _id, context: any) => {
+            // Roll back on failure
+            if (context?.previous) {
+                queryClient.setQueryData(["/api/chat/conversations"], context.previous);
+            }
+        },
+        onSettled: () => {
+            // Quiet background sync — no loading spinner
+            queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations"], refetchType: "none" });
         },
     });
 }

@@ -135,13 +135,15 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
             </div>
           )}
 
-        <AnimatePresence>
+        <AnimatePresence initial={false}>
           {filteredConversations.map((chat) => (
             <motion.div
               key={chat.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
+              layout
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              transition={{ duration: 0.15 }}
               className={cn(
                 "group flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 cursor-pointer",
                 activeConversationId === chat.id

@@ -214,6 +214,7 @@ export default function Dashboard() {
         const shouldProtectLocal =
           isStreaming ||
           isRouting ||
+          inPostStreamGrace ||
           (fromServer.length < prev.length && serverIsSubsetOfPrev) ||
           (inPostStreamGrace && missingLocalMessages);
 
@@ -480,34 +481,41 @@ export default function Dashboard() {
         },
         // onModelComplete
         (modelName, message, tokenUsage) => {
+          // Compute next streaming map
           const s = streamingStateRef.current.get(convId);
+          let nextStreamingMessages = s ? new Map(s.messages) : new Map<string, StreamingMessage>();
+          nextStreamingMessages.delete(modelName);
           if (s) {
-            const newMessages = new Map(s.messages);
-            newMessages.delete(modelName);
-            streamingStateRef.current.set(convId, { ...s, typingModel: null, messages: newMessages });
-            if (activeConvIdRef.current === convId) {
-              setTypingModel(null);
-              setStreamingMessages(new Map(newMessages));
-            }
+            streamingStateRef.current.set(convId, { ...s, typingModel: null, messages: nextStreamingMessages });
           }
-          if (activeConvIdRef.current === convId) {
-            upsertLocalMessage(message);
-          }
-          // Track token usage for this model
+
+          // Compute next token map
+          let nextTokensByModel: Map<string, ModelTokenUsage> | null = null;
           if (tokenUsage && (tokenUsage.totalTokens > 0 || tokenUsage.promptTokens > 0 || tokenUsage.completionTokens > 0)) {
-            const convTokens = tokenTrackingRef.current.get(convId) ?? new Map<string, ModelTokenUsage>();
+            const convTokens = new Map(tokenTrackingRef.current.get(convId) ?? new Map<string, ModelTokenUsage>());
             const existing = convTokens.get(modelName);
-            const updated: ModelTokenUsage = {
+            convTokens.set(modelName, {
               modelName,
               promptTokens: (existing?.promptTokens ?? 0) + tokenUsage.promptTokens,
               completionTokens: (existing?.completionTokens ?? 0) + tokenUsage.completionTokens,
               totalTokens: (existing?.totalTokens ?? 0) + tokenUsage.totalTokens,
-            };
-            convTokens.set(modelName, updated);
+            });
             tokenTrackingRef.current.set(convId, convTokens);
-            if (activeConvIdRef.current === convId) {
-              setTokensByModel(new Map(convTokens));
-            }
+            nextTokensByModel = convTokens;
+          }
+
+          if (activeConvIdRef.current === convId) {
+            // Batch all state updates for this model completion into one React render
+            setTypingModel(null);
+            setStreamingMessages(new Map(nextStreamingMessages));
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === message.id);
+              if (idx === -1) return sortMessagesChronologically([...prev, message]);
+              const next = [...prev];
+              next[idx] = message;
+              return sortMessagesChronologically(next);
+            });
+            if (nextTokensByModel) setTokensByModel(new Map(nextTokensByModel));
           }
         },
         // onUserMessage
@@ -522,8 +530,11 @@ export default function Dashboard() {
         () => {
           streamingStateRef.current.delete(convId);
           setPendingAttachmentPayload(undefined);
+          // Extend the grace window so the conversationData sync effect doesn't
+          // overwrite locally committed messages with a stale server snapshot
           streamSettlingUntilRef.current = Date.now() + POST_STREAM_SYNC_GRACE_MS;
           if (activeConvIdRef.current === convId) {
+            // Batch final cleanup into one render
             setIsStreaming(false);
             setTypingModel(null);
             setStreamingMessages(new Map());
