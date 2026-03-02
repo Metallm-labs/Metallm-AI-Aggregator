@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, Zap, Globe, ExternalLink, ChevronRight, Paperclip } from "lucide-react";
+import { User, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, Zap, Globe, ExternalLink, ChevronRight, Paperclip, Brain } from "lucide-react";
 import { MarkdownRenderer } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -25,6 +25,28 @@ function formatAttachmentSize(bytes?: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// ── Parse <think> blocks out of model content ──────────────────────────────
+function parseThinkingContent(raw: string): { thinkingBlocks: string[]; visibleContent: string } {
+    const thinkingBlocks: string[] = [];
+    // Match complete <think>...</think> blocks (case-insensitive, multiline)
+    const cleaned = raw.replace(/<think>([\s\S]*?)<\/think>/gi, (_match, inner: string) => {
+        const trimmed = inner.trim();
+        if (trimmed) thinkingBlocks.push(trimmed);
+        return "";
+    });
+    // Handle unclosed <think> block during streaming
+    const openIdx = cleaned.lastIndexOf("<think>");
+    const closeIdx = cleaned.lastIndexOf("</think>");
+    let visibleContent = cleaned;
+    if (openIdx !== -1 && openIdx > closeIdx) {
+        // Currently streaming inside a think block — hide the partial tag
+        const partial = cleaned.slice(openIdx + 7).trim();
+        if (partial) thinkingBlocks.push(partial + " ▌");
+        visibleContent = cleaned.slice(0, openIdx);
+    }
+    return { thinkingBlocks, visibleContent: visibleContent.trim() };
+}
+
 // Dynamic model colors configuration
 const modelConfig: Record<string, { color: string; bgColor: string }> = {
     // OpenRouter Models
@@ -36,6 +58,15 @@ const modelConfig: Record<string, { color: string; bgColor: string }> = {
     "Qwen 2.5": { color: "text-pink-400", bgColor: "bg-pink-500/20" },
     "Gemma 3 12B": { color: "text-amber-400", bgColor: "bg-amber-500/20" },
     "GLM 4.5": { color: "text-teal-400", bgColor: "bg-teal-500/20" },
+    "Trinity Large": { color: "text-orange-400", bgColor: "bg-orange-500/20" },
+    // Groq Models
+    "LLaMA 3.3 70B": { color: "text-blue-400", bgColor: "bg-blue-500/20" },
+    "LLaMA 4 Maverick": { color: "text-violet-400", bgColor: "bg-violet-500/20" },
+    "LLaMA 4 Scout": { color: "text-green-400", bgColor: "bg-green-500/20" },
+    "Kimi K2": { color: "text-cyan-400", bgColor: "bg-cyan-500/20" },
+    "Qwen 3 32B": { color: "text-orange-400", bgColor: "bg-orange-500/20" },
+    "GPT OSS 120B": { color: "text-lime-400", bgColor: "bg-lime-500/20" },
+    "Groq Compound": { color: "text-yellow-400", bgColor: "bg-yellow-500/20" },
     // Summary
     "Summary": { color: "text-yellow-400", bgColor: "bg-gradient-to-br from-yellow-500/20 to-orange-500/20" },
     // Legacy models
@@ -73,6 +104,7 @@ export function ChatMessage({
     const [editContent, setEditContent] = useState(content);
     const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
     const [showSources, setShowSources] = useState(false);
+    const [showThinking, setShowThinking] = useState(false);
     const [previewImage, setPreviewImage] = useState<{ name: string; url: string } | null>(null);
     const isSummary = modelName === "Summary" || metadata?.isSummary;
     const userAttachments = Array.isArray(metadata?.attachments) ? metadata.attachments as Array<{
@@ -84,8 +116,12 @@ export function ChatMessage({
         fullDataUrl?: string;
     }> : [];
 
+    // Parse thinking blocks from content (Groq/DeepSeek models emit <think>...</think>)
+    const { thinkingBlocks, visibleContent } = !isUser ? parseThinkingContent(content) : { thinkingBlocks: [], visibleContent: content };
+    const hasThinking = thinkingBlocks.length > 0;
+
     const handleCopy = async () => {
-        await navigator.clipboard.writeText(content);
+        await navigator.clipboard.writeText(isUser ? content : visibleContent);
         toast({ description: "Copied to clipboard" });
     };
 
@@ -202,8 +238,38 @@ export function ChatMessage({
                                         ? "rounded-2xl px-4 py-3 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/15 rounded-bl-sm"
                                         : "py-1"
                                 )}>
+                                    {/* ── Expandable Thinking / Reasoning Section ── */}
+                                    {hasThinking && (
+                                        <div className="mb-3">
+                                            <button
+                                                onClick={() => setShowThinking(s => !s)}
+                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/15 transition-colors text-[11px] text-purple-300 hover:text-purple-200 w-full text-left"
+                                            >
+                                                <Brain className="w-3 h-3 flex-shrink-0" />
+                                                <span className="font-medium">
+                                                    {isStreaming && !content.includes("</think>") ? "Thinking…" : "View Reasoning"}
+                                                </span>
+                                                <ChevronDown className={cn("w-3 h-3 ml-auto transition-transform flex-shrink-0", showThinking && "rotate-180")} />
+                                            </button>
+                                            <AnimatePresence>
+                                                {showThinking && (
+                                                    <motion.div
+                                                        initial={{ height: 0, opacity: 0 }}
+                                                        animate={{ height: "auto", opacity: 1 }}
+                                                        exit={{ height: 0, opacity: 0 }}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="overflow-hidden"
+                                                    >
+                                                        <div className="mt-1.5 px-3 py-2.5 rounded-lg bg-purple-500/5 border border-purple-500/15 text-xs text-purple-200/70 leading-relaxed whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                                                            {thinkingBlocks.join("\n\n---\n\n")}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    )}
                                     <div className="prose prose-invert prose-sm sm:prose-base max-w-none overflow-hidden [&>p]:text-gray-100 [&>p]:font-normal [&>p]:leading-relaxed [&>ul]:text-gray-100 [&>ol]:text-gray-100 [&>li]:text-gray-100 [&>code]:text-[#9cdcfe] [&>pre]:bg-[#1e1e1e] [&_pre]:max-w-full [&_pre]:overflow-x-auto">
-                                        <MarkdownRenderer content={content} />
+                                        <MarkdownRenderer content={visibleContent || (isStreaming ? "" : content)} />
                                         {isStreaming && (
                                             <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />
                                         )}

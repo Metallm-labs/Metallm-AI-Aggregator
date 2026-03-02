@@ -8,6 +8,8 @@ export interface ModelTokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  /** true when the provider doesn't report token counts (e.g. groq/compound) */
+  unavailable?: boolean;
 }
 
 export interface TokenCounterProps {
@@ -80,10 +82,12 @@ export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps)
   const [isOpen, setIsOpen] = useState(false);
 
   const models = Array.from(tokensByModel.values());
-  const totalPrompt = models.reduce((sum, m) => sum + m.promptTokens, 0);
-  const totalCompletion = models.reduce((sum, m) => sum + m.completionTokens, 0);
-  const totalTokens = models.reduce((sum, m) => sum + m.totalTokens, 0);
-  const totalCost = models.reduce((sum, m) => sum + getModelCost(m), 0);
+  // Only count available models in totals
+  const availableModels = models.filter(m => !m.unavailable);
+  const totalPrompt = availableModels.reduce((sum, m) => sum + m.promptTokens, 0);
+  const totalCompletion = availableModels.reduce((sum, m) => sum + m.completionTokens, 0);
+  const totalTokens = availableModels.reduce((sum, m) => sum + m.totalTokens, 0);
+  const totalCost = availableModels.reduce((sum, m) => sum + getModelCost(m), 0);
 
   const modelSlices = models.map((m, i) => ({
     model: m,
@@ -92,7 +96,7 @@ export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps)
     cost: getModelCost(m),
   }));
 
-  if (totalTokens === 0) return null;
+  if (models.length === 0) return null;
 
   return (
     <>
@@ -116,7 +120,9 @@ export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps)
           title="Token usage"
         >
           <Coins className="w-3.5 h-3.5 text-yellow-400" />
-          <span className="text-white/80">{formatTokenCount(totalTokens)}</span>
+          <span className="text-white/80">
+            {totalTokens > 0 ? formatTokenCount(totalTokens) : "N/A"}
+          </span>
           {totalCost > 0 && (
             <span className="text-emerald-400/80 text-[10px] ml-0.5">{formatCost(totalCost)}</span>
           )}
@@ -259,6 +265,19 @@ export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps)
                         animate={{ opacity: 1, x: 0 }}
                         className={cn("rounded-lg border p-2.5", slice.color.bg, slice.color.border)}
                       >
+                        {slice.model.unavailable ? (
+                          // Model responded but Groq does not expose token counts for it
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className={cn("w-2.5 h-2.5 rounded-full", slice.color.solid)} />
+                              <span className={cn("text-xs font-semibold", slice.color.text)}>
+                                {slice.model.modelName}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-white/40 italic">tokens N/A from API</span>
+                          </div>
+                        ) : (
+                        <>
                         <div className="flex items-center justify-between mb-1.5">
                           <div className="flex items-center gap-2">
                             <div className={cn("w-2.5 h-2.5 rounded-full", slice.color.solid)} />
@@ -299,6 +318,8 @@ export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps)
                           <div className="mt-1 text-[9px] text-muted-foreground/40">
                             ${pricing.input}/1M in · ${pricing.output}/1M out
                           </div>
+                        )}
+                        </>
                         )}
                       </motion.div>
                     );

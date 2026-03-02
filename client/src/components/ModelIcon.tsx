@@ -29,6 +29,15 @@ const MODEL_LOCAL_URL_MAP: Record<string, string> = {
     "Qwen": "/icons/qwen.svg",
     "GLM 4.5": "/icons/glm.svg",
     "GLM": "/icons/glm.svg",
+    "Trinity Large": "/icons/mistral.svg",
+    // Groq-hosted models
+    "LLaMA 3.3 70B": "/icons/meta.svg",
+    "LLaMA 4 Maverick": "/icons/meta.svg",
+    "LLaMA 4 Scout": "/icons/meta.svg",
+    "Kimi K2": "/icons/moonshot.svg",
+    "Qwen 3 32B": "/icons/qwen.svg",
+    "GPT OSS 120B": "/icons/openai.svg",
+    "Groq Compound": "/icons/groq.svg",
 };
 
 // Generic placeholder for models not in the map

@@ -551,17 +551,33 @@ export default function Dashboard() {
 
           // Compute next token map
           let nextTokensByModel: Map<string, ModelTokenUsage> | null = null;
-          if (tokenUsage && (tokenUsage.totalTokens > 0 || tokenUsage.promptTokens > 0 || tokenUsage.completionTokens > 0)) {
+          const hasRealTokens = tokenUsage && (tokenUsage.totalTokens > 0 || tokenUsage.promptTokens > 0 || tokenUsage.completionTokens > 0);
+          if (hasRealTokens) {
             const convTokens = new Map(tokenTrackingRef.current.get(convId) ?? new Map<string, ModelTokenUsage>());
             const existing = convTokens.get(modelName);
             convTokens.set(modelName, {
               modelName,
-              promptTokens: (existing?.promptTokens ?? 0) + tokenUsage.promptTokens,
-              completionTokens: (existing?.completionTokens ?? 0) + tokenUsage.completionTokens,
-              totalTokens: (existing?.totalTokens ?? 0) + tokenUsage.totalTokens,
+              promptTokens: (existing?.promptTokens ?? 0) + tokenUsage!.promptTokens,
+              completionTokens: (existing?.completionTokens ?? 0) + tokenUsage!.completionTokens,
+              totalTokens: (existing?.totalTokens ?? 0) + tokenUsage!.totalTokens,
             });
             tokenTrackingRef.current.set(convId, convTokens);
             nextTokensByModel = convTokens;
+          } else if (!tokenUsage) {
+            // Provider responded but didn't return token counts (e.g. groq/compound)
+            // Still show the model in the counter with an "N/A" indicator
+            const convTokens = new Map(tokenTrackingRef.current.get(convId) ?? new Map<string, ModelTokenUsage>());
+            if (!convTokens.has(modelName)) {
+              convTokens.set(modelName, {
+                modelName,
+                promptTokens: 0,
+                completionTokens: 0,
+                totalTokens: 0,
+                unavailable: true,
+              });
+              tokenTrackingRef.current.set(convId, convTokens);
+              nextTokensByModel = convTokens;
+            }
           }
 
           if (activeConvIdRef.current === convId) {

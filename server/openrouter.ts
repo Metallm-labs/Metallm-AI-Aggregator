@@ -1,7 +1,8 @@
-// OpenRouter + Gemini API integration for multi-model AI aggregation
+// OpenRouter + Gemini + Groq API integration for multi-model AI aggregation
 // Model definitions are in server/models.json — edit that file to add/change models.
 import { GoogleGenAI } from "@google/genai";
 import modelsJson from "./models.json";
+import { callGroqStream } from "./providers/groq";
 
 // ================================
 // === Web Search Types ===
@@ -756,6 +757,46 @@ export async function callModelStream(
             return { content: result.content, sources: [...webSources, ...result.sources], tokenUsage: result.tokenUsage };
         }
         throw lastError!;
+    } else if (model.provider === "groq") {
+        // ── Groq ──────────────────────────────────────────────────────
+        // Ultra-fast inference via Groq Cloud API (OpenAI-compatible).
+        // Supports web search via the same DDG pipeline as OpenRouter.
+        const lastUserMsgGroq = [...messages].reverse().find(m => m.role === "user")?.content ?? "";
+        let groqWebSources: WebSource[] = [];
+        let groqSystemPrompt = enrichedSystemPrompt;
+
+        if (userWantsWebSearch) {
+            console.log(`[WebSearch/Groq] User enabled web search for query: "${lastUserMsgGroq.substring(0, 60)}"`);
+            const { context: webCtx, sources } = await fetchWebContext(lastUserMsgGroq, onStatus);
+            groqWebSources = sources;
+            if (webCtx) {
+                groqSystemPrompt += `\n\n${webCtx}\n\nThe above are fresh web search results. Use them to answer the user's question. For factual, numerical, or time-sensitive claims, prefer these results over your training data. Cite sources when you use them.`;
+            }
+        }
+
+        let lastErr: Error | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                const result = await callGroqStream(model.id, messages, onChunk, {
+                    ...options,
+                    systemPrompt: groqSystemPrompt,
+                });
+                // Merge DDG pipeline sources + compound model's built-in search sources
+                const allGroqSources = [...groqWebSources, ...result.sources];
+                return { content: result.content, sources: allGroqSources, tokenUsage: result.tokenUsage };
+            } catch (e: any) {
+                lastErr = e;
+                const msg = String(e?.message || "");
+                const isConnErr = msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT") || msg.includes("UND_ERR_CONNECT_TIMEOUT");
+                if (isConnErr && attempt < 2) {
+                    console.warn(`[Groq] Connection error attempt ${attempt + 1}/3, retrying in ${(attempt + 1) * 2}s...`);
+                    await sleep((attempt + 1) * 2_000);
+                    continue;
+                }
+                throw e;
+            }
+        }
+        throw lastErr!;
     } else {
         // ── OpenRouter ──────────────────────────────────────────────
         // Web search ONLY when user explicitly enabled it via the toggle.
