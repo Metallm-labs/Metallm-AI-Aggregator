@@ -106,7 +106,6 @@ function TypingText({ texts, className = "" }: { texts: string[]; className?: st
 
 /* ─── Neural Network Brain Canvas ─── */
 function NeuralNetworkCanvas() {
-  const [isDesktop, setIsDesktop] = useState(() => (typeof window === "undefined" ? true : window.innerWidth >= 1024));
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef({ x: -1000, y: -1000 });
   const animFrameRef = useRef<number>(0);
@@ -116,13 +115,6 @@ function NeuralNetworkCanvas() {
   const initedRef = useRef(false);
 
   useEffect(() => {
-    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  useEffect(() => {
-    if (!isDesktop) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -558,7 +550,7 @@ function NeuralNetworkCanvas() {
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [isDesktop]);
+  }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -585,12 +577,10 @@ function NeuralNetworkCanvas() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleMouseLeave}
     >
-      {isDesktop ? (
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
-        />
-      ) : null}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full"
+      />
     </div>
   );
 }
