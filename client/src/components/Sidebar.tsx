@@ -1,7 +1,7 @@
 import { Menu, MessageSquare, Trash2, PanelLeftClose, PanelLeft, LogOut, Search, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetClose, SheetTrigger } from "@/components/ui/sheet";
 import { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useConversations, useDeleteConversation } from "@/hooks/use-chat";
@@ -41,10 +41,10 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
     });
   };
 
-  const NavContent = ({ collapsed = false }: { collapsed?: boolean }) => (
+  const NavContent = ({ collapsed = false, isMobile = false }: { collapsed?: boolean; isMobile?: boolean }) => (
     <div className={cn(
       "flex flex-col h-full bg-card/50 backdrop-blur-xl border-r border-white/5 transition-all duration-300",
-      collapsed ? "w-16" : "w-64"
+      isMobile ? "w-full" : collapsed ? "w-16" : "w-64"
     )}>
       {/* Header with collapse button */}
       <div className={cn("p-4 border-b border-white/5", collapsed && "px-2")}>
@@ -60,8 +60,21 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
               </div>
             )}
           </div>
+          {/* Mobile close button — inside the sidebar header */}
+          {isMobile && (
+            <SheetClose asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-8 h-8 text-muted-foreground hover:text-white hover:bg-white/5"
+                title="Close sidebar"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </SheetClose>
+          )}
           {/* Collapse Toggle (Desktop Only) */}
-          {!collapsed && (
+          {!collapsed && !isMobile && (
             <Button
               variant="ghost"
               size="icon"
@@ -246,8 +259,8 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
               <Menu className="w-5 h-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-80 bg-background border-r border-white/10">
-            <NavContent collapsed={false} />
+          <SheetContent side="left" className="p-0 w-80 bg-background border-r border-white/10" hideClose>
+            <NavContent collapsed={false} isMobile />
           </SheetContent>
         </Sheet>
       </div>
