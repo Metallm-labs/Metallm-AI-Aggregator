@@ -184,8 +184,8 @@ export default function Dashboard() {
           return data.models.slice(0, MAX_MULTI_MODELS).map((m: any) => m.id);
         });
         setDebateParticipants((prev) => prev.length > 0 ? prev : [
-          { modelId: data.models[0]?.id ?? "", customRole: data.models[0]?.role ?? "", customSystemPrompt: "" },
-          { modelId: data.models[1]?.id ?? data.models[0]?.id ?? "", customRole: data.models[1]?.role ?? "", customSystemPrompt: "" },
+          { modelId: data.models[0]?.id ?? "", customRole: "", customSystemPrompt: "" },
+          { modelId: data.models[1]?.id ?? data.models[0]?.id ?? "", customRole: "", customSystemPrompt: "" },
         ]);
       }
     } catch (e) {
@@ -649,6 +649,8 @@ export default function Dashboard() {
         perModelPromptsArg,
         attachmentPayload?.context,
         attachmentPayload?.attachments,
+        mode === "debate" ? roundNumber : undefined,
+        mode === "debate" ? debateRoundsRef.current : undefined,
       );
     } catch (error: any) {
       // Ignore abort errors (user clicked stop)

@@ -229,6 +229,8 @@ export function useSendMessage() {
         perModelPrompts?: Array<{ modelId: string; displayName: string; prompt: string }>,
         attachmentContext?: string,
         attachments?: ChatAttachmentMeta[],
+        roundNumber?: number,
+        totalRounds?: number,
     ) => {
         const res = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
             method: "POST",
@@ -244,6 +246,8 @@ export function useSendMessage() {
                 perModelPrompts,
                 attachmentContext,
                 attachments,
+                roundNumber,
+                totalRounds,
             }),
             credentials: "include",
             signal,

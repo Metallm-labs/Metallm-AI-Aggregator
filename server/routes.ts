@@ -506,10 +506,11 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
           originalPrompt: content,
         });
       } else {
-        // Debate mode — main model reads full debater configs and generates per-debater prompts
+        // Debate mode — NO prompt enhancement, NO per-model tailoring.
+        // Send the EXACT same user prompt to both debaters.
+        // Custom roles from debateConfig completely override default model roles.
 
-        // 1. Build the debater list — debateConfig (with custom role/systemPrompt) wins,
-        //    then selectedModelIds, then first 3 available models.
+        // 1. Build the debater list — debateConfig (with custom role) wins.
         type DebaterEntry = typeof currentModels[number] & { customSystemPrompt?: string };
         let debateModels: DebaterEntry[];
         if (Array.isArray(debateConfig) && debateConfig.length >= 2) {
@@ -517,8 +518,9 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
             const base = currentModels.find((m) => m.id === p.modelId) ?? currentModels[0];
             return {
               ...base,
-              role: p.customRole || base.role,
-              systemPrompt: p.customSystemPrompt || base.systemPrompt,
+              // COMPLETELY replace default role with custom role if provided
+              role: p.customRole && p.customRole.trim() ? p.customRole.trim() : base.role,
+              systemPrompt: p.customSystemPrompt || "",
               customSystemPrompt: p.customSystemPrompt,
             };
           });
@@ -529,73 +531,17 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
           debateModels = currentModels.slice(0, 3);
         }
 
-        // 2. Rephrase user input into a complete debate topic
-        let enhancedPrompt = content;
-        try {
-          const result = await callModel(getMainModel(), [{
-            role: "user",
-            content: `You are a debate facilitator. Rephrase the following user input as a clear, complete, neutral debate topic or question (1–2 sentences). Do NOT shorten, truncate, or cut it off. Return ONLY the rephrased topic — no intro, no commentary.
+        // 2. NO enhancement — use exact user prompt as-is
+        const enhancedPrompt = content;
 
-User input: "${content}"
-
-Debate topic:`,
-          }], { maxTokens: 200, temperature: 0.3 });
-          enhancedPrompt = result.replace(/^["']+|["']+$/g, "").trim() || content;
-        } catch (e) {
-          console.error("Debate topic enhancement failed:", e);
-        }
-
-        // 3. Ask the main model to generate a tailored prompt for EACH debater,
-        //    using their full config: role, system prompt, and personality.
+        // 3. Same prompt for all debaters — no tailoring, no stance generation
         const perModelPrompts: { modelId: string; displayName: string; prompt: string; stance: string }[] =
-          debateModels.map((m) => ({ modelId: m.id, displayName: m.displayName, prompt: enhancedPrompt, stance: m.role }));
-
-        try {
-          const debaterDescriptions = debateModels.map((m, i) => {
-            const sysSnippet = m.systemPrompt ? m.systemPrompt.slice(0, 300) : "(no system prompt)";
-            return `${i + 1}. id="${m.id}"
-   name: ${m.displayName}
-   role/specialty: ${m.role}
-   personality (system prompt excerpt): ${sysSnippet}`;
-          }).join("\n\n");
-
-          const stanceReq = `You are a master debate facilitator and prompt engineer. A user wants to run a structured debate between multiple AI models.
-
-Debate topic: "${enhancedPrompt}"
-
-Debaters (with their full personality/role config):
-${debaterDescriptions}
-
-Your job:
-1. Assign each debater a DISTINCT debate stance (e.g. "strongly in favour", "strongly against", "devil's advocate", "neutral analyst", "ethical critic", "pragmatist", etc.) — no two debaters may share the same stance.
-2. Write a tailored opening-argument prompt FOR each debater that:
-   - Tells them exactly what stance to argue
-   - Frames the debate topic in a way that plays to THEIR specific role and personality (use what you know from their system prompt excerpt)
-   - Is concrete, specific, and compelling — not generic
-   - Is 2–4 sentences long
-
-Return ONLY a valid JSON array — no markdown fences, no explanation.
-
-Format: [{"modelId":"<exact id>","stance":"<stance label>","prompt":"<tailored opening prompt>"}]`;
-
-          const raw = await callModel(getMainModel(), [{ role: "user", content: stanceReq }], {
-            maxTokens: 2000,
-            temperature: 0.4,
-          });
-          const jsonStr = raw.replace(/```json|```/g, "").trim();
-          const parsed = JSON.parse(jsonStr);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((p: any) => {
-              const idx = perModelPrompts.findIndex((x) => x.modelId === p.modelId);
-              if (idx !== -1) {
-                perModelPrompts[idx].prompt = String(p.prompt || enhancedPrompt);
-                perModelPrompts[idx].stance = String(p.stance || debateModels[idx].role);
-              }
-            });
-          }
-        } catch (e) {
-          console.error("Debate per-model prompt generation failed, using defaults:", e);
-        }
+          debateModels.map((m) => ({
+            modelId: m.id,
+            displayName: m.displayName,
+            prompt: content,  // exact same user prompt
+            stance: m.role,   // their assigned role IS their stance
+          }));
 
         res.json({
           routingType: "debate",
@@ -944,87 +890,235 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
         // === DEBATE MODE ===
         // ===========================================
       } else if (mode === "debate") {
-        const debateRounds = 2;
-        let debaters: typeof currentModels;
+        // Single round per server call — the client handles multi-round via betweenRoundState
+        const serverRound = 1;
+
+        // Build debaters with CUSTOM roles completely overriding defaults
+        let debaters: (typeof currentModels[number] & { customRole?: string })[];
         if (Array.isArray(debateConfig) && debateConfig.length >= 2) {
-          debaters = debateConfig.map((p: { modelId: string; customRole: string; customSystemPrompt: string }) => {
+          debaters = debateConfig.map((p: { modelId: string; customRole?: string; customSystemPrompt?: string }) => {
             const base = currentModels.find((m) => m.id === p.modelId) ?? currentModels[0];
-            return { ...base, role: p.customRole || base.role, systemPrompt: p.customSystemPrompt || base.systemPrompt };
+            return {
+              ...base,
+              // COMPLETELY replace model's default role with user's custom role
+              role: p.customRole && p.customRole.trim() ? p.customRole.trim() : base.role,
+              systemPrompt: "",  // ignore default system prompt — debate has its own
+              customRole: p.customRole?.trim() || undefined,
+            };
           });
         } else if (Array.isArray(perModelPrompts) && perModelPrompts.length >= 2) {
-          // Use models selected during routing step
           debaters = perModelPrompts
-            .map((p: any) => currentModels.find((m) => m.id === p.modelId))
-            .filter(Boolean) as typeof currentModels;
+            .map((p: any) => {
+              const base = currentModels.find((m) => m.id === p.modelId);
+              if (!base) return null;
+              return { ...base, role: p.stance || base.role };
+            })
+            .filter(Boolean) as typeof debaters;
           if (debaters.length < 2) debaters = currentModels.slice(0, 3);
         } else {
           debaters = currentModels.slice(0, 3);
         }
+
+        // Determine round number from request body (client tracks this)
+        const clientRoundNumber = typeof req.body.roundNumber === "number" ? req.body.roundNumber : 1;
+        const totalRounds = typeof req.body.totalRounds === "number" ? req.body.totalRounds : 1;
+
+        // Determine debate phase from round number and total
+        function getDebatePhase(round: number, total: number): "opening" | "rebuttal" | "closing" {
+          if (total <= 1) return "opening";
+          if (round === 1) return "opening";
+          if (round === total) return "closing";
+          return "rebuttal";
+        }
+        const debatePhase = getDebatePhase(clientRoundNumber, totalRounds);
+
+        // Build the opponent info string for each debater
+        function getOpponentInfo(currentDebater: typeof debaters[number], allDebaters: typeof debaters): string {
+          return allDebaters
+            .filter(d => d.id !== currentDebater.id)
+            .map(d => `"${d.displayName}" arguing as "${d.role}"`)
+            .join(", ");
+        }
+
+        // Build aggressive debate system prompt — this REPLACES the default metallm system prompt
+        function buildDebateSystemPrompt(
+          debater: typeof debaters[number],
+          allDebaters: typeof debaters,
+          phase: "opening" | "rebuttal" | "closing",
+          round: number,
+          total: number,
+        ): string {
+          const opponentInfo = getOpponentInfo(debater, allDebaters);
+          const roleInstruction = debater.role
+            ? `You ARE "${debater.role}". This is your IDENTITY in this debate. You believe in this position with absolute conviction. Every word you say must reflect this role. FORGET any default AI assistant personality — you are ONLY "${debater.role}" now.`
+            : `You are ${debater.displayName} with your own strong opinions.`;
+
+          const phaseInstructions: Record<string, string> = {
+            opening: `THIS IS YOUR OPENING ARGUMENT (Round ${round} of ${total}).
+- State your position clearly and forcefully
+- Present your 2-3 strongest arguments with concrete evidence or logic
+- Set the tone — be bold, provocative, and unapologetic
+- Make your opponent WANT to respond
+- Do NOT acknowledge the other side's potential merit — that's weakness`,
+
+            rebuttal: `THIS IS A REBUTTAL ROUND (Round ${round} of ${total}).
+- You MUST directly attack your opponent's specific arguments from the previous round
+- Quote or reference their exact points and tear them apart
+- Expose logical fallacies, weak evidence, and contradictions in their reasoning
+- Present counter-evidence that demolishes their position
+- Do NOT repeat your opening arguments — advance NEW points
+- Be relentless — every sentence should be a counter-punch`,
+
+            closing: `THIS IS YOUR CLOSING ARGUMENT (Round ${round} of ${total} — FINAL ROUND).
+- Summarize WHY you won this debate
+- Highlight the strongest moments of YOUR argument
+- Point out where your opponent failed to counter your key points
+- Deliver a devastating final statement that leaves no doubt
+- Be memorable — this is your last word, make it count
+- Do NOT introduce brand new arguments — synthesize and conclude`,
+          };
+
+          return `=== METALLM AGGRESSIVE DEBATE MODE ===
+
+YOU ARE IN A COMPETITIVE DEBATE. THIS IS NOT A POLITE AI CONFERENCE. THIS IS A FIERCE, AGGRESSIVE DEBATE.
+
+${roleInstruction}
+
+Your opponent(s): ${opponentInfo}
+
+DEBATE STRUCTURE:
+- Total rounds: ${total}
+- Current round: ${round}
+- Phase: ${phase.toUpperCase()}
+
+${phaseInstructions[phase]}
+
+=== MANDATORY RULES (VIOLATION = PENALTY) ===
+
+1. ROLE LOCK: You are ONLY "${debater.role}". Do NOT break character. Do NOT say "as an AI" or "I don't have opinions". You HAVE strong opinions — that's your job here.
+
+2. NO COPYING: NEVER repeat, paraphrase, or agree with your opponent's arguments. If you find yourself agreeing, FIND A WAY TO DISAGREE. This is a debate, not a discussion.
+
+3. SHORT & SHARP: Keep your response focused and punchy. 150-250 words MAX. No filler, no hedging, no "on the other hand". Every sentence must advance YOUR position.
+
+4. ATTACK MODE: Directly challenge your opponent. Use their name/role when addressing their points. Be specific — vague disagreement is weak.
+
+5. NO FENCE-SITTING: Do NOT say "both sides have valid points" or "it depends". Pick your side and FIGHT for it.
+
+6. EVIDENCE & LOGIC: Back your claims with reasoning, examples, data, or analogies. Bare assertions are penalties.
+
+7. COUNTER-PUNCHING: In rebuttal/closing rounds, you MUST reference and dismantle specific opponent arguments. Generic responses = penalty.
+
+8. UNIQUE VOICE: Your argument style must reflect your role "${debater.role}". Bring that perspective's unique insights, not generic debate points.
+
+PENALTIES (invisible judge is scoring):
+- Repeating opponent's points: -10 points
+- Breaking character: -15 points
+- Being too agreeable/diplomatic: -10 points
+- Going over word limit: -5 points
+- Failing to address opponent's arguments (in rebuttal/closing): -20 points
+- Using "as an AI" or similar disclaimers: -25 points
+- Generic filler without substance: -10 points
+
+BONUS POINTS:
+- Devastating counter-argument: +15 points
+- Creative analogy or example: +10 points
+- Exposing opponent's logical fallacy: +20 points
+- Memorable closing line: +10 points
+- Using role-specific expertise effectively: +15 points
+
+Platform: Metallm AI Aggregator — Debate Mode
+You are: ${debater.displayName} (${debater.id})
+Your debate role: ${debater.role}
+
+NOW ARGUE. BE FIERCE. WIN THIS DEBATE.`;
+        }
+
         let debateContext = `Debate topic: ${promptToSend}\n\n`;
 
-        for (let round = 0; round < debateRounds; round++) {
-          for (const debater of debaters) {
-            // Find the tailored per-model prompt from the routing step
-            const perModelEntry = Array.isArray(perModelPrompts)
-              ? (perModelPrompts as any[]).find((p) => p.modelId === debater.id)
-              : null;
+        // Collect previous messages for rebuttal context
+        const previousDebateMessages = historyForContext
+          .filter(m => m.role === "assistant" && m.metadata && (m.metadata as any).debateRound)
+          .map(m => `[${m.modelName} — Round ${(m.metadata as any).debateRound}]: ${m.content}`)
+          .join("\n\n");
 
-            const stance = perModelEntry?.stance || debater.role;
-            sendSSE(res, "model_start", { modelName: debater.displayName, round: round + 1, stance });
-            const contextMessages = buildContextMessagesForModel(historyForContext, debater.displayName);
-            const debateSystemPrompt = buildMetallmSystemPrompt(
-              debater.systemPrompt,
-              debater,
-              "debate",
-              historyForContext
-            );
+        if (previousDebateMessages) {
+          debateContext += `Previous rounds:\n${previousDebateMessages}\n\n`;
+        }
 
-            let debatePrompt: string;
-            if (round === 0 && perModelEntry?.prompt) {
-              // Use the tailored opening prompt from routing
-              debatePrompt = perModelEntry.prompt;
-            } else {
-              // Subsequent rounds: react to previous arguments
-              debatePrompt = `You are ${debater.displayName} in a structured debate, arguing from the perspective of "${stance}".
+        for (const debater of debaters) {
+          const perModelEntry = Array.isArray(perModelPrompts)
+            ? (perModelPrompts as any[]).find((p) => p.modelId === debater.id)
+            : null;
 
-Debate topic: ${promptToSend}
+          const stance = perModelEntry?.stance || debater.role;
+          sendSSE(res, "model_start", {
+            modelName: debater.displayName,
+            round: clientRoundNumber,
+            totalRounds,
+            phase: debatePhase,
+            stance,
+          });
 
-Previous discussion:
-${debateContext}
+          // Build the debate-specific system prompt (completely replaces default)
+          const debateSystemPrompt = buildDebateSystemPrompt(
+            debater,
+            debaters,
+            debatePhase,
+            clientRoundNumber,
+            totalRounds,
+          );
 
-Round ${round + 1} — Respond directly to the most recent arguments above. Challenge or support specific points made by other participants using your expertise (${debater.role}). Be thorough and persuasive — fully develop your argument.`;
-            }
-
-            let fullContent = "";
-            let debateTokenUsage: TokenUsage | undefined;
-            try {
-              const debateResult = await callModelStream(
-                debater,
-                [...contextMessages, { role: "user", content: debatePrompt }],
-                (chunk) => {
-                  sendSSE(res, "chunk", { modelName: debater.displayName, content: chunk });
-                },
-                { systemPrompt: debateSystemPrompt }
-              );
-              fullContent = debateResult.content;
-              debateTokenUsage = debateResult.tokenUsage;
-            } catch (e) {
-              console.error(`${debater.displayName} debate error:`, e);
-              fullContent = `[${debater.displayName}] Error in debate round.`;
-              sendSSE(res, "chunk", { modelName: debater.displayName, content: fullContent });
-            }
-
-            debateContext += `\n[${debater.displayName} — ${stance}]: ${fullContent}\n`;
-
-            const assistantMessage = await storage.addMessage({
-              conversationId,
-              role: "assistant",
-              content: fullContent,
-              modelName: debater.displayName,
-              metadata: { modelId: debater.id, role: debater.role, debateRound: round + 1, tokenUsage: debateTokenUsage ?? undefined },
-            });
-            sendSSE(res, "model_complete", { modelName: debater.displayName, message: assistantMessage, tokenUsage: debateTokenUsage });
+          // Build the user message — SAME prompt for all debaters, with debate context
+          let debatePrompt: string;
+          if (clientRoundNumber === 1) {
+            // Opening round — use exact user prompt
+            debatePrompt = `DEBATE TOPIC: ${content}\n\nDeliver your ${debatePhase} argument as "${stance}". Fight for your position.`;
+          } else {
+            // Subsequent rounds — include previous debate context for rebuttals
+            debatePrompt = `DEBATE TOPIC: ${content}\n\nPREVIOUS ARGUMENTS:\n${debateContext}\n\nRound ${clientRoundNumber} of ${totalRounds} (${debatePhase.toUpperCase()}).\nYou are "${stance}". Respond to your opponent's arguments above. Attack their weakest points. Defend your position. WIN.`;
           }
+
+          let fullContent = "";
+          let debateTokenUsage: TokenUsage | undefined;
+          try {
+            const debateResult = await callModelStream(
+              debater,
+              [{ role: "user", content: debatePrompt }],
+              (chunk) => {
+                sendSSE(res, "chunk", { modelName: debater.displayName, content: chunk });
+              },
+              {
+                systemPrompt: debateSystemPrompt,
+                maxTokens: 8192,
+              }
+            );
+            fullContent = debateResult.content;
+            debateTokenUsage = debateResult.tokenUsage;
+          } catch (e) {
+            console.error(`${debater.displayName} debate error:`, e);
+            fullContent = `[${debater.displayName}] Error in debate round.`;
+            sendSSE(res, "chunk", { modelName: debater.displayName, content: fullContent });
+          }
+
+          debateContext += `\n[${debater.displayName} — ${stance} — Round ${clientRoundNumber}]: ${fullContent}\n`;
+
+          const assistantMessage = await storage.addMessage({
+            conversationId,
+            role: "assistant",
+            content: fullContent,
+            modelName: debater.displayName,
+            metadata: {
+              modelId: debater.id,
+              role: debater.role,
+              debateRound: clientRoundNumber,
+              debatePhase,
+              totalRounds,
+              stance,
+              tokenUsage: debateTokenUsage ?? undefined,
+            },
+          });
+          sendSSE(res, "model_complete", { modelName: debater.displayName, message: assistantMessage, tokenUsage: debateTokenUsage });
         }
       }
 
