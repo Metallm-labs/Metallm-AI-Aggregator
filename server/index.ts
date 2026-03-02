@@ -3,6 +3,10 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import * as logger from "./logger";
+
+// Install global console patch so all server files get colorized output
+logger.installGlobalLogger();
 
 const app = express();
 const httpServer = createServer(app);
@@ -25,14 +29,7 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: "50mb" }));
 
 export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
+  logger.info(source, message);
 }
 
 app.use((req, res, next) => {
@@ -49,12 +46,7 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
+      logger.httpLog(req.method, path, res.statusCode, duration, capturedJsonResponse);
     }
   });
 
@@ -68,7 +60,8 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    console.error("Internal Server Error:", err);
+    logger.error("server", `Unhandled error [${status}]: ${message}`);
+    if (err.stack) console.error(err.stack);
 
     if (res.headersSent) {
       return next(err);

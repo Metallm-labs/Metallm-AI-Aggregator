@@ -3,6 +3,7 @@
 import { GoogleGenAI } from "@google/genai";
 import modelsJson from "./models.json";
 import { callGroqStream } from "./providers/groq";
+import * as logger from "./logger";
 
 // ================================
 // === Web Search Types ===
@@ -131,7 +132,7 @@ async function searchDDG(query: string, maxResults = 5): Promise<Array<{ title: 
             });
         }
         if (liteResults.length > 0) {
-            console.log(`[WebSearch] DDG lite found ${liteResults.length} results for: "${query.substring(0, 60)}"`);
+    console.log(`[WebSearch] DDG lite found ${liteResults.length} results for: "${query.substring(0, 60)}"`);
             return liteResults;
         }
     } catch (e) {
@@ -224,7 +225,7 @@ const gemini = new GoogleGenAI({
     },
 });
 
-export type ModelProvider = "gemini" | "openrouter" | "openai" | "anthropic" | "grok";
+export type ModelProvider = "gemini" | "openrouter" | "openai" | "anthropic" | "grok" | "groq";
 
 export interface ModelConfig {
     id: string;
@@ -722,12 +723,13 @@ export async function callModelStream(
                 lastError = e;
                 const errMsg = String(e?.message || "");
                 if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
-                    console.warn(`[Gemini] Rate limited (attempt ${attempt + 1}/3), waiting before retry...`);
-                    await sleep((attempt + 1) * 3_000);
+                    const waitSec = (attempt + 1) * 3;
+                    logger.rateLimit("Gemini", model.id, waitSec);
+                    await sleep(waitSec * 1_000);
                     continue;
                 }
                 if (errMsg.includes("fetch failed") || errMsg.includes("ECONNRESET") || errMsg.includes("ETIMEDOUT")) {
-                    console.warn(`[Gemini] Network error (attempt ${attempt + 1}/3), retrying...`);
+                    logger.warn("Gemini", `Network error (attempt ${attempt + 1}/3), retrying...`);
                     await sleep(1_000);
                     continue;
                 }
@@ -789,11 +791,18 @@ export async function callModelStream(
                 const msg = String(e?.message || "");
                 const isConnErr = msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT") || msg.includes("UND_ERR_CONNECT_TIMEOUT");
                 if (isConnErr && attempt < 2) {
-                    console.warn(`[Groq] Connection error attempt ${attempt + 1}/3, retrying in ${(attempt + 1) * 2}s...`);
+                    logger.warn("Groq", `Connection error attempt ${attempt + 1}/3, retrying in ${(attempt + 1) * 2}s...`);
                     await sleep((attempt + 1) * 2_000);
                     continue;
                 }
-                throw e;
+                if (msg.includes("429") || msg.includes("rate_limit_exceeded")) {
+                    // Parse retry-after seconds from Groq error message if available
+                    const secMatch = msg.match(/(\d+\.?\d*)\s*s\./i);
+                    const retrySec = secMatch ? Math.ceil(parseFloat(secMatch[1])) : (attempt + 1) * 5;
+                    logger.rateLimit("Groq", model.id, retrySec);
+                    await sleep(Math.min(retrySec * 1_000, 60_000));
+                    continue;
+                }
             }
         }
         throw lastErr!;
@@ -828,7 +837,7 @@ export async function callModelStream(
                     const msg = String(e?.message || "");
                     const isConnErr = msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT") || msg.includes("UND_ERR_CONNECT_TIMEOUT");
                     if (isConnErr && attempt < 2) {
-                        console.warn(`[OpenRouter] Connection error attempt ${attempt + 1}/3, retrying in ${(attempt + 1) * 2}s...`);
+                        logger.warn("OpenRouter", `Connection error attempt ${attempt + 1}/3, retrying in ${(attempt + 1) * 2}s...`);
                         await sleep((attempt + 1) * 2_000);
                         continue;
                     }

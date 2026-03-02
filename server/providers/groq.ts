@@ -7,6 +7,7 @@
 //   kimi-k2, qwen3-32b, gpt-oss-120b, groq/compound, etc.
 
 import type { WebSource } from "../types";
+import * as logger from "../logger";
 
 export interface TokenUsage {
     promptTokens: number;
@@ -128,7 +129,7 @@ export async function callGroqStream(
                 if (!firstChunkLogged && (data.choices?.length > 0 || data.usage || data.x_groq)) {
                     const keys = Object.keys(data);
                     const deltaKeys = data.choices?.[0]?.delta ? Object.keys(data.choices[0].delta) : [];
-                    console.log(`[Groq/${modelId}] First chunk keys: ${keys.join(",")}, delta keys: ${deltaKeys.join(",")}`);
+                    logger.info("groq", `${logger.colorModel(modelId)} first chunk — keys: ${logger.colorValue(keys.join(","))} delta: ${logger.colorValue(deltaKeys.join(",") || "none")}`);
                     firstChunkLogged = true;
                 }
 
@@ -169,7 +170,7 @@ export async function callGroqStream(
                         completionTokens: data.usage.completion_tokens ?? 0,
                         totalTokens: data.usage.total_tokens ?? ((data.usage.prompt_tokens ?? 0) + (data.usage.completion_tokens ?? 0)),
                     };
-                    console.log(`[Groq] Token usage (data.usage):`, JSON.stringify(data.usage));
+                    logger.tokenLog("Groq", modelId, tokenUsage.promptTokens, tokenUsage.completionTokens, tokenUsage.totalTokens);
                 }
                 // Groq-specific usage field (compound-beta and some other models)
                 if (!tokenUsage && data.x_groq?.usage) {
@@ -181,7 +182,7 @@ export async function callGroqStream(
                             completionTokens: u.completion_tokens ?? 0,
                             totalTokens: u.total_tokens ?? total,
                         };
-                        console.log(`[Groq] Token usage (x_groq.usage):`, JSON.stringify(u));
+                        logger.tokenLog("Groq", modelId, tokenUsage.promptTokens, tokenUsage.completionTokens, tokenUsage.totalTokens);
                     }
                 }
             } catch {
@@ -191,16 +192,16 @@ export async function callGroqStream(
     }
 
     if (tokenUsage) {
-        console.log(`[Groq] Final token usage: prompt=${tokenUsage.promptTokens}, completion=${tokenUsage.completionTokens}, total=${tokenUsage.totalTokens}`);
+        logger.tokenLog("Groq", modelId, tokenUsage.promptTokens, tokenUsage.completionTokens, tokenUsage.totalTokens);
     } else {
         // groq/compound is a compound orchestrator — Groq does not report token
         // usage for it (always returns 0 in the API). Leave tokenUsage undefined
         // so the UI shows "—" rather than a wrong number.
-        console.log(`[Groq/${modelId}] API returned no token usage (compound model reports 0 — Groq limitation)`);
+        logger.warn("Groq", `${logger.colorModel(modelId)} — API returned no token usage (compound model, Groq limitation)`);
     }
 
     if (sources.length > 0) {
-        console.log(`[Groq/${modelId}] Extracted ${sources.length} sources from built-in search`);
+        logger.ok("Groq", `${logger.colorModel(modelId)} extracted ${logger.colorValue(sources.length)} built-in search sources`);
     }
 
     return { content: fullContent, sources, tokenUsage };
