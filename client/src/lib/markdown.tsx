@@ -215,23 +215,27 @@ function MermaidBlock({ chart }: { chart: string }) {
     // ── SVG viewport (shared between inline + fullscreen) ─────────────────────
     const SvgViewport = ({ fullscreenMode }: { fullscreenMode: boolean }) => (
         <div
-            className={`overflow-hidden ${fullscreenMode ? "w-full flex-1 cursor-grab active:cursor-grabbing" : "w-full cursor-grab active:cursor-grabbing"}`}
+            className={fullscreenMode
+                ? "overflow-hidden w-full flex-1 cursor-grab active:cursor-grabbing"
+                : "w-full overflow-x-auto overflow-y-hidden scrollbar-hide"}
             style={{ userSelect: "none" }}
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
-            onWheel={onWheel}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
+            onMouseDown={fullscreenMode ? onMouseDown : undefined}
+            onMouseMove={fullscreenMode ? onMouseMove : undefined}
+            onMouseUp={fullscreenMode ? onMouseUp : undefined}
+            onMouseLeave={fullscreenMode ? onMouseUp : undefined}
+            onWheel={fullscreenMode ? onWheel : undefined}
+            onTouchStart={fullscreenMode ? onTouchStart : undefined}
+            onTouchMove={fullscreenMode ? onTouchMove : undefined}
         >
             <div
                 style={{
                     transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                    transformOrigin: "top center",
+                    transformOrigin: fullscreenMode ? "top center" : "top left",
                     transition: isPanningRef.current ? "none" : "transform 0.1s ease",
                 }}
-                className="[&_svg]:max-w-full [&_svg]:h-auto [&_svg]:mx-auto [&_svg]:block"
+                className={fullscreenMode
+                    ? "[&_svg]:max-w-full [&_svg]:h-auto [&_svg]:mx-auto [&_svg]:block"
+                    : "inline-block min-w-full [&_svg]:max-w-none [&_svg]:h-auto [&_svg]:block"}
                 dangerouslySetInnerHTML={{ __html: svg }}
             />
         </div>
@@ -383,8 +387,8 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 },
                 table({ children }: any) {
                     return (
-                        <div className="overflow-x-auto my-3">
-                            <table className="min-w-full border border-white/10 rounded-lg overflow-hidden">
+                        <div className="overflow-x-auto scrollbar-hide my-3 -mx-1 px-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                            <table className="w-max min-w-full border border-white/10 rounded-lg" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
                                 {children}
                             </table>
                         </div>
@@ -395,14 +399,14 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 },
                 th({ children }: any) {
                     return (
-                        <th className="px-4 py-2 text-left text-sm font-medium text-white border-b border-white/10">
+                        <th className="px-4 py-2 text-left text-sm font-medium text-white border-b border-white/10 whitespace-nowrap sm:whitespace-normal">
                             {children}
                         </th>
                     );
                 },
                 td({ children }: any) {
                     return (
-                        <td className="px-4 py-2 text-sm text-muted-foreground border-b border-white/5">
+                        <td className="px-4 py-2 text-sm text-muted-foreground border-b border-white/5 whitespace-nowrap sm:whitespace-normal">
                             {children}
                         </td>
                     );

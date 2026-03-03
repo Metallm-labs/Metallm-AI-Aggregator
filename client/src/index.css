@@ -82,6 +82,8 @@
   }
 
   .scrollbar-hide::-webkit-scrollbar {
+    width: 0;
+    height: 0;
     display: none;
   }
 
@@ -118,9 +120,34 @@
 
 /* Tables scroll horizontally within their container */
 .prose table {
-  display: block;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  display: table;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Let tables and diagrams keep natural width inside their own scrollers */
+.prose table,
+.prose thead,
+.prose tbody,
+.prose tr,
+.prose th,
+.prose td,
+.prose svg {
+  max-width: none;
+}
+
+.prose th,
+.prose td {
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .prose th,
+  .prose td {
+    white-space: normal;
+  }
 }
 
 /* AI Model specific colors (used as accents) */

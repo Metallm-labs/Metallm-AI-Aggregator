@@ -160,7 +160,7 @@ export function ChatMessage({
             {/* Message Content */}
             <div className={cn(
                 "min-w-0 flex-1",
-                isUser ? "flex flex-col items-end max-w-[85%] sm:max-w-[78%]" : "max-w-full sm:max-w-[88%] overflow-hidden"
+                isUser ? "flex flex-col items-end max-w-[85%] sm:max-w-[78%]" : "max-w-full sm:max-w-[88%] min-w-0"
             )}>
 
                 {/* Model name + role — no web search badge here */}
@@ -239,7 +239,7 @@ export function ChatMessage({
                                             </AnimatePresence>
                                         </div>
                                     )}
-                                    <div className="prose prose-invert prose-sm sm:prose-base max-w-none overflow-hidden [&>p]:text-gray-100 [&>p]:font-normal [&>p]:leading-relaxed [&>ul]:text-gray-100 [&>ol]:text-gray-100 [&>li]:text-gray-100 [&>code]:text-[#9cdcfe] [&>pre]:bg-[#1e1e1e] [&_pre]:max-w-full [&_pre]:overflow-x-auto">
+                                    <div className="prose prose-invert prose-sm sm:prose-base max-w-none min-w-0 [&>p]:text-gray-100 [&>p]:font-normal [&>p]:leading-relaxed [&>ul]:text-gray-100 [&>ol]:text-gray-100 [&>li]:text-gray-100 [&>code]:text-[#9cdcfe] [&>pre]:bg-[#1e1e1e] [&_pre]:max-w-full [&_pre]:overflow-x-auto">
                                         <MarkdownRenderer content={visibleContent || (isStreaming ? "" : content)} />
                                         {isStreaming && (
                                             <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />

@@ -51,7 +51,7 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
         <div className={cn("flex items-center justify-between mb-6", collapsed && "justify-center")}>
           <div className="flex items-center gap-3">
             <div className="flex-shrink-0">
-              <img src="/favicon.png" alt="Metallm" className={collapsed ? "w-9 h-9" : "w-10 h-10"} style={{ objectFit: "contain" }} />
+              <img src="/favicon.svg" alt="Metallm" className={collapsed ? "w-9 h-9" : "w-10 h-10"} style={{ objectFit: "contain", mixBlendMode: "screen" }} />
             </div>
             {!collapsed && (
               <div>

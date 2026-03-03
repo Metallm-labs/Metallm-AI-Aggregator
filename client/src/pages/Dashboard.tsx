@@ -1104,7 +1104,7 @@ export default function Dashboard() {
 
                 {/* If we are streaming but NO messages are in the last group yet */}
                 {isStreaming && (groupedMessages.length === 0 || !Array.isArray(groupedMessages[groupedMessages.length - 1])) && (
-                  (streamingMessages.size > 1 || pendingMode === "multi") ? (
+                  (pendingMode === "multi" || (streamingMessages.size > 1 && pendingMode !== "debate")) ? (
                     <MultiModelResponse
                       key="streaming-multi"
                       messages={[]}
