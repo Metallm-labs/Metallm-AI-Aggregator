@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown, Settings, Loader2, ArrowRight, CheckCircle2, Edit } from "lucide-react";
+import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown, Settings, Loader2, ArrowRight, CheckCircle2, Edit, Trophy, Gavel } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ModelIcon } from "@/components/ModelIcon";
@@ -310,6 +310,13 @@ export interface DebateContinueState {
     onEnd: () => void;
 }
 
+export interface DebateCompleteState {
+    roundsCompleted: number;
+    onGetVerdict: () => void;
+    verdictLoading: boolean;
+    onDismiss: () => void;
+}
+
 interface ChatInputProps {
     onSend: (
         content: string,
@@ -331,6 +338,8 @@ interface ChatInputProps {
     debateParticipants?: DebateParticipant[];
     /** When set, the input bar switches to "debate continue" mode */
     debateContinue?: DebateContinueState | null;
+    /** When set, all debate rounds are finished — shows Get Verdict button */
+    debateComplete?: DebateCompleteState | null;
     /** When set, the input bar pre-fills with the user message content for editing */
     editingMessage?: { id: number; content: string } | null;
     onCancelEdit?: () => void;
@@ -380,7 +389,7 @@ const getStoredDirectModelId = (storageScope?: string): string => {
     return window.localStorage.getItem(getStorageKey(CHAT_DIRECT_MODEL_STORAGE_KEY, storageScope)) ?? "";
 };
 
-export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [], debateContinue = null, editingMessage = null, onCancelEdit }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [], debateContinue = null, debateComplete = null, editingMessage = null, onCancelEdit }: ChatInputProps) {
     const { toast } = useToast();
     const [content, setContent] = useState("");
     const [mode, setMode] = useState<ChatMode>(() => getStoredChatMode(storageScope));
@@ -716,13 +725,62 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                                         — Add guidance below, or press Continue to proceed
                                     </span>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={debateContinue.onEnd}
-                                    className="text-[10px] text-muted-foreground hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5 flex-shrink-0"
-                                >
-                                    End debate
-                                </button>
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    {/* Verdict button — disabled between rounds */}
+                                    <button
+                                        type="button"
+                                        disabled
+                                        title={`Complete all ${debateContinue.totalRounds} rounds to unlock verdict`}
+                                        className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-white/10 text-muted-foreground/40 cursor-not-allowed select-none"
+                                    >
+                                        <Trophy className="w-3 h-3" />
+                                        <span className="hidden sm:inline">Get Verdict</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={debateContinue.onEnd}
+                                        className="text-[10px] text-muted-foreground hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
+                                    >
+                                        End debate
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Debate-complete banner — all rounds done, verdict available */}
+                        {debateComplete && !debateContinue && (
+                            <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-1">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Trophy className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                                    <span className="text-xs text-yellow-300/90 font-medium">
+                                        All {debateComplete.roundsCompleted} rounds complete!
+                                    </span>
+                                    <span className="text-xs text-muted-foreground/50 hidden sm:inline">
+                                        — Request a verdict from a neutral judge
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={debateComplete.onGetVerdict}
+                                        disabled={debateComplete.verdictLoading}
+                                        className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/30 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                        {debateComplete.verdictLoading ? (
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                            <Gavel className="w-3 h-3" />
+                                        )}
+                                        <span>{debateComplete.verdictLoading ? "Judging..." : "Get Verdict"}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={debateComplete.onDismiss}
+                                        className="text-[10px] text-muted-foreground hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
                             </div>
                         )}
 

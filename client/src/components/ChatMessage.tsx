@@ -137,15 +137,16 @@ export function ChatMessage({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className={cn(
-                "flex gap-3 px-3 sm:px-4 py-3 group w-full min-w-0 overflow-x-hidden",
+                "flex gap-0 sm:gap-3 px-3 sm:px-4 py-3 group w-full min-w-0 overflow-x-hidden",
                 isUser ? "flex-row-reverse" : "flex-row",
                 isSummary && "bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border-t border-b border-yellow-500/10"
             )}
         >
-            {/* Avatar */}
+            {/* Avatar — hidden on mobile for both user and assistant (assistant gets inline avatar instead) */}
             <div
                 className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm transition-all mt-0.5",
+                    "w-8 h-8 rounded-full items-center justify-center flex-shrink-0 text-sm transition-all mt-0.5",
+                    "hidden sm:flex",
                     isUser
                         ? "bg-gradient-to-br from-primary to-secondary text-white"
                         : config.bgColor,
@@ -160,12 +161,23 @@ export function ChatMessage({
             {/* Message Content */}
             <div className={cn(
                 "min-w-0 flex-1",
-                isUser ? "flex flex-col items-end max-w-[85%] sm:max-w-[78%]" : "max-w-full sm:max-w-[88%] min-w-0"
+                isUser ? "flex flex-col items-end max-w-[92%] sm:max-w-[78%]" : "max-w-full min-w-0"
             )}>
 
                 {/* Model name + role — no web search badge here */}
                 {!isUser && modelName && (
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        {/* Inline avatar — mobile only; replaces the hidden side avatar */}
+                        <div
+                            className={cn(
+                                "sm:hidden w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0",
+                                config.bgColor,
+                                isCollapsible && "cursor-pointer"
+                            )}
+                            onClick={() => isCollapsible && setIsExpanded(!isExpanded)}
+                        >
+                            <ModelIcon modelName={modelName || ""} size={16} />
+                        </div>
                         <span className={cn("text-xs font-medium", config.color)}>{modelName}</span>
                         {metadata?.role && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-muted-foreground border border-white/10">
@@ -200,7 +212,7 @@ export function ChatMessage({
                             {isUser ? (
                                 /* ── User bubble ── */
                                 <div className="rounded-2xl bg-primary text-white rounded-br-sm px-4 py-3">
-                                    <p className="text-base font-medium whitespace-pre-wrap leading-relaxed">{content}</p>
+                                    <p className="text-[15px] sm:text-base font-medium whitespace-pre-wrap leading-[1.75] sm:leading-relaxed">{content}</p>
                                 </div>
                             ) : (
                                 /* ── Assistant — clean, no box ── */
@@ -239,7 +251,7 @@ export function ChatMessage({
                                             </AnimatePresence>
                                         </div>
                                     )}
-                                    <div className="prose prose-invert prose-sm sm:prose-base max-w-none min-w-0 [&>p]:text-gray-100 [&>p]:font-normal [&>p]:leading-relaxed [&>ul]:text-gray-100 [&>ol]:text-gray-100 [&>li]:text-gray-100 [&>code]:text-[#9cdcfe] [&>pre]:bg-[#1e1e1e] [&_pre]:max-w-full [&_pre]:overflow-x-auto">
+                                    <div className="prose prose-invert prose-base max-w-none min-w-0 [&>p]:text-gray-100 [&>p]:font-normal [&>p]:leading-[1.8] sm:[&>p]:leading-relaxed [&>ul]:text-gray-100 [&>ol]:text-gray-100 [&>li]:text-gray-100 [&>li]:leading-[1.8] sm:[&>li]:leading-relaxed [&>code]:text-[#9cdcfe] [&>pre]:bg-[#1e1e1e] [&_pre]:max-w-full [&_pre]:overflow-x-auto">
                                         <MarkdownRenderer content={visibleContent || (isStreaming ? "" : content)} />
                                         {isStreaming && (
                                             <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />

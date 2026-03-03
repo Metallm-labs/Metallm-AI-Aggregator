@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatMessage, TypingIndicator } from "@/components/ChatMessage";
-import { ChatInput, CHAT_MODE_STORAGE_KEY, CHAT_DIRECT_MODEL_STORAGE_KEY, type AttachmentPayload, type ChatMode, type DebateParticipant, type DebateContinueState } from "@/components/ChatInput";
+import { ChatInput, CHAT_MODE_STORAGE_KEY, CHAT_DIRECT_MODEL_STORAGE_KEY, type AttachmentPayload, type ChatMode, type DebateParticipant, type DebateContinueState, type DebateCompleteState } from "@/components/ChatInput";
 import { MAX_MULTI_MODELS, ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { ModelIcon } from "@/components/ModelIcon";
@@ -105,9 +105,9 @@ export default function Dashboard() {
   // Retry version history — keys are user message IDs
   type RetryVersionEntry = { oldVersions: Message[][]; offset: number };
   const [retryHistory, setRetryHistory] = useState<Map<number, RetryVersionEntry>>(new Map());
-  // Debate rounds
-  const [debateRounds, setDebateRounds] = useState(1);
-  const debateRoundsRef = useRef(1);
+  // Debate rounds (minimum 2)
+  const [debateRounds, setDebateRounds] = useState(2);
+  const debateRoundsRef = useRef(2);
   // Between-rounds dialog
   const [betweenRoundState, setBetweenRoundState] = useState<{
     currentRound: number;
@@ -119,6 +119,16 @@ export default function Dashboard() {
     webSearch: boolean;
   } | null>(null);
   const [betweenRoundInput, setBetweenRoundInput] = useState("");
+  // Debate complete state (all rounds finished) — enables Get Verdict
+  const [debateCompleteState, setDebateCompleteState] = useState<{
+    convId: number;
+    debateConfig: DebateParticipant[];
+    originalContent: string;
+    roundsCompleted: number;
+  } | null>(null);
+  const [verdictLoading, setVerdictLoading] = useState(false);
+  const [verdictMessageIds, setVerdictMessageIds] = useState<Set<number>>(new Set());
+  const isVerdictModeRef = useRef(false);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -174,6 +184,12 @@ export default function Dashboard() {
       setWebSearchStatus(null);
       setTokensByModel(new Map());
     }
+    // Reset debate state when switching conversations
+    setBetweenRoundState(null);
+    setBetweenRoundInput("");
+    setDebateCompleteState(null);
+    setVerdictLoading(false);
+    setVerdictMessageIds(new Set());
   }, [activeConversationId]);
 
   // Fetch available models on mount
@@ -626,6 +642,10 @@ export default function Dashboard() {
               return sortMessagesChronologically(next);
             });
             if (nextTokensByModel) setTokensByModel(new Map(nextTokensByModel));
+            // Tag the message as a verdict if we are in verdict mode
+            if (isVerdictModeRef.current) {
+              setVerdictMessageIds((prev) => new Set(Array.from(prev).concat(message.id)));
+            }
           }
         },
         // onUserMessage
@@ -660,6 +680,14 @@ export default function Dashboard() {
               selectedModelIds: selectedModelIds ?? [],
               debateConfig: debateConfig ?? [],
               webSearch: webSearch ?? false,
+            });
+          } else if (mode === "debate" && roundNumber === debateRoundsRef.current && !isVerdictModeRef.current) {
+            // All rounds are done — surface the Get Verdict option
+            setDebateCompleteState({
+              convId,
+              debateConfig: debateConfig ?? [],
+              originalContent,
+              roundsCompleted: roundNumber,
             });
           }
         },
@@ -761,6 +789,119 @@ export default function Dashboard() {
       currentRound + 1,
     );
   }, [betweenRoundState]);
+
+  // Request a verdict from a neutral judge model after all debate rounds complete
+  const handleGetVerdict = useCallback(async () => {
+    if (!debateCompleteState || !activeConversationId) return;
+
+    // ── Detect the model maker/family from its ID or display name ──────────
+    const getModelFamily = (modelId: string, displayName?: string): string => {
+      const id = modelId.toLowerCase();
+      const name = (displayName ?? "").toLowerCase();
+      if (id.includes("meta-llama") || id.startsWith("llama-") || name.includes("llama")) return "meta";
+      if (id.includes("qwen") || name.includes("qwen")) return "alibaba";
+      if (id.includes("gemini") || id.startsWith("google/") || name.includes("gemini")) return "google";
+      if (id.includes("nvidia/") || id.includes("nemotron") || name.includes("nemotron")) return "nvidia";
+      if (id.includes("moonshotai") || id.includes("moonshot") || name.includes("kimi")) return "moonshot";
+      if (id.startsWith("openai/") || name.includes("gpt")) return "openai";
+      if (id.includes("z-ai/") || id.includes("glm") || name.includes("glm")) return "zhipu";
+      if (id.includes("arcee") || name.includes("trinity")) return "arcee";
+      if (id.startsWith("groq/") || name.includes("groq compound")) return "groq";
+      if (id.includes("deepseek") || name.includes("deepseek")) return "deepseek";
+      if (id.includes("anthropic") || name.includes("claude")) return "anthropic";
+      if (id.includes("mistral") || name.includes("mistral")) return "mistral";
+      return id.split("/")[0] || "unknown";
+    };
+
+    const participantIds = new Set(debateCompleteState.debateConfig.map((p) => p.modelId));
+
+    // Collect all families in the debate (may be >1 if models are from the same company)
+    const participantFamilies = new Set(
+      debateCompleteState.debateConfig.map((p) => {
+        const m = availableModels.find((x) => x.id === p.modelId);
+        return getModelFamily(p.modelId, m?.displayName);
+      })
+    );
+
+    // Priority 1: not a participant AND not from any participant's company
+    let judgeModel = availableModels.find((m) => {
+      if (participantIds.has(m.id)) return false;
+      if (participantFamilies.has(getModelFamily(m.id, m.displayName))) return false;
+      return true;
+    });
+
+    // Priority 2: if all non-participants are from the same family, just pick any non-participant
+    if (!judgeModel) {
+      judgeModel = availableModels.find((m) => !participantIds.has(m.id));
+    }
+
+    const judgeModelId = judgeModel?.id ?? mainModelId;
+
+    const p0 = availableModels.find((m) => m.id === debateCompleteState.debateConfig[0]?.modelId);
+    const p1 = availableModels.find((m) => m.id === debateCompleteState.debateConfig[1]?.modelId);
+    const role0 = debateCompleteState.debateConfig[0]?.customRole || p0?.displayName || "Debater 1";
+    const role1 = debateCompleteState.debateConfig[1]?.customRole || p1?.displayName || "Debater 2";
+    const judgeDisplayName = judgeModel?.displayName ?? "Judge";
+
+    // Verdict prompt — embedded system-level instruction + strict short-form output
+    const verdictPrompt = [
+      `[SYSTEM INSTRUCTION — JUDGE ROLE ONLY]`,
+      `You are ${judgeDisplayName}, acting as a completely impartial debate judge.`,
+      `Your sole task is to evaluate the debate below and declare a winner.`,
+      ``,
+      `RULES YOU MUST FOLLOW:`,
+      `• You are NOT one of the debaters — do not take sides from personal preference.`,
+      `• Verify every factual claim made by each side. Flag unsupported, exaggerated, or logically flawed points.`,
+      `• Base your verdict purely on: quality of evidence, logical consistency, clarity, and persuasiveness.`,
+      `• Keep ALL responses extremely short — bullet points only, no paragraphs.`,
+      `• Do NOT repeat or summarize the debate. Only give the verdict.`,
+      ``,
+      `DEBATE TOPIC: "${debateCompleteState.originalContent}"`,
+      `DEBATER A: ${role0}`,
+      `DEBATER B: ${role1}`,
+      ``,
+      `OUTPUT FORMAT (strictly follow this structure):`,
+      `**🏆 Winner:** [${role0} or ${role1}]`,
+      `**Reason:** [1 sentence — why they won on evidence & logic]`,
+      ``,
+      `**Strongest Points (Winner):**`,
+      `• [point 1]`,
+      `• [point 2]`,
+      `• [point 3 — optional]`,
+      ``,
+      `**Key Weakness (Losing Side):**`,
+      `• [the main gap or flaw in the losing argument]`,
+      ``,
+      `**Evidence Verdict:** [Brief note on which side had stronger factual support]`,
+      ``,
+      `**Final Verdict:** [One definitive sentence.]`,
+    ].join("\n");
+
+    isVerdictModeRef.current = true;
+    setVerdictLoading(true);
+    const capturedState = debateCompleteState;
+    setDebateCompleteState(null);
+
+    try {
+      await handleApproveAndSend(
+        verdictPrompt,
+        "single",
+        verdictPrompt,
+        judgeModelId,
+        capturedState.convId,
+        false,
+        [],
+        [],
+        undefined,
+        undefined,
+        undefined,
+        true, // skipUserMessage — verdict prompt must NOT appear as a user bubble
+      );
+    } finally {
+      setVerdictLoading(false);
+      isVerdictModeRef.current = false;
+    }
+  }, [debateCompleteState, activeConversationId, mainModelId, availableModels]);
 
   const handleRetry = async (userMsgId: number) => {
     if (!activeConversationId) return;
@@ -985,6 +1126,14 @@ export default function Dashboard() {
     onEnd: () => { setBetweenRoundState(null); setBetweenRoundInput(""); },
   } : null;
 
+  // Debate-complete state (all rounds finished) passed down to ChatInput
+  const debateCompleteData: DebateCompleteState | null = debateCompleteState && !betweenRoundState ? {
+    roundsCompleted: debateCompleteState.roundsCompleted,
+    onGetVerdict: handleGetVerdict,
+    verdictLoading,
+    onDismiss: () => setDebateCompleteState(null),
+  } : null;
+
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       {/* Token Counter - floating top-right */}
@@ -1086,7 +1235,34 @@ export default function Dashboard() {
                     const vInfo = versionInfoMap.get(msg.id);
                     const isLatestVersion = !vInfo || vInfo.current === vInfo.total;
                     const canRetry = msg.role === "assistant" && !isStreaming && !!parentId && isLatestVersion && (!vInfo || vInfo.total < 4);
-                    return (
+                    const isVerdict = verdictMessageIds.has(msg.id) && msg.role === "assistant";
+                    return isVerdict ? (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        className="mx-3 sm:mx-4 my-3"
+                      >
+                        {/* Verdict Card header */}
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-t-xl bg-gradient-to-r from-yellow-500/20 to-amber-500/10 border border-yellow-500/30 border-b-0">
+                          <span className="text-base">🏆</span>
+                          <span className="text-xs font-bold text-yellow-300 uppercase tracking-wider">Debate Verdict</span>
+                          {msg.modelName && (
+                            <span className="text-[10px] text-yellow-300/50 ml-auto">Judge: {msg.modelName}</span>
+                          )}
+                        </div>
+                        <div className="rounded-b-xl border border-yellow-500/20 overflow-hidden">
+                          <ChatMessage
+                            role={msg.role as "user" | "assistant"}
+                            content={msg.content}
+                            modelName={msg.modelName}
+                            timestamp={new Date(msg.createdAt)}
+                            metadata={msg.metadata}
+                            versionInfo={vInfo}
+                          />
+                        </div>
+                      </motion.div>
+                    ) : (
                       <ChatMessage
                         key={msg.id}
                         role={msg.role as "user" | "assistant"}
@@ -1111,17 +1287,41 @@ export default function Dashboard() {
                       streamingContent={new Map(Array.from(streamingMessages.entries()).map(([k, v]) => [k, v.content]))}
                     />
                   ) : (
-                    // Single model streaming
-                    Array.from(streamingMessages.values()).map((sm) => (
-                      <ChatMessage
-                        key={`streaming-${sm.modelName}`}
-                        role="assistant"
-                        content={sm.content}
-                        modelName={sm.modelName}
-                        isStreaming
-                        metadata={sm.sources && sm.sources.length > 0 ? { sources: sm.sources } : undefined}
-                      />
-                    ))
+                    // Single model streaming (or verdict streaming)
+                    Array.from(streamingMessages.values()).map((sm) =>
+                      verdictLoading ? (
+                        <motion.div
+                          key={`verdict-streaming-${sm.modelName}`}
+                          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          className="mx-3 sm:mx-4 my-3"
+                        >
+                          <div className="flex items-center gap-2 px-4 py-2 rounded-t-xl bg-gradient-to-r from-yellow-500/20 to-amber-500/10 border border-yellow-500/30 border-b-0">
+                            <span className="text-base">🏆</span>
+                            <span className="text-xs font-bold text-yellow-300 uppercase tracking-wider">Debate Verdict</span>
+                            <span className="text-[10px] text-yellow-300/50 ml-auto">Judge: {sm.modelName}</span>
+                          </div>
+                          <div className="rounded-b-xl border border-yellow-500/20 overflow-hidden">
+                            <ChatMessage
+                              role="assistant"
+                              content={sm.content}
+                              modelName={sm.modelName}
+                              isStreaming
+                              metadata={sm.sources && sm.sources.length > 0 ? { sources: sm.sources } : undefined}
+                            />
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <ChatMessage
+                          key={`streaming-${sm.modelName}`}
+                          role="assistant"
+                          content={sm.content}
+                          modelName={sm.modelName}
+                          isStreaming
+                          metadata={sm.sources && sm.sources.length > 0 ? { sources: sm.sources } : undefined}
+                        />
+                      )
+                    )
                   )
                 )}
 
@@ -1403,7 +1603,7 @@ export default function Dashboard() {
         <ChatInput
           onSend={handleSend}
           onStop={handleStop}
-          isLoading={isStreaming || isRouting}
+          isLoading={isStreaming || isRouting || verdictLoading}
           disabled={convLoading}
           storageScope={user.id}
           availableModels={availableModels}
@@ -1413,6 +1613,7 @@ export default function Dashboard() {
           selectedMultiModelIds={selectedMultiModelIds}
           debateParticipants={debateParticipants}
           debateContinue={debateContinueState}
+          debateComplete={debateCompleteData}
           editingMessage={editingMessage}
           onCancelEdit={() => setEditingMessage(null)}
         />

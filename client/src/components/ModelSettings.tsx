@@ -267,11 +267,11 @@ function DebateModeSettings({ availableModels, participants, onChange, debateRou
                                 Debate Rounds
                             </label>
                             <p className="text-[10px] text-muted-foreground/60">
-                                After each round you can add guidance before the next one starts.
+                                Minimum 2 rounds. After each round you can add guidance.
                             </p>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            {[1, 2, 3, 4, 5].map((n) => (
+                            {[2, 3, 4, 5].map((n) => (
                                 <button
                                     key={n}
                                     type="button"
@@ -288,12 +288,10 @@ function DebateModeSettings({ availableModels, participants, onChange, debateRou
                             ))}
                         </div>
                     </div>
-                    {debateRounds > 1 && (
-                        <p className="text-[10px] text-orange-300/70 mt-2 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
-                            Between rounds you can inject guidance or let models continue automatically.
-                        </p>
-                    )}
+                    <p className="text-[10px] text-orange-300/70 mt-2 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
+                        After all {debateRounds} rounds, request a verdict from a neutral judge model.
+                    </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {[0, 1].map(idx => {
