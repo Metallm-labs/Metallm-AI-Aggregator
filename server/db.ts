@@ -2,6 +2,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
 
+// Allow connections to databases with self-signed certificates (e.g. Supabase on Koyeb)
+if (process.env.NODE_ENV === "production") {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
 const { Pool } = pg;
 
 if (!process.env.DATABASE_URL) {
