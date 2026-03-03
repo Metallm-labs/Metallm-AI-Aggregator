@@ -2,13 +2,13 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatMessage, TypingIndicator } from "@/components/ChatMessage";
-import { ChatInput, CHAT_MODE_STORAGE_KEY, type AttachmentPayload, type ChatMode, type DebateParticipant, type DebateContinueState } from "@/components/ChatInput";
+import { ChatInput, CHAT_MODE_STORAGE_KEY, CHAT_DIRECT_MODEL_STORAGE_KEY, type AttachmentPayload, type ChatMode, type DebateParticipant, type DebateContinueState } from "@/components/ChatInput";
 import { MAX_MULTI_MODELS, ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { ModelIcon } from "@/components/ModelIcon";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversation, useCreateConversation, useSendMessage, routePrompt, type RoutingResult, type TokenUsage } from "@/hooks/use-chat";
-import { Loader2, MessageSquare, Zap, Edit3, Send, X, Sparkles, ChevronDown, Globe, Search } from "lucide-react";
+import { Loader2, MessageSquare, Zap, Edit3, Send, X, Sparkles, ChevronDown, ChevronLeft, ChevronRight, RotateCcw, Globe, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Message } from "@shared/schema";
 import { TokenCounter, type ModelTokenUsage } from "@/components/TokenCounter";
@@ -90,6 +90,21 @@ export default function Dashboard() {
   // Remember the last send params so retry/edit replays the exact same model
   const lastSendModeRef = useRef<"single" | "multi" | "debate" | "direct">("single");
   const lastSendDirectModelIdRef = useRef<string | undefined>(undefined);
+  // Restore last-send refs from localStorage on mount so refresh doesn't lose them
+  useEffect(() => {
+    if (!user?.id) return;
+    const storedMode = localStorage.getItem(`metallm.lastSendMode:${user.id}`);
+    if (storedMode === "single" || storedMode === "multi" || storedMode === "debate" || storedMode === "direct") {
+      lastSendModeRef.current = storedMode;
+    }
+    const storedModel = localStorage.getItem(`metallm.lastDirectModel:${user.id}`);
+    if (storedModel) lastSendDirectModelIdRef.current = storedModel;
+  }, [user?.id]);
+  // Pending edit — message pulled into the input bar for editing
+  const [editingMessage, setEditingMessage] = useState<{ id: number; content: string } | null>(null);
+  // Retry version history — keys are user message IDs
+  type RetryVersionEntry = { oldVersions: Message[][]; offset: number };
+  const [retryHistory, setRetryHistory] = useState<Map<number, RetryVersionEntry>>(new Map());
   // Debate rounds
   const [debateRounds, setDebateRounds] = useState(1);
   const debateRoundsRef = useRef(1);
@@ -136,6 +151,7 @@ export default function Dashboard() {
   useEffect(() => {
     activeConvIdRef.current = activeConversationId;
     setMessages([]);
+    setRetryHistory(new Map());
     setRoutingResult(null);
     // Only reset routing when switching convs by the user, not during a send flow
     if (!pendingRoutingRef.current) {
@@ -408,12 +424,24 @@ export default function Dashboard() {
       handleContinueDebateRound(content);
       return;
     }
+
+    // In edit mode the input bar submits the edited message
+    if (editingMessage) {
+      const { id: messageId } = editingMessage;
+      setEditingMessage(null);
+      void handleEditSubmit(messageId, content, mode, directModelId);
+      return;
+    }
     // Remap "direct" mode → "single" for internal routing
     const resolvedMode = mode === "direct" ? "single" : mode as "single" | "multi" | "debate";
 
     // Persist so retry/edit can replay the same model
     lastSendModeRef.current = mode;
     lastSendDirectModelIdRef.current = directModelId;
+    if (user?.id) {
+      localStorage.setItem(`metallm.lastSendMode:${user.id}`, mode);
+      if (directModelId) localStorage.setItem(`metallm.lastDirectModel:${user.id}`, directModelId);
+    }
 
     setPendingContent(content);
     setPendingMode(resolvedMode);
@@ -494,6 +522,7 @@ export default function Dashboard() {
     perModelPromptsArg?: Array<{ modelId: string; displayName: string; prompt: string }>,
     attachmentPayload?: AttachmentPayload,
     roundNumber = 1,
+    skipUserMessage = false,
   ) => {
     setRoutingResult(null);
     setIsStreaming(true);
@@ -672,6 +701,7 @@ export default function Dashboard() {
         attachmentPayload?.attachments,
         mode === "debate" ? roundNumber : undefined,
         mode === "debate" ? debateRoundsRef.current : undefined,
+        skipUserMessage,
       );
     } catch (error: any) {
       // Ignore abort errors (user clicked stop)
@@ -732,37 +762,94 @@ export default function Dashboard() {
     );
   }, [betweenRoundState]);
 
-  const handleRetry = async (messageIndex: number) => {
+  const handleRetry = async (userMsgId: number) => {
     if (!activeConversationId) return;
-    const userMessages = messages.slice(0, messageIndex).filter(m => m.role === "user");
-    if (userMessages.length === 0) return;
-    const lastUserMessage = userMessages[userMessages.length - 1];
+    const lastUserMessage = messages.find(m => m.id === userMsgId);
+    if (!lastUserMessage) return;
+    const lastUserMsgIdx = messages.findIndex(m => m.id === userMsgId);
+
+    // Enforce max 3 retries (total of 4 versions: original + 3 retries)
+    const existingHist = retryHistory.get(userMsgId);
+    if (existingHist && existingHist.oldVersions.length >= 3) return;
+
+    // Find first AI response after user message in LIVE messages
+    const firstResponseAfterUser = messages.slice(lastUserMsgIdx + 1).find(Boolean);
+    if (!firstResponseAfterUser) return;
+
+    // Save the current live responses as an old version before deleting
+    const currentResponses = messages.slice(lastUserMsgIdx + 1);
+    setRetryHistory(prev => {
+      const m = new Map(prev);
+      const h = m.get(userMsgId) ?? { oldVersions: [], offset: 0 };
+      m.set(userMsgId, { oldVersions: [...h.oldVersions, currentResponses], offset: 0 });
+      return m;
+    });
 
     try {
-      await fetch(`/api/chat/conversations/${activeConversationId}/messages/${lastUserMessage.id}/after`, {
+      // Delete only AI responses from DB (user message stays)
+      await fetch(`/api/chat/conversations/${activeConversationId}/messages/${firstResponseAfterUser.id}/after`, {
         method: "DELETE", credentials: "include",
       });
-      const response = await fetch(`/api/chat/conversations/${activeConversationId}`, { credentials: "include" });
-      const data = await response.json();
-      setMessages(data.messages);
-      handleSend(lastUserMessage.content, lastSendModeRef.current, true, false, lastSendDirectModelIdRef.current);
+
+      // Remove deleted AI responses from local state
+      setMessages(prev => prev.filter(m => m.id < firstResponseAfterUser.id));
+
+      // Determine mode/model — prefer in-session refs, fall back to localStorage
+      const retryMode = (lastSendModeRef.current !== "single"
+        ? lastSendModeRef.current
+        : currentChatMode) as "single" | "multi" | "debate" | "direct";
+      const retryDirectModelId = lastSendDirectModelIdRef.current
+        || (user?.id ? localStorage.getItem(`${CHAT_DIRECT_MODEL_STORAGE_KEY}:${user.id}`) || undefined : undefined);
+
+      const resolvedMode = retryMode === "direct" ? "single" : retryMode as "single" | "multi" | "debate";
+      const targetModelId = retryMode === "direct" ? retryDirectModelId : undefined;
+
+      // Regenerate AI response without re-sending the user message
+      void handleApproveAndSend(
+        lastUserMessage.content,
+        resolvedMode,
+        lastUserMessage.content,
+        targetModelId,
+        activeConversationId,
+        false,
+        selectedMultiModelIds.slice(0, MAX_MULTI_MODELS),
+        debateParticipants,
+        undefined,
+        undefined,
+        1,
+        true, // skipUserMessage
+      );
     } catch (error) {
       console.error("Retry error:", error);
     }
   };
 
-  const handleEdit = async (messageId: number, newContent: string) => {
+  // Called when user submits an edited message from the input bar
+  const handleEditSubmit = async (messageId: number, newContent: string, mode: ChatMode, directModelId?: string) => {
     if (!activeConversationId) return;
     try {
+      // Delete the user message (inclusive) + all following messages
       await fetch(`/api/chat/conversations/${activeConversationId}/messages/${messageId}/after`, {
         method: "DELETE", credentials: "include",
       });
-      const response = await fetch(`/api/chat/conversations/${activeConversationId}`, { credentials: "include" });
-      const data = await response.json();
-      setMessages(data.messages);
-      handleSend(newContent, lastSendModeRef.current, true, false, lastSendDirectModelIdRef.current);
+      // Remove from local state
+      setMessages(prev => prev.filter(m => m.id < messageId));
+
+      const resolvedMode = mode === "direct" ? "single" : mode as "single" | "multi" | "debate";
+      const targetModelId = mode === "direct" ? directModelId : undefined;
+
+      void handleApproveAndSend(
+        newContent,
+        resolvedMode,
+        newContent,
+        targetModelId,
+        activeConversationId,
+        false,
+        selectedMultiModelIds.slice(0, MAX_MULTI_MODELS),
+        debateParticipants,
+      );
     } catch (error) {
-      console.error("Edit error:", error);
+      console.error("Edit submit error:", error);
     }
   };
 
@@ -775,12 +862,91 @@ export default function Dashboard() {
     return availableModels.find(m => m.id === selectedModelId);
   };
 
+  // Compute display messages — swaps in old versions when user navigates version history
+  const displayMessages = useMemo(() => {
+    const result: Message[] = [];
+    let i = 0;
+    while (i < messages.length) {
+      const msg = messages[i];
+      if (msg.role === "user") {
+        result.push(msg);
+        let j = i + 1;
+        while (j < messages.length && messages[j].role !== "user") j++;
+        const hist = retryHistory.get(msg.id);
+        if (hist && hist.offset > 0) {
+          const versionIdx = hist.oldVersions.length - hist.offset;
+          result.push(...(hist.oldVersions[versionIdx] ?? []));
+        } else {
+          result.push(...messages.slice(i + 1, j));
+        }
+        i = j;
+      } else {
+        result.push(msg);
+        i++;
+      }
+    }
+    return result;
+  }, [messages, retryHistory]);
+
+  // Map each assistant message ID → its parent user message ID (used for retry calls)
+  const msgParentUserMap = useMemo(() => {
+    const map = new Map<number, number>();
+    let currentUserMsgId: number | null = null;
+    displayMessages.forEach(msg => {
+      if (msg.role === "user") currentUserMsgId = msg.id;
+      else if (currentUserMsgId !== null) map.set(msg.id, currentUserMsgId);
+    });
+    return map;
+  }, [displayMessages]);
+
+  // Version navigator info for the last assistant message in each response group
+  const versionInfoMap = useMemo(() => {
+    const map = new Map<number, { current: number; total: number; onPrev: () => void; onNext: () => void }>();
+    let i = 0;
+    while (i < displayMessages.length) {
+      const msg = displayMessages[i];
+      if (msg.role === "user") {
+        const userMsgId = msg.id;
+        let j = i + 1;
+        let lastAssistantId: number | null = null;
+        while (j < displayMessages.length && displayMessages[j].role !== "user") {
+          if (displayMessages[j].role === "assistant") lastAssistantId = displayMessages[j].id;
+          j++;
+        }
+        const hist = retryHistory.get(userMsgId);
+        if (hist && hist.oldVersions.length > 0 && lastAssistantId !== null) {
+          const total = hist.oldVersions.length + 1;
+          const current = total - hist.offset;
+          map.set(lastAssistantId, {
+            current,
+            total,
+            onPrev: () => setRetryHistory(prev => {
+              const m = new Map(prev);
+              const h = m.get(userMsgId);
+              if (h && h.offset < h.oldVersions.length) m.set(userMsgId, { ...h, offset: h.offset + 1 });
+              return m;
+            }),
+            onNext: () => setRetryHistory(prev => {
+              const m = new Map(prev);
+              const h = m.get(userMsgId);
+              if (h && h.offset > 0) m.set(userMsgId, { ...h, offset: h.offset - 1 });
+              return m;
+            }),
+          });
+        }
+        i = j;
+      } else {
+        i++;
+      }
+    }
+    return map;
+  }, [displayMessages, retryHistory]);
+
   // Group messages logic
   const groupedMessages = useMemo(() => {
     const groups: (Message | Message[])[] = [];
     let currentMultiGroup: Message[] = [];
-
-    messages.forEach((msg) => {
+    displayMessages.forEach((msg) => {
       if (isMultiModelMsg(msg) && msg.role === "assistant") {
         currentMultiGroup.push(msg);
       } else {
@@ -795,7 +961,7 @@ export default function Dashboard() {
       groups.push([...currentMultiGroup]);
     }
     return groups;
-  }, [messages]);
+  }, [displayMessages]);
 
   const mainModelName = useMemo(() => {
     return availableModels.find(m => m.id === mainModelId)?.displayName || "Main AI";
@@ -879,15 +1045,47 @@ export default function Dashboard() {
                       ? new Map(Array.from(streaming.entries()).map(([k, v]) => [k, v.content]))
                       : undefined;
 
+                    // Version nav + retry for multi-model groups
+                    const lastMultiMsg = item[item.length - 1];
+                    const vInfoMulti = lastMultiMsg ? versionInfoMap.get(lastMultiMsg.id) : undefined;
+                    const parentIdMulti = lastMultiMsg ? msgParentUserMap.get(lastMultiMsg.id) : undefined;
+                    const isLatestMulti = !vInfoMulti || vInfoMulti.current === vInfoMulti.total;
+                    const canRetryMulti = !isStreaming && !!parentIdMulti && isLatestMulti && (!vInfoMulti || vInfoMulti.total < 4);
+
                     return (
-                      <MultiModelResponse
-                        key={`multi-${index}`}
-                        messages={item}
-                        streamingContent={streamingContentMap}
-                      />
+                      <div key={`multi-${index}`}>
+                        <MultiModelResponse
+                          messages={item}
+                          streamingContent={streamingContentMap}
+                        />
+                        {(vInfoMulti || canRetryMulti) && !isStreaming && (
+                          <div className="flex items-center gap-2 px-3 sm:px-4 pb-2 justify-end">
+                            {vInfoMulti && (
+                              <div className="flex items-center gap-0.5 rounded-lg bg-white/5 border border-white/10 px-1 py-0.5 text-[11px] text-muted-foreground">
+                                <button onClick={vInfoMulti.onPrev} disabled={vInfoMulti.current <= 1} className="p-0.5 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Previous response">
+                                  <ChevronLeft className="w-3 h-3" />
+                                </button>
+                                <span className="px-1 tabular-nums font-medium">{vInfoMulti.current}/{vInfoMulti.total}</span>
+                                <button onClick={vInfoMulti.onNext} disabled={vInfoMulti.current >= vInfoMulti.total} className="p-0.5 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors" title="Next response">
+                                  <ChevronRight className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                            {canRetryMulti && (
+                              <button className="h-7 w-7 flex items-center justify-center rounded-md bg-white/5 hover:bg-white/10 border border-white/10 transition-colors" onClick={() => handleRetry(parentIdMulti!)} title="Try again">
+                                <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     );
                   } else {
                     const msg = item;
+                    const parentId = msgParentUserMap.get(msg.id);
+                    const vInfo = versionInfoMap.get(msg.id);
+                    const isLatestVersion = !vInfo || vInfo.current === vInfo.total;
+                    const canRetry = msg.role === "assistant" && !isStreaming && !!parentId && isLatestVersion && (!vInfo || vInfo.total < 4);
                     return (
                       <ChatMessage
                         key={msg.id}
@@ -896,8 +1094,9 @@ export default function Dashboard() {
                         modelName={msg.modelName}
                         timestamp={new Date(msg.createdAt)}
                         metadata={msg.metadata}
-                        onRetry={msg.role === "assistant" && !isStreaming ? () => handleRetry(index) : undefined}
-                        onEdit={msg.role === "user" && !isStreaming ? (newContent) => handleEdit(msg.id, newContent) : undefined}
+                        onRetry={canRetry ? () => handleRetry(parentId!) : undefined}
+                        onEdit={msg.role === "user" && !isStreaming ? (existingContent) => setEditingMessage({ id: msg.id, content: existingContent }) : undefined}
+                        versionInfo={vInfo}
                       />
                     );
                   }
@@ -1214,6 +1413,8 @@ export default function Dashboard() {
           selectedMultiModelIds={selectedMultiModelIds}
           debateParticipants={debateParticipants}
           debateContinue={debateContinueState}
+          editingMessage={editingMessage}
+          onCancelEdit={() => setEditingMessage(null)}
         />
       </main>
     </div>

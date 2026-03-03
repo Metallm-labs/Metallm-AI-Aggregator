@@ -4,8 +4,8 @@
     {
       "id": "gemini-2.5-flash",
       "displayName": "Gemini",
-      "role": "Main AI Assistant",
-      "systemPrompt": "You are Gemini, Google's fastest and most capable AI model. You provide intelligent, accurate, and well-structured responses. You excel at understanding context, following instructions precisely, and generating high-quality content across all domains.",
+      "role": "Real time Knowledge & Web Search",
+      "systemPrompt": "You are Gemini, Google's fastest and most capable AI model. You provide intelligent, accurate, well-structured  and real time data and news  responses. You excel at understanding context, following instructions precisely, and generating high-quality content across all domains.",
       "iconUrl": "/icons/gemini.svg",
       "color": "blue",
       "provider": "gemini"
@@ -98,7 +98,7 @@
     {
       "id": "groq/compound",
       "displayName": "Groq Compound",
-      "role": "Web Search & Real-time Knowledge",
+      "role": "Multimodal & Advanced Reasoning",
       "systemPrompt": "You are Groq Compound, an advanced AI model by Groq that combines fast inference with real-time web search capabilities. You provide accurate, up-to-date responses and can retrieve live information from the web. Always cite your sources when using real-time data.",
       "iconUrl": "/icons/groq.svg",
       "color": "yellow",

@@ -231,6 +231,7 @@ export function useSendMessage() {
         attachments?: ChatAttachmentMeta[],
         roundNumber?: number,
         totalRounds?: number,
+        skipUserMessage?: boolean,
     ) => {
         const res = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
             method: "POST",
@@ -248,6 +249,7 @@ export function useSendMessage() {
                 attachments,
                 roundNumber,
                 totalRounds,
+                skipUserMessage: skipUserMessage === true ? true : undefined,
             }),
             credentials: "include",
             signal,

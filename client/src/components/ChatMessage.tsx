@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, Zap, Globe, ExternalLink, ChevronRight, Paperclip, Brain } from "lucide-react";
+import { User, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, ChevronLeft, Zap, Globe, ExternalLink, ChevronRight, Paperclip, Brain } from "lucide-react";
 import { MarkdownRenderer } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -91,17 +91,16 @@ interface ChatMessageProps {
     metadata?: any;
     isCollapsible?: boolean;
     defaultCollapsed?: boolean;
+    versionInfo?: { current: number; total: number; onPrev: () => void; onNext: () => void };
 }
 
 export function ChatMessage({
     role, content, modelName, isStreaming, timestamp, onRetry, onEdit,
-    metadata, isCollapsible, defaultCollapsed
+    metadata, isCollapsible, defaultCollapsed, versionInfo
 }: ChatMessageProps) {
     const isUser = role === "user";
     const config = modelName ? getModelConfig(modelName) : getModelConfig("Gemini");
     const { toast } = useToast();
-    const [isEditing, setIsEditing] = useState(false);
-    const [editContent, setEditContent] = useState(content);
     const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
     const [showSources, setShowSources] = useState(false);
     const [showThinking, setShowThinking] = useState(false);
@@ -123,18 +122,6 @@ export function ChatMessage({
     const handleCopy = async () => {
         await navigator.clipboard.writeText(isUser ? content : visibleContent);
         toast({ description: "Copied to clipboard" });
-    };
-
-    const handleEdit = () => {
-        if (isEditing && editContent.trim() && editContent !== content) {
-            onEdit?.(editContent.trim());
-        }
-        setIsEditing(!isEditing);
-    };
-
-    const handleCancelEdit = () => {
-        setEditContent(content);
-        setIsEditing(false);
     };
 
     const formatTime = (date: Date) => {
@@ -212,25 +199,9 @@ export function ChatMessage({
                         >
                             {isUser ? (
                                 /* ── User bubble ── */
-                                isEditing ? (
-                                    <div className="space-y-2 rounded-2xl bg-primary px-4 py-3 rounded-br-sm">
-                                        <textarea
-                                            value={editContent}
-                                            onChange={(e) => setEditContent(e.target.value)}
-                                            className="w-full bg-white/10 text-white rounded px-2 py-1 text-base resize-none focus:outline-none focus:ring-1 focus:ring-white/30"
-                                            rows={3}
-                                            autoFocus
-                                        />
-                                        <div className="flex gap-2 justify-end">
-                                            <button onClick={handleCancelEdit} className="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20">Cancel</button>
-                                            <button onClick={handleEdit} className="text-xs px-2 py-1 rounded bg-white/20 hover:bg-white/30">Send</button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="rounded-2xl bg-primary text-white rounded-br-sm px-4 py-3">
-                                        <p className="text-base font-medium whitespace-pre-wrap leading-relaxed">{content}</p>
-                                    </div>
-                                )
+                                <div className="rounded-2xl bg-primary text-white rounded-br-sm px-4 py-3">
+                                    <p className="text-base font-medium whitespace-pre-wrap leading-relaxed">{content}</p>
+                                </div>
                             ) : (
                                 /* ── Assistant — clean, no box ── */
                                 <div className={cn(
@@ -330,7 +301,7 @@ export function ChatMessage({
                 )}
 
                 {/* ── Sources row + action buttons ── */}
-                {!isStreaming && !isEditing && isExpanded && !isUser && (
+                {!isStreaming && isExpanded && !isUser && (
                     <div className="flex items-center gap-1.5 mt-2 flex-wrap">
 
                         {/* Favicon preview strip + expand button */}
@@ -369,6 +340,27 @@ export function ChatMessage({
                         >
                             <Copy className="h-3.5 w-3.5" />
                         </Button>
+                        {versionInfo && (
+                            <div className="flex items-center gap-0.5 rounded-lg bg-white/5 border border-white/10 px-1 py-0.5 text-[11px] text-muted-foreground">
+                                <button
+                                    onClick={versionInfo.onPrev}
+                                    disabled={versionInfo.current <= 1}
+                                    className="p-0.5 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Previous response"
+                                >
+                                    <ChevronLeft className="w-3 h-3" />
+                                </button>
+                                <span className="px-1 tabular-nums font-medium">{versionInfo.current}/{versionInfo.total}</span>
+                                <button
+                                    onClick={versionInfo.onNext}
+                                    disabled={versionInfo.current >= versionInfo.total}
+                                    className="p-0.5 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Next response"
+                                >
+                                    <ChevronRight className="w-3 h-3" />
+                                </button>
+                            </div>
+                        )}
                         {onRetry && (
                             <Button
                                 variant="ghost"
@@ -384,7 +376,7 @@ export function ChatMessage({
                 )}
 
                 {/* User action buttons */}
-                {!isStreaming && !isEditing && isExpanded && isUser && (
+                {!isStreaming && isExpanded && isUser && (
                     <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 justify-end">
                         <Button
                             variant="ghost"
@@ -400,7 +392,7 @@ export function ChatMessage({
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7 bg-card hover:bg-card/80 border border-white/10"
-                                onClick={() => setIsEditing(true)}
+                                onClick={() => onEdit?.(content)}
                                 title="Edit"
                             >
                                 <Edit className="h-3.5 w-3.5" />

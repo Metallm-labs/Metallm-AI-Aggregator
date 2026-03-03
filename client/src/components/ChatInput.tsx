@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown, Settings, Loader2, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown, Settings, Loader2, ArrowRight, CheckCircle2, Edit } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ModelIcon } from "@/components/ModelIcon";
@@ -331,6 +331,9 @@ interface ChatInputProps {
     debateParticipants?: DebateParticipant[];
     /** When set, the input bar switches to "debate continue" mode */
     debateContinue?: DebateContinueState | null;
+    /** When set, the input bar pre-fills with the user message content for editing */
+    editingMessage?: { id: number; content: string } | null;
+    onCancelEdit?: () => void;
 }
 
 const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; description: string; color: string }> = {
@@ -341,9 +344,9 @@ const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; descr
         color: "text-primary",
     },
     multi: {
-        label: "All Models",
+        label: "Multi Models",
         icon: <Users className="w-3.5 h-3.5" />,
-        description: "All models answer + summary",
+        description: "Multiple models answer + summary",
         color: "text-purple-400",
     },
     debate: {
@@ -377,7 +380,7 @@ const getStoredDirectModelId = (storageScope?: string): string => {
     return window.localStorage.getItem(getStorageKey(CHAT_DIRECT_MODEL_STORAGE_KEY, storageScope)) ?? "";
 };
 
-export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [], debateContinue = null }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [], debateContinue = null, editingMessage = null, onCancelEdit }: ChatInputProps) {
     const { toast } = useToast();
     const [content, setContent] = useState("");
     const [mode, setMode] = useState<ChatMode>(() => getStoredChatMode(storageScope));
@@ -445,6 +448,13 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
         }
     }, [content]);
 
+    // Pre-fill textarea when editing a message
+    useEffect(() => {
+        if (!editingMessage) return;
+        setContent(editingMessage.content);
+        setTimeout(() => textareaRef.current?.focus(), 50);
+    }, [editingMessage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // Close menus on outside click
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -475,7 +485,7 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
     const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
         // In debate-continue mode, allow empty content (instructions are optional)
-        if (!debateContinue && !content.trim()) return;
+        if (!debateContinue && !editingMessage && !content.trim()) return;
         if (isLoading || disabled || isPreparingAttachments) return;
         // Always read from ref — guards against any stale closure on the state value
         const currentDirectModelId = directModelIdRef.current;
@@ -676,7 +686,25 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                             </div>
                         )}
 
-                                        {/* Debate-continue notification banner */}
+                                        {/* Edit-message banner */}
+                        {editingMessage && !debateContinue && (
+                            <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-1">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Edit className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                                    <span className="text-xs text-blue-300/90 font-medium">Editing message</span>
+                                    <span className="text-xs text-muted-foreground/50 hidden sm:inline">— modify and press Update to send</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => { setContent(""); onCancelEdit?.(); }}
+                                    className="text-[10px] text-muted-foreground hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5 flex-shrink-0"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Debate-continue notification banner */}
                         {debateContinue && (
                             <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-1">
                                 <div className="flex items-center gap-2 min-w-0">
@@ -707,9 +735,11 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                             placeholder={
                                 debateContinue
                                     ? "Enter instructions or context for next round (optional)..."
-                                    : mode === "direct" && selectedModel
-                                        ? `Chat with ${selectedModel.displayName}...`
-                                        : "Ask anything..."
+                                    : editingMessage
+                                        ? "Edit your message..."
+                                        : mode === "direct" && selectedModel
+                                            ? `Chat with ${selectedModel.displayName}...`
+                                            : "Ask anything..."
                             }
                             className="min-h-[44px] max-h-[120px] bg-transparent border-0 resize-none focus-visible:ring-0 text-base placeholder:text-muted-foreground/50 py-2.5 px-4"
                             disabled={isLoading || disabled || isPreparingAttachments}
@@ -939,6 +969,21 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                                     title="Stop generating"
                                 >
                                     <Square className="w-3.5 h-3.5 fill-white" />
+                                </Button>
+                            ) : editingMessage ? (
+                                <Button
+                                    type="submit"
+                                    disabled={!content.trim() || disabled || isPreparingAttachments}
+                                    className="h-9 px-3 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-all flex-shrink-0 text-xs font-medium flex items-center gap-1.5"
+                                >
+                                    {isPreparingAttachments ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Edit className="w-3.5 h-3.5" />
+                                            <span className="hidden sm:inline">Update</span>
+                                        </>
+                                    )}
                                 </Button>
                             ) : debateContinue ? (
                                 <Button

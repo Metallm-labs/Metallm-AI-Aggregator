@@ -214,29 +214,6 @@ function resolveRuntimeMode(mode: unknown, targetModelId: unknown): RuntimeMode 
   return "single";
 }
 
-function resolvePrimaryModelForRequest(targetModelId: unknown): ModelConfig {
-  if (typeof targetModelId === "string" && targetModelId.trim()) {
-    return currentModels.find((m) => m.id === targetModelId) || getMainModel();
-  }
-  return getMainModel();
-}
-
-function isMetallmHardGuardrailQuestion(content: string): boolean {
-  const normalized = content
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const asksIdentity = /\b(who are you|what are you|your job|your role|which model|what model)\b/.test(normalized);
-  const asksPlatformNow = /\b(which platform|what platform|platform you are in)\b/.test(normalized);
-  const asksModeNow = /\b(which mode|what mode|mode are we in|current mode)\b/.test(normalized);
-  const asksBroadProductInfo = /\b(what is metallm|what is matellm|how .* work|how metallm work|key feature|features|explain metallm|describe metallm)\b/.test(normalized);
-
-  if (asksBroadProductInfo) return false;
-  return asksIdentity || asksPlatformNow || asksModeNow;
-}
-
 function shouldForceMetallmFocus(content: string): boolean {
   const normalized = content
     .toLowerCase()
@@ -245,41 +222,6 @@ function shouldForceMetallmFocus(content: string): boolean {
     .trim();
 
   return /\b(meta\s*llm|metallm|matellm|metal\s*lm)\b/.test(normalized);
-}
-
-function buildMetallmContextAnswer(
-  runtimeMode: RuntimeMode,
-  model: Pick<ModelConfig, "displayName" | "id" | "role">,
-  history: HistoryMessage[]
-): string {
-  const priorModels = listPriorModelNames(history, model.displayName);
-  const priorText = priorModels.length > 0 ? priorModels.join(", ") : "None yet";
-  const modeLabel =
-    runtimeMode === "direct"
-      ? "Direct mode (single selected model)"
-      : runtimeMode === "single"
-        ? "Smart Route mode"
-        : runtimeMode === "multi"
-          ? "Multi mode"
-          : "Debate mode";
-
-  return [
-    `You are in **Metallm AI Aggregator**.`,
-    ``,
-    `Current mode: **${modeLabel}**.`,
-    `Current active model for this reply: **${model.displayName}** (${model.id}).`,
-    `Model specialty: **${model.role}**.`,
-    ``,
-    `Other models used earlier in this same chat: ${priorText}.`,
-    ``,
-    `How Metallm works (short):`,
-    `- One conversation can include multiple models.`,
-    `- You can switch mode/model without losing shared chat history.`,
-    `- Attachments are stored in user-message metadata and can be reused as context in later turns.`,
-    `- Models must identify themselves correctly and not impersonate other models.`,
-    ``,
-    `My job in this chat: answer as ${model.displayName} using the shared conversation context inside Metallm.`,
-  ].join("\n");
 }
 
 // SSE Helper
@@ -581,6 +523,7 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
         perModelPrompts,
         attachmentContext,
         attachments,
+        skipUserMessage,
       } = req.body;
       if (!content) return res.status(400).json({ message: "Content is required" });
 
@@ -595,35 +538,47 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
         ? `[IMPORTANT: The user is asking about the Metallm platform in this chat. Use the provided runtime/platform context. Do not answer about external "MetaLLM" projects unless explicitly requested.]\n\n${promptWithAttachments}`
         : promptWithAttachments;
 
-
-      // Check message count BEFORE saving the user message (so 0 = first ever message)
-      // Use count query instead of loading all messages — much cheaper at scale
-      const messageCount = await storage.getMessageCount(conversationId);
-      const isFirstMessage = messageCount === 0;
-
-      // Save the clean user-visible message (without extracted attachment context)
-      const userMessage = await storage.addMessage({
-        conversationId,
-        role: "user",
-        content,
-        modelName: null,
-        metadata: {
-          attachments: cleanAttachments.length > 0 ? cleanAttachments : undefined,
-          attachmentContext: cleanAttachmentContext,
-        },
-      });
-
-      // Setup SSE
+      // Setup SSE first (needed regardless of skipUserMessage)
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
       res.flushHeaders();
 
-      sendSSE(res, "user_message", userMessage);
+      // On retry (skipUserMessage=true) the user message already exists in DB — skip creating it
+      let userMessage: Awaited<ReturnType<typeof storage.addMessage>> | null = null;
+      let isFirstMessage = false;
+      if (!skipUserMessage) {
+        // Check message count BEFORE saving the user message (so 0 = first ever message)
+        const messageCount = await storage.getMessageCount(conversationId);
+        isFirstMessage = messageCount === 0;
+
+        // Save the clean user-visible message (without extracted attachment context)
+        userMessage = await storage.addMessage({
+          conversationId,
+          role: "user",
+          content,
+          modelName: null,
+          metadata: {
+            attachments: cleanAttachments.length > 0 ? cleanAttachments : undefined,
+            attachmentContext: cleanAttachmentContext,
+          },
+        });
+        sendSSE(res, "user_message", userMessage);
+      }
 
       // Get conversation history for context
       const history = await storage.getMessages(conversationId, 12);
-      const historyForContext = history.filter((m) => m.id !== userMessage.id) as HistoryMessage[];
+      let historyForContext: HistoryMessage[];
+      if (skipUserMessage) {
+        // Retry: the user message is already in DB. Exclude it from context
+        // since it will be appended as the final `promptToSend` to the model.
+        const lastUserInHistory = [...history].reverse().find((m) => m.role === "user");
+        historyForContext = (lastUserInHistory
+          ? history.filter((m) => m.id !== lastUserInHistory.id)
+          : history) as HistoryMessage[];
+      } else {
+        historyForContext = history.filter((m) => m.id !== userMessage!.id) as HistoryMessage[];
+      }
 
       // =============================================
       // === TITLE: instant — first 3-4 words of user message ===
@@ -645,38 +600,6 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
       }
 
       const runtimeMode = resolveRuntimeMode(mode, targetModelId);
-      const primaryModel = resolvePrimaryModelForRequest(targetModelId);
-
-      // Hard guardrail for platform identity questions so models don't drift to
-      // external "MetaLLM" definitions or generic provider/platform answers.
-      if (runtimeMode === "single" || runtimeMode === "direct") {
-        if (isMetallmHardGuardrailQuestion(content)) {
-          const modelName = primaryModel.displayName;
-          sendSSE(res, "model_start", { modelName, role: primaryModel.role, provider: primaryModel.provider });
-          const fixedAnswer = buildMetallmContextAnswer(runtimeMode, primaryModel, historyForContext);
-          sendSSE(res, "chunk", { modelName, content: fixedAnswer });
-
-          const assistantMessage = await storage.addMessage({
-            conversationId,
-            role: "assistant",
-            content: fixedAnswer,
-            modelName,
-            metadata: {
-              modelId: primaryModel.id,
-              role: primaryModel.role,
-              provider: primaryModel.provider,
-              isMetallmContextAnswer: true,
-              webSearch: false,
-              hasAttachmentContext: !!cleanAttachmentContext,
-            },
-          });
-          sendSSE(res, "model_complete", { modelName, message: assistantMessage });
-          await titlePromise;
-          sendSSE(res, "done", {});
-          res.end();
-          return;
-        }
-      }
 
       // ===========================================
       // === SINGLE MODE ===
