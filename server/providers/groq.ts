@@ -108,7 +108,9 @@ export async function callGroqStream(
     let tokenUsage: TokenUsage | undefined;
     const sources: WebSource[] = [];
     const seenUrls = new Set<string>();
+    const seenTitles = new Set<string>();
     let firstChunkLogged = false;
+    const isCompound = modelId.includes("compound");
 
     while (true) {
         const { done, value } = await reader.read();
@@ -125,25 +127,34 @@ export async function callGroqStream(
             try {
                 const data = JSON.parse(trimmed.slice(6));
 
-                // Log first non-empty chunk structure to understand compound model fields
+                // Log first non-empty chunk — for compound, dump full structure so we can
+                // understand exactly where citations/sources are returned
                 if (!firstChunkLogged && (data.choices?.length > 0 || data.usage || data.x_groq)) {
                     const keys = Object.keys(data);
                     const deltaKeys = data.choices?.[0]?.delta ? Object.keys(data.choices[0].delta) : [];
                     logger.info("groq", `${logger.colorModel(modelId)} first chunk — keys: ${logger.colorValue(keys.join(","))} delta: ${logger.colorValue(deltaKeys.join(",") || "none")}`);
+                    if (isCompound) {
+                        // Dump full first chunk for compound so we can see citations structure
+                        logger.info("groq", `[compound] full first chunk: ${JSON.stringify(data).slice(0, 500)}`);
+                    }
                     firstChunkLogged = true;
                 }
 
-                // Stream text content (including <think> tags — client strips them)
-                const text: string = data.choices?.[0]?.delta?.content || "";
+                const delta = data.choices?.[0]?.delta ?? {};
+
+                // ── Content: compound streams reasoning first, then content ──
+                // delta.content = final visible answer (stream to client)
+                // delta.reasoning = internal search steps (skip — not user-facing)
+                const text: string = delta.content || "";
                 if (text) {
                     onChunk(text);
                     fullContent += text;
                 }
 
-                // ── Sources: parse from annotations (Groq Compound built-in search) ──
-                // Compound model returns URL citations as delta.annotations, same
-                // structure as OpenRouter web plugin: { type: "url_citation", url_citation: {...} }
-                const annotations: any[] = data.choices?.[0]?.delta?.annotations || [];
+                // ── Sources: check every known location Groq may put citations ──
+
+                // 1. delta.annotations (OpenAI-style url_citation)
+                const annotations: any[] = delta.annotations || [];
                 for (const ann of annotations) {
                     if (ann.type === "url_citation" && ann.url_citation?.url) {
                         const url: string = ann.url_citation.url;
@@ -152,12 +163,66 @@ export async function callGroqStream(
                             sources.push({ title: ann.url_citation.title || url, url });
                         }
                     }
-                    // Some Groq compound chunks use a flat citation structure
                     if (ann.type === "citation" && ann.url) {
                         const url: string = ann.url;
-                        if (!seenUrls.has(url)) {
-                            seenUrls.add(url);
-                            sources.push({ title: ann.title || url, url });
+                        if (!seenUrls.has(url)) { seenUrls.add(url); sources.push({ title: ann.title || url, url }); }
+                    }
+                }
+
+                // 2. delta.citations (Groq compound-beta specific array)
+                const deltaCitations: any[] = delta.citations || [];
+                for (const cit of deltaCitations) {
+                    const url: string = cit.url || cit.link || "";
+                    if (url && !seenUrls.has(url)) {
+                        seenUrls.add(url);
+                        sources.push({ title: cit.title || cit.name || url, url });
+                    }
+                }
+
+                // 3. Top-level data.citations array (some Groq responses)
+                const topCitations: any[] = data.citations || data.sources || [];
+                for (const cit of topCitations) {
+                    const url: string = cit.url || cit.link || "";
+                    if (url && !seenUrls.has(url)) {
+                        seenUrls.add(url);
+                        sources.push({ title: cit.title || cit.name || url, url });
+                    }
+                }
+
+                // 4. x_groq.citations (Groq extension field)
+                const xGroqCitations: any[] = data.x_groq?.citations || data.x_groq?.sources || [];
+                for (const cit of xGroqCitations) {
+                    const url: string = cit.url || cit.link || "";
+                    if (url && !seenUrls.has(url)) {
+                        seenUrls.add(url);
+                        sources.push({ title: cit.title || cit.name || url, url });
+                    }
+                }
+
+                // 5. choices[0].message.citations (non-streaming final message)
+                const msgCitations: any[] = data.choices?.[0]?.message?.citations || [];
+                for (const cit of msgCitations) {
+                    const url: string = cit.url || cit.link || "";
+                    if (url && !seenUrls.has(url)) {
+                        seenUrls.add(url);
+                        sources.push({ title: cit.title || cit.name || url, url });
+                    }
+                }
+
+                // 6. Parse inline 【Title】 markers from compound content and map to URLs
+                //    (compound embeds these when citing sources inline)
+                if (isCompound && text) {
+                    const inlineMarkers = text.matchAll(/【([^\]】]+)】/g);
+                    for (const m of inlineMarkers) {
+                        const title = m[1].trim();
+                        if (title && !seenTitles.has(title) && !title.match(/^\d+$/)) {
+                            seenTitles.add(title);
+                            // Only add if we don't already have it as a URL source
+                            const alreadyHave = sources.some(s => s.title === title);
+                            if (!alreadyHave) {
+                                // Will be a title-only source — better than nothing
+                                sources.push({ title, url: `https://www.google.com/search?q=${encodeURIComponent(title)}` });
+                            }
                         }
                     }
                 }
@@ -170,7 +235,7 @@ export async function callGroqStream(
                         completionTokens: data.usage.completion_tokens ?? 0,
                         totalTokens: data.usage.total_tokens ?? ((data.usage.prompt_tokens ?? 0) + (data.usage.completion_tokens ?? 0)),
                     };
-                    logger.tokenLog("Groq", modelId, tokenUsage.promptTokens, tokenUsage.completionTokens, tokenUsage.totalTokens);
+                    // Final log emitted after loop — don't log here to avoid duplicate
                 }
                 // Groq-specific usage field (compound-beta and some other models)
                 if (!tokenUsage && data.x_groq?.usage) {
@@ -182,7 +247,7 @@ export async function callGroqStream(
                             completionTokens: u.completion_tokens ?? 0,
                             totalTokens: u.total_tokens ?? total,
                         };
-                        logger.tokenLog("Groq", modelId, tokenUsage.promptTokens, tokenUsage.completionTokens, tokenUsage.totalTokens);
+                        // Final log emitted after loop — don't log here to avoid duplicate
                     }
                 }
             } catch {
@@ -201,7 +266,10 @@ export async function callGroqStream(
     }
 
     if (sources.length > 0) {
-        logger.ok("Groq", `${logger.colorModel(modelId)} extracted ${logger.colorValue(sources.length)} built-in search sources`);
+        logger.ok("Groq", `${logger.colorModel(modelId)} extracted ${logger.colorValue(sources.length)} sources from built-in search`);
+        sources.slice(0, 3).forEach((s, i) => logger.info("groq", `  ${i + 1}. ${logger.colorValue(s.title.slice(0, 60))} — ${s.url.slice(0, 80)}`));
+    } else if (isCompound) {
+        logger.warn("Groq", `${logger.colorModel(modelId)} responded but no sources found — check compound chunk structure in logs above`);
     }
 
     return { content: fullContent, sources, tokenUsage };

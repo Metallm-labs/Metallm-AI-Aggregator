@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatMessage, TypingIndicator } from "@/components/ChatMessage";
-import { ChatInput, CHAT_MODE_STORAGE_KEY, type AttachmentPayload, type ChatMode, type DebateParticipant } from "@/components/ChatInput";
+import { ChatInput, CHAT_MODE_STORAGE_KEY, type AttachmentPayload, type ChatMode, type DebateParticipant, type DebateContinueState } from "@/components/ChatInput";
 import { MAX_MULTI_MODELS, ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { ModelIcon } from "@/components/ModelIcon";
@@ -403,6 +403,11 @@ export default function Dashboard() {
     directModelId?: string,
     attachmentPayload?: AttachmentPayload,
   ) => {
+    // In debate-continue mode the input bar routes straight to the next round
+    if (betweenRoundState) {
+      handleContinueDebateRound(content);
+      return;
+    }
     // Remap "direct" mode → "single" for internal routing
     const resolvedMode = mode === "direct" ? "single" : mode as "single" | "multi" | "debate";
 
@@ -807,101 +812,17 @@ export default function Dashboard() {
 
   if (!user) return null;
 
+  // Debate-continue state passed down to ChatInput
+  const debateContinueState: DebateContinueState | null = betweenRoundState ? {
+    currentRound: betweenRoundState.currentRound,
+    totalRounds: betweenRoundState.totalRounds,
+    onEnd: () => { setBetweenRoundState(null); setBetweenRoundInput(""); },
+  } : null;
+
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       {/* Token Counter - floating top-right */}
       <TokenCounter tokensByModel={tokensByModel} onExportChat={exportChat} />
-
-      {/* Between-rounds dialog */}
-      <AnimatePresence>
-        {betweenRoundState && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] flex items-center justify-center p-4"
-          >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div
-              initial={{ scale: 0.92, y: 16 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.92, y: 16 }}
-              transition={{ type: "spring", damping: 26, stiffness: 300 }}
-              className="relative w-full max-w-lg bg-card border border-orange-500/25 rounded-2xl shadow-2xl shadow-orange-500/10 overflow-hidden"
-            >
-              {/* Dialog header */}
-              <div className="px-5 py-4 border-b border-white/10 bg-gradient-to-r from-orange-500/10 to-amber-500/5">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="flex items-center gap-1.5">
-                    {Array.from({ length: betweenRoundState.totalRounds }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          "w-2 h-2 rounded-full transition-all",
-                          i < betweenRoundState.currentRound
-                            ? "bg-orange-400"
-                            : "bg-white/15"
-                        )}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-sm font-semibold text-white">
-                    Round {betweenRoundState.currentRound} of {betweenRoundState.totalRounds} Complete
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground/70">
-                  Add guidance, a question, or instructions — or skip to let models continue on their own.
-                </p>
-              </div>
-
-              {/* Input */}
-              <div className="p-5">
-                <label className="block text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Your input for Round {betweenRoundState.currentRound + 1} (optional)
-                </label>
-                <textarea
-                  value={betweenRoundInput}
-                  onChange={(e) => setBetweenRoundInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                      e.preventDefault();
-                      handleContinueDebateRound(betweenRoundInput);
-                    }
-                  }}
-                  placeholder="e.g. 'Focus on the economic impact' or 'Challenge the assumptions made so far'..."
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 placeholder:text-muted-foreground/35 focus:outline-none focus:border-orange-500/40 resize-none transition-colors"
-                  rows={3}
-                  autoFocus
-                />
-                <div className="flex items-center justify-between mt-4">
-                  <button
-                    onClick={() => { setBetweenRoundState(null); setBetweenRoundInput(""); }}
-                    className="text-xs text-muted-foreground hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
-                  >
-                    End debate here
-                  </button>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleContinueDebateRound("")}
-                      className="text-xs text-muted-foreground hover:text-white px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 transition-all"
-                    >
-                      Skip → continue
-                    </button>
-                    <button
-                      onClick={() => handleContinueDebateRound(betweenRoundInput)}
-                      disabled={!betweenRoundInput.trim()}
-                      className="text-xs font-medium text-white px-4 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
-                    >
-                      <Send className="w-3 h-3" />
-                      Send & Round {betweenRoundState.currentRound + 1}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <Sidebar
         activeConversationId={activeConversationId}
@@ -1292,6 +1213,7 @@ export default function Dashboard() {
           showSettings={showSettings}
           selectedMultiModelIds={selectedMultiModelIds}
           debateParticipants={debateParticipants}
+          debateContinue={debateContinueState}
         />
       </main>
     </div>

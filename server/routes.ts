@@ -894,7 +894,7 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
         const serverRound = 1;
 
         // Build debaters with CUSTOM roles completely overriding defaults
-        let debaters: (typeof currentModels[number] & { customRole?: string })[];
+        let debaters: (typeof currentModels[number] & { customRole?: string; customSystemPrompt?: string })[];
         if (Array.isArray(debateConfig) && debateConfig.length >= 2) {
           debaters = debateConfig.map((p: { modelId: string; customRole?: string; customSystemPrompt?: string }) => {
             const base = currentModels.find((m) => m.id === p.modelId) ?? currentModels[0];
@@ -904,6 +904,8 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
               role: p.customRole && p.customRole.trim() ? p.customRole.trim() : base.role,
               systemPrompt: "",  // ignore default system prompt — debate has its own
               customRole: p.customRole?.trim() || undefined,
+              // Preserve custom system prompt from user's debate config
+              customSystemPrompt: p.customSystemPrompt?.trim() || undefined,
             };
           });
         } else if (Array.isArray(perModelPrompts) && perModelPrompts.length >= 2) {
@@ -953,6 +955,12 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
             ? `You ARE "${debater.role}". This is your IDENTITY in this debate. You believe in this position with absolute conviction. Every word you say must reflect this role. FORGET any default AI assistant personality — you are ONLY "${debater.role}" now.`
             : `You are ${debater.displayName} with your own strong opinions.`;
 
+          // Inject user-provided custom instructions for this debater (if any)
+          const customInstructions = (debater as any).customSystemPrompt?.trim();
+          const customInstructionsBlock = customInstructions
+            ? `\n\n=== USER CUSTOM INSTRUCTIONS FOR YOUR ROLE ===\n${customInstructions}\n=== END CUSTOM INSTRUCTIONS ===`
+            : "";
+
           const phaseInstructions: Record<string, string> = {
             opening: `THIS IS YOUR OPENING ARGUMENT (Round ${round} of ${total}).
 - State your position clearly and forcefully
@@ -970,12 +978,13 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
 - Be relentless — every sentence should be a counter-punch`,
 
             closing: `THIS IS YOUR CLOSING ARGUMENT (Round ${round} of ${total} — FINAL ROUND).
-- Summarize WHY you won this debate
-- Highlight the strongest moments of YOUR argument
-- Point out where your opponent failed to counter your key points
-- Deliver a devastating final statement that leaves no doubt
+- Make your final, strongest case for YOUR position — leave no ambiguity
+- Show how YOUR core arguments have been consistent and well-supported throughout
+- Highlight the weakest points in your opponent's reasoning that were never resolved
+- Deliver a compelling final statement that cements your perspective
 - Be memorable — this is your last word, make it count
-- Do NOT introduce brand new arguments — synthesize and conclude`,
+- Do NOT introduce brand new arguments — synthesize and conclude
+- Do NOT declare yourself the winner — let the strength of your argument speak for itself`,
           };
 
           return `=== METALLM AGGRESSIVE DEBATE MODE ===
@@ -1001,7 +1010,7 @@ ${phaseInstructions[phase]}
 
 3. SHORT & SHARP: Keep your response focused and punchy. 150-250 words MAX. No filler, no hedging, no "on the other hand". Every sentence must advance YOUR position.
 
-4. ATTACK MODE: Directly challenge your opponent. Use their name/role when addressing their points. Be specific — vague disagreement is weak.
+4. ATTACK MODE: Directly challenge your opponent. Use their role when addressing their points. Be specific — vague disagreement is weak.
 
 5. NO FENCE-SITTING: Do NOT say "both sides have valid points" or "it depends". Pick your side and FIGHT for it.
 
@@ -1029,9 +1038,9 @@ BONUS POINTS:
 
 Platform: Metallm AI Aggregator — Debate Mode
 You are: ${debater.displayName} (${debater.id})
-Your debate role: ${debater.role}
+Your debate role: ${debater.role}${customInstructionsBlock}
 
-NOW ARGUE. BE FIERCE. WIN THIS DEBATE.`;
+NOW ARGUE. BE FIERCE. MAKE YOUR CASE.`;
         }
 
         let debateContext = `Debate topic: ${promptToSend}\n\n`;

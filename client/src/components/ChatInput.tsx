@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown, Settings, Loader2 } from "lucide-react";
+import { Paperclip, Send, Sparkles, Users, MessageSquare, X, FileText, Image as ImageIcon, Square, Globe, Plus, Bot, ChevronDown, Settings, Loader2, ArrowRight, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ModelIcon } from "@/components/ModelIcon";
@@ -304,6 +304,12 @@ interface AvailableModel {
     provider: string;
 }
 
+export interface DebateContinueState {
+    currentRound: number;
+    totalRounds: number;
+    onEnd: () => void;
+}
+
 interface ChatInputProps {
     onSend: (
         content: string,
@@ -323,6 +329,8 @@ interface ChatInputProps {
     showSettings?: boolean;
     selectedMultiModelIds?: string[];
     debateParticipants?: DebateParticipant[];
+    /** When set, the input bar switches to "debate continue" mode */
+    debateContinue?: DebateContinueState | null;
 }
 
 const modeConfig: Record<ChatMode, { label: string; icon: React.ReactNode; description: string; color: string }> = {
@@ -369,7 +377,7 @@ const getStoredDirectModelId = (storageScope?: string): string => {
     return window.localStorage.getItem(getStorageKey(CHAT_DIRECT_MODEL_STORAGE_KEY, storageScope)) ?? "";
 };
 
-export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [] }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, availableModels = [], onModeChange, onSettingsClick, showSettings, selectedMultiModelIds = [], debateParticipants = [], debateContinue = null }: ChatInputProps) {
     const { toast } = useToast();
     const [content, setContent] = useState("");
     const [mode, setMode] = useState<ChatMode>(() => getStoredChatMode(storageScope));
@@ -466,7 +474,9 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
 
     const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
-        if (!content.trim() || isLoading || disabled || isPreparingAttachments) return;
+        // In debate-continue mode, allow empty content (instructions are optional)
+        if (!debateContinue && !content.trim()) return;
+        if (isLoading || disabled || isPreparingAttachments) return;
         // Always read from ref — guards against any stale closure on the state value
         const currentDirectModelId = directModelIdRef.current;
         if (mode === "direct" && !currentDirectModelId) return;
@@ -666,6 +676,28 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                             </div>
                         )}
 
+                                        {/* Debate-continue notification banner */}
+                        {debateContinue && (
+                            <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-1">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
+                                    <span className="text-xs text-orange-300/90 font-medium">
+                                        Round {debateContinue.currentRound} of {debateContinue.totalRounds} complete
+                                    </span>
+                                    <span className="text-xs text-muted-foreground/50 hidden sm:inline">
+                                        — Add guidance below, or press Continue to proceed
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={debateContinue.onEnd}
+                                    className="text-[10px] text-muted-foreground hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-white/5 flex-shrink-0"
+                                >
+                                    End debate
+                                </button>
+                            </div>
+                        )}
+
                         {/* Textarea */}
                         <Textarea
                             ref={textareaRef}
@@ -673,9 +705,11 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                             onChange={(e) => setContent(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder={
-                                mode === "direct" && selectedModel
-                                    ? `Chat with ${selectedModel.displayName}...`
-                                    : "Ask anything..."
+                                debateContinue
+                                    ? "Enter instructions or context for next round (optional)..."
+                                    : mode === "direct" && selectedModel
+                                        ? `Chat with ${selectedModel.displayName}...`
+                                        : "Ask anything..."
                             }
                             className="min-h-[44px] max-h-[120px] bg-transparent border-0 resize-none focus-visible:ring-0 text-base placeholder:text-muted-foreground/50 py-2.5 px-4"
                             disabled={isLoading || disabled || isPreparingAttachments}
@@ -905,6 +939,21 @@ export function ChatInput({ onSend, onStop, isLoading, disabled, storageScope, a
                                     title="Stop generating"
                                 >
                                     <Square className="w-3.5 h-3.5 fill-white" />
+                                </Button>
+                            ) : debateContinue ? (
+                                <Button
+                                    type="submit"
+                                    disabled={disabled || isPreparingAttachments}
+                                    className="h-9 px-3 rounded-full bg-orange-500 hover:bg-orange-600 text-white transition-all flex-shrink-0 text-xs font-medium flex items-center gap-1.5"
+                                >
+                                    {isPreparingAttachments ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <ArrowRight className="w-3.5 h-3.5" />
+                                            <span className="hidden sm:inline">Round {debateContinue.currentRound + 1}</span>
+                                        </>
+                                    )}
                                 </Button>
                             ) : (
                                 <Button
