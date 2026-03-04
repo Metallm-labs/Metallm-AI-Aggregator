@@ -36,6 +36,7 @@ interface AvailableModel {
   role: string;
   iconUrl?: string;
   provider: string;
+  pricing?: { inputPerMillion: number; outputPerMillion: number; free?: boolean };
 }
 
 const POST_STREAM_SYNC_GRACE_MS = 4_000;
@@ -76,6 +77,7 @@ export default function Dashboard() {
   const [pendingWebSearch, setPendingWebSearch] = useState(false);
   const [pendingAttachmentPayload, setPendingAttachmentPayload] = useState<AttachmentPayload | undefined>(undefined);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const availableModelsRef = useRef<AvailableModel[]>([]);
   const [mainModelId, setMainModelId] = useState<string>("");
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -209,6 +211,7 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json();
         setAvailableModels(data.models);
+        availableModelsRef.current = data.models;
         setMainModelId(data.mainModelId);
         setSelectedMultiModelIds((prev) => {
           const validPrev = prev.filter((id) => data.models.some((m: any) => m.id === id));
@@ -316,11 +319,13 @@ export default function Dashboard() {
       if (totalTokens === 0 && promptTokens === 0 && completionTokens === 0) continue;
 
       const existing = restoredTokens.get(msg.modelName);
+      const modelMeta = availableModelsRef.current.find((m) => m.displayName === msg.modelName);
       restoredTokens.set(msg.modelName, {
         modelName: msg.modelName,
         promptTokens: (existing?.promptTokens ?? 0) + promptTokens,
         completionTokens: (existing?.completionTokens ?? 0) + completionTokens,
         totalTokens: (existing?.totalTokens ?? 0) + totalTokens,
+        pricing: existing?.pricing ?? modelMeta?.pricing,
       });
     }
     if (restoredTokens.size > 0) {
@@ -605,11 +610,13 @@ export default function Dashboard() {
           if (hasRealTokens) {
             const convTokens = new Map(tokenTrackingRef.current.get(convId) ?? new Map<string, ModelTokenUsage>());
             const existing = convTokens.get(modelName);
+            const modelMeta = availableModelsRef.current.find((m) => m.displayName === modelName);
             convTokens.set(modelName, {
               modelName,
               promptTokens: (existing?.promptTokens ?? 0) + tokenUsage!.promptTokens,
               completionTokens: (existing?.completionTokens ?? 0) + tokenUsage!.completionTokens,
               totalTokens: (existing?.totalTokens ?? 0) + tokenUsage!.totalTokens,
+              pricing: existing?.pricing ?? modelMeta?.pricing,
             });
             tokenTrackingRef.current.set(convId, convTokens);
             nextTokensByModel = convTokens;
@@ -618,12 +625,14 @@ export default function Dashboard() {
             // Still show the model in the counter with an "N/A" indicator
             const convTokens = new Map(tokenTrackingRef.current.get(convId) ?? new Map<string, ModelTokenUsage>());
             if (!convTokens.has(modelName)) {
+              const modelMeta = availableModelsRef.current.find((m) => m.displayName === modelName);
               convTokens.set(modelName, {
                 modelName,
                 promptTokens: 0,
                 completionTokens: 0,
                 totalTokens: 0,
                 unavailable: true,
+                pricing: modelMeta?.pricing,
               });
               tokenTrackingRef.current.set(convId, convTokens);
               nextTokensByModel = convTokens;

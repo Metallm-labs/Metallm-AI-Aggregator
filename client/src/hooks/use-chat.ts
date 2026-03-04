@@ -297,6 +297,10 @@ export function useSendMessage() {
                                 patchConversationMessage(queryClient, conversationId, data.message as Message);
                                 onModelComplete(data.modelName, data.message, data.tokenUsage as TokenUsage | undefined);
                                 break;
+                            case "credit_update":
+                                // Update credit balance in cache when credits are deducted
+                                queryClient.setQueryData(["/api/credits/balance"], { credits: data.newBalance });
+                                break;
                             case "web_sources":
                                 onWebSources?.(data.modelName, data.sources ?? []);
                                 break;

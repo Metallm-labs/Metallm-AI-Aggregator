@@ -1,0 +1,98 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+interface PaddleConfig {
+  clientToken: string;
+  priceId: string;
+  environment: string;
+  minQuantity: number;
+  creditRatio: number;
+}
+
+interface CreditBalance {
+  credits: number;
+}
+
+interface CreditTransaction {
+  id: number;
+  userId: string;
+  type: string;
+  amount: string;
+  balanceAfter: string;
+  description: string | null;
+  metadata: any;
+  createdAt: string;
+}
+
+interface VerifyResult {
+  success: boolean;
+  creditsAdded: number;
+  newBalance: number;
+}
+
+export function usePaddleConfig() {
+  return useQuery<PaddleConfig>({
+    queryKey: ["/api/paddle/config"],
+    queryFn: async () => {
+      const res = await fetch("/api/paddle/config", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch Paddle config");
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 30, // 30 min
+  });
+}
+
+export function useCreditBalance() {
+  return useQuery<CreditBalance>({
+    queryKey: ["/api/credits/balance"],
+    queryFn: async () => {
+      const res = await fetch("/api/credits/balance", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch balance");
+      return res.json();
+    },
+    staleTime: 0,              // always consider data stale so any focus/mount refetches
+    refetchInterval: 1000 * 30, // poll every 30 s as a safety net
+    refetchOnWindowFocus: true, // re-fetch when user switches back to the tab
+    refetchOnMount: true,       // re-fetch whenever the component mounts
+  });
+}
+
+export function useCreditTransactions(limit = 50) {
+  return useQuery<CreditTransaction[]>({
+    queryKey: ["/api/credits/transactions", limit],
+    queryFn: async () => {
+      const res = await fetch(`/api/credits/transactions?limit=${limit}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch transactions");
+      return res.json();
+    },
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useVerifyTransaction() {
+  const queryClient = useQueryClient();
+
+  return useMutation<VerifyResult, Error, string>({
+    mutationFn: async (transactionId: string) => {
+      const res = await fetch("/api/paddle/verify-transaction", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: "Verification failed" }));
+        throw new Error(error.message);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      // Refresh balance after successful verification
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/balance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/credits/transactions"] });
+    },
+  });
+}
+
+export function updateCreditBalance(queryClient: ReturnType<typeof useQueryClient>, newBalance: number) {
+  queryClient.setQueryData(["/api/credits/balance"], { credits: newBalance });
+}

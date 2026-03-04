@@ -6,6 +6,7 @@ import { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useConversations, useDeleteConversation } from "@/hooks/use-chat";
 import { motion, AnimatePresence } from "framer-motion";
+import { BuyCreditsDialog } from "@/components/BuyCredits";
 
 interface SidebarProps {
   activeConversationId?: number | null;
@@ -194,6 +195,17 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
 
       {/* User Section */}
       <div className={cn("p-3 mt-auto border-t border-white/5 bg-black/20", collapsed && "p-2")}>
+        {/* Credits / Buy Credits */}
+        {!collapsed ? (
+          <div className="mb-3">
+            <BuyCreditsDialog />
+          </div>
+        ) : (
+          <div className="mb-2 flex justify-center">
+            <BuyCreditsDialog />
+          </div>
+        )}
+
         {!collapsed && (
           <div className="flex items-center gap-3 mb-3 px-1">
             <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">

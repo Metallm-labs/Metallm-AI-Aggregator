@@ -46,7 +46,13 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      logger.httpLog(req.method, path, res.statusCode, duration, capturedJsonResponse);
+      // Sanitize sensitive data from logs
+      let logBody = capturedJsonResponse;
+      if (logBody && path.includes("/auth/user")) {
+        const { password, otpCode, otpExpiresAt, ...safe } = logBody as any;
+        logBody = safe;
+      }
+      logger.httpLog(req.method, path, res.statusCode, duration, logBody);
     }
   });
 

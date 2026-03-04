@@ -18,6 +18,8 @@ import {
   type WebSource,
   type TokenUsage,
 } from "./openrouter";
+import { calculateTokenCost, deductCredits, getUserCredits } from "./integrations/paddle";
+import { registerPaddleRoutes } from "./integrations/paddle/routes";
 
 // In-memory model config store
 let currentModels: ModelConfig[] = [...DEFAULT_MODELS];
@@ -237,6 +239,9 @@ export async function registerRoutes(
   // Setup Auth
   await setupAuth(app);
   registerAuthRoutes(app);
+
+  // Setup Paddle Payment Routes
+  registerPaddleRoutes(app);
 
   // =============================================
   // === Model Configuration API ===
@@ -527,6 +532,12 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
       } = req.body;
       if (!content) return res.status(400).json({ message: "Content is required" });
 
+      // Check credit balance before processing
+      const userCredits = await getUserCredits(userId);
+      if (userCredits <= 0) {
+        return res.status(402).json({ message: "Insufficient credits. Please purchase credits to continue.", credits: userCredits });
+      }
+
       const cleanAttachmentContext = sanitizeAttachmentContext(attachmentContext);
       const cleanAttachments = sanitizeAttachments(attachments);
       // The prompt to actually send to the model (user-approved enhanced prompt)
@@ -676,6 +687,16 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
             tokenUsage: tokenUsage ?? undefined,
           },
         });
+        // Deduct credits based on token usage
+        if (tokenUsage) {
+          const cost = calculateTokenCost(targetModel.id, tokenUsage.promptTokens, tokenUsage.completionTokens);
+          if (cost > 0) {
+            const deductResult = await deductCredits(userId, cost, `Chat: ${targetModel.displayName}`, {
+              modelId: targetModel.id, promptTokens: tokenUsage.promptTokens, completionTokens: tokenUsage.completionTokens, cost,
+            });
+            sendSSE(res, "credit_update", { cost, newBalance: deductResult.newBalance });
+          }
+        }
         sendSSE(res, "model_complete", { modelName, message: assistantMessage, tokenUsage });
 
         // ===========================================
@@ -755,6 +776,16 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
               tokenUsage: multiTokenUsage ?? undefined,
             },
           });
+          // Deduct credits based on token usage
+          if (multiTokenUsage) {
+            const cost = calculateTokenCost(model.id, multiTokenUsage.promptTokens, multiTokenUsage.completionTokens);
+            if (cost > 0) {
+              const deductResult = await deductCredits(userId, cost, `Multi: ${model.displayName}`, {
+                modelId: model.id, promptTokens: multiTokenUsage.promptTokens, completionTokens: multiTokenUsage.completionTokens, cost,
+              });
+              sendSSE(res, "credit_update", { cost, newBalance: deductResult.newBalance });
+            }
+          }
           sendSSE(res, "model_complete", { modelName: model.displayName, message: assistantMessage, tokenUsage: multiTokenUsage });
         });
 
@@ -778,6 +809,7 @@ ${modelResponses.map(r => `\n--- ${r.modelName} (${r.role}) ---\n${r.content.sub
 Provide a well-structured summary. Do NOT just repeat - synthesize and add value.`;
 
         let summaryContent = "";
+        let summaryTokenUsage: TokenUsage | undefined;
         try {
           const mainModel = getMainModel();
           const summarySystemPrompt = buildMetallmSystemPrompt(
@@ -786,14 +818,16 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
             "multi",
             historyForContext
           );
-          summaryContent = (await callModelStream(
+          const summaryResult = await callModelStream(
             mainModel,
             [{ role: "user", content: summaryPrompt }],
             (chunk) => {
               sendSSE(res, "chunk", { modelName: summaryModelName, content: chunk });
             },
             { maxTokens: 4096, systemPrompt: summarySystemPrompt }
-          )).content;
+          );
+          summaryContent = summaryResult.content;
+          summaryTokenUsage = summaryResult.tokenUsage;
         } catch (e) {
           console.error("Summary error:", e);
           summaryContent = "Failed to generate summary. Please review individual model responses above.";
@@ -805,9 +839,22 @@ Provide a well-structured summary. Do NOT just repeat - synthesize and add value
           role: "assistant",
           content: summaryContent,
           modelName: summaryModelName,
-          metadata: { isSummary: true, modelCount: modelResponses.length },
+          metadata: { isSummary: true, modelCount: modelResponses.length, tokenUsage: summaryTokenUsage ?? undefined },
         });
-        sendSSE(res, "model_complete", { modelName: summaryModelName, message: summaryMessage, isSummary: true });
+
+        // Deduct credits for summary generation
+        if (summaryTokenUsage) {
+          const mainModel = getMainModel();
+          const summaryCost = calculateTokenCost(mainModel.id, summaryTokenUsage.promptTokens, summaryTokenUsage.completionTokens);
+          if (summaryCost > 0) {
+            const deductResult = await deductCredits(userId, summaryCost, "Multi summary", {
+              modelId: mainModel.id, promptTokens: summaryTokenUsage.promptTokens, completionTokens: summaryTokenUsage.completionTokens, cost: summaryCost,
+            });
+            sendSSE(res, "credit_update", { cost: summaryCost, newBalance: deductResult.newBalance });
+          }
+        }
+
+        sendSSE(res, "model_complete", { modelName: summaryModelName, message: summaryMessage, isSummary: true, tokenUsage: summaryTokenUsage });
 
         // ===========================================
         // === DEBATE MODE ===
@@ -1050,6 +1097,16 @@ NOW ARGUE. BE FIERCE. MAKE YOUR CASE.`;
               tokenUsage: debateTokenUsage ?? undefined,
             },
           });
+          // Deduct credits based on token usage for debate
+          if (debateTokenUsage) {
+            const cost = calculateTokenCost(debater.id, debateTokenUsage.promptTokens, debateTokenUsage.completionTokens);
+            if (cost > 0) {
+              const deductResult = await deductCredits(userId, cost, `Debate: ${debater.displayName}`, {
+                modelId: debater.id, promptTokens: debateTokenUsage.promptTokens, completionTokens: debateTokenUsage.completionTokens, cost,
+              });
+              sendSSE(res, "credit_update", { cost, newBalance: deductResult.newBalance });
+            }
+          }
           sendSSE(res, "model_complete", { modelName: debater.displayName, message: assistantMessage, tokenUsage: debateTokenUsage });
         }
       }

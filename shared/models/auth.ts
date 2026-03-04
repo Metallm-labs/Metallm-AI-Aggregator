@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, timestamp, varchar, boolean, numeric, bigserial, integer } from "drizzle-orm/pg-core";
 
 // Session storage table.
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
@@ -26,6 +26,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  credits: numeric("credits", { precision: 12, scale: 4 }).default("0").notNull(), // Credit balance (1:1 with USD)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -33,6 +34,39 @@ export const users = pgTable("users", {
   index("idx_users_auth_provider").on(table.authProvider),
 ]);
 
+// === Paddle Transactions ===
+export const paddleTransactions = pgTable("paddle_transactions", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  userId: varchar("user_id").notNull(),
+  paddleTransactionId: varchar("paddle_transaction_id").notNull().unique(),
+  status: varchar("status").notNull(), // 'completed', 'refunded', etc.
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency").default("USD").notNull(),
+  creditsAdded: numeric("credits_added", { precision: 12, scale: 4 }).notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_paddle_tx_user").on(table.userId),
+  index("idx_paddle_tx_paddle_id").on(table.paddleTransactionId),
+]);
+
+// === Credit Usage Ledger ===
+export const creditTransactions = pgTable("credit_transactions", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  userId: varchar("user_id").notNull(),
+  type: varchar("type").notNull(), // 'purchase' | 'usage' | 'refund'
+  amount: numeric("amount", { precision: 12, scale: 6 }).notNull(), // positive for purchase, negative for usage
+  balanceAfter: numeric("balance_after", { precision: 12, scale: 4 }).notNull(),
+  description: varchar("description"),
+  metadata: jsonb("metadata"), // token usage details, model name, etc.
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_credit_tx_user").on(table.userId),
+  index("idx_credit_tx_type").on(table.type),
+]);
+
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+export type PaddleTransaction = typeof paddleTransactions.$inferSelect;
+export type CreditTransaction = typeof creditTransactions.$inferSelect;
 

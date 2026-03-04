@@ -236,6 +236,12 @@ export interface ModelConfig {
     iconUrl?: string;
     color: string;
     provider: ModelProvider;
+    /** Per-million-token pricing. Set free:true (or both to 0) for free models. */
+    pricing?: {
+        inputPerMillion: number;
+        outputPerMillion: number;
+        free?: boolean;
+    };
 }
 
 // ─── Load model registry from models.json ───────────────────────────────────

@@ -10,6 +10,8 @@ export interface ModelTokenUsage {
   totalTokens: number;
   /** true when the provider doesn't report token counts (e.g. groq/compound) */
   unavailable?: boolean;
+  /** Per-million-token pricing sourced from models.json */
+  pricing?: { inputPerMillion: number; outputPerMillion: number; free?: boolean };
 }
 
 export interface TokenCounterProps {
@@ -17,25 +19,12 @@ export interface TokenCounterProps {
   onExportChat?: () => void;
 }
 
-// ── Model Pricing (per 1M tokens in USD) ──
-
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  "Gemini":  { input: 0.50,  output: 3.00 },
-  "DeepSeek R1":   { input: 0,     output: 0    },
-  "LLaMA 3.3":    { input: 0,     output: 0    },
-  "Gemma 3 27B":  { input: 0,     output: 0    },
-  "Devstral":     { input: 0,     output: 0    },
-  "Nemotron":     { input: 0,     output: 0    },
-  "Qwen 2.5":    { input: 0,     output: 0    },
-  "Gemma 3 12B":  { input: 0,     output: 0    },
-  "GLM 4.5":     { input: 0,     output: 0    },
-};
-
+// Pricing is sourced from models.json via ModelTokenUsage.pricing
 function getModelCost(model: ModelTokenUsage): number {
-  const pricing = MODEL_PRICING[model.modelName];
-  if (!pricing) return 0;
-  const inputCost = (model.promptTokens / 1_000_000) * pricing.input;
-  const outputCost = (model.completionTokens / 1_000_000) * pricing.output;
+  const p = model.pricing;
+  if (!p || p.free || (p.inputPerMillion === 0 && p.outputPerMillion === 0)) return 0;
+  const inputCost = (model.promptTokens / 1_000_000) * p.inputPerMillion;
+  const outputCost = (model.completionTokens / 1_000_000) * p.outputPerMillion;
   return inputCost + outputCost;
 }
 
@@ -49,16 +38,19 @@ function formatCost(cost: number): string {
 
 // ── Color mapping by model displayName ──
 const MODEL_COLOR_MAP: Record<string, { solid: string; text: string; bg: string; border: string }> = {
-  "Gemini":  { solid: "bg-blue-500",    text: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/20"    },
-  "DeepSeek R1":   { solid: "bg-purple-500",  text: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-500/20"  },
-  "LLaMA 3.3":    { solid: "bg-green-500",   text: "text-green-400",   bg: "bg-green-500/10",   border: "border-green-500/20"   },
-  "Gemma 3 27B":  { solid: "bg-indigo-500",  text: "text-indigo-400",  bg: "bg-indigo-500/10",  border: "border-indigo-500/20"  },
-  "Devstral":     { solid: "bg-cyan-500",    text: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "border-cyan-500/20"    },
-  "Nemotron":     { solid: "bg-lime-500",    text: "text-lime-400",    bg: "bg-lime-500/10",    border: "border-lime-500/20"    },
-  "Qwen 2.5":    { solid: "bg-pink-500",    text: "text-pink-400",    bg: "bg-pink-500/10",    border: "border-pink-500/20"    },
-  "Gemma 3 12B":  { solid: "bg-amber-500",   text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20"   },
-  "GLM 4.5":     { solid: "bg-teal-500",    text: "text-teal-400",    bg: "bg-teal-500/10",    border: "border-teal-500/20"    },
-  "✨ Summary":   { solid: "bg-yellow-500",  text: "text-yellow-400",  bg: "bg-yellow-500/10",  border: "border-yellow-500/20"  },
+  // Current models (matched by displayName from models.json)
+  "Gemini":           { solid: "bg-blue-500",    text: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/20"    },
+  "Nemotron":         { solid: "bg-lime-500",    text: "text-lime-400",    bg: "bg-lime-500/10",    border: "border-lime-500/20"    },
+  "GLM 4.5":          { solid: "bg-teal-500",    text: "text-teal-400",    bg: "bg-teal-500/10",    border: "border-teal-500/20"    },
+  "Trinity Large":    { solid: "bg-orange-500",  text: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/20"  },
+  "LLaMA 3.3 70B":   { solid: "bg-green-500",   text: "text-green-400",   bg: "bg-green-500/10",   border: "border-green-500/20"   },
+  "LLaMA 4 Maverick": { solid: "bg-purple-500",  text: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-500/20"  },
+  "LLaMA 4 Scout":   { solid: "bg-emerald-500", text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+  "Kimi K2":          { solid: "bg-cyan-500",    text: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "border-cyan-500/20"    },
+  "Qwen 3 32B":       { solid: "bg-amber-500",   text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20"   },
+  "GPT OSS 120B":    { solid: "bg-sky-500",     text: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/20"     },
+  "Groq Compound":   { solid: "bg-yellow-500",  text: "text-yellow-400",  bg: "bg-yellow-500/10",  border: "border-yellow-500/20"  },
+  "✨ Summary":       { solid: "bg-yellow-500",  text: "text-yellow-400",  bg: "bg-yellow-500/10",  border: "border-yellow-500/20"  },
 };
 
 const FALLBACK_COLORS = [
@@ -255,8 +247,8 @@ export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps)
                 {/* Model legend rows */}
                 <div className="space-y-2">
                   {modelSlices.map((slice) => {
-                    const pricing = MODEL_PRICING[slice.model.modelName];
-                    const isFree = !pricing || (pricing.input === 0 && pricing.output === 0);
+                    const p = slice.model.pricing;
+                    const isFree = !p || p.free || (p.inputPerMillion === 0 && p.outputPerMillion === 0);
 
                     return (
                       <motion.div
@@ -314,11 +306,6 @@ export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps)
                           </span>
                         </div>
 
-                        {pricing && !isFree && (
-                          <div className="mt-1 text-[9px] text-muted-foreground/40">
-                            ${pricing.input}/1M in · ${pricing.output}/1M out
-                          </div>
-                        )}
                         </>
                         )}
                       </motion.div>
