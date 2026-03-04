@@ -126,6 +126,7 @@ export function BuyCreditsDialog() {
 
   // Handle Paddle events (checkout completion)
   const handlePaddleEvent = useCallback((event: any) => {
+    console.log("[Paddle Event RAW]", JSON.stringify(event, null, 2));
     if (event?.name === "checkout.completed") {
       const transactionId = event?.data?.transaction_id || event?.data?.id;
       if (transactionId) {
@@ -158,7 +159,7 @@ export function BuyCreditsDialog() {
         });
       }
     } else if (event?.name === "checkout.error") {
-      console.error("[Paddle] Checkout error:", event?.data?.detail || event?.data);
+      console.error("[Paddle] Checkout error event:", JSON.stringify(event, null, 2));
     }
   }, [verifyTransaction, toast]);
 
@@ -174,11 +175,17 @@ export function BuyCreditsDialog() {
 
     const checkoutParams = {
       items: [{ priceId: config.priceId, quantity }],
-      customData: { userId: user?.id },
+      // Paddle production requires customData to be a JSON string
+      customData: JSON.stringify({ userId: user?.id }),
       customer: { email: user?.email || undefined },
       settings: { displayMode: "overlay", theme: "dark", allowLogout: false },
     };
-    console.log("[Paddle] Opening checkout with:", { priceId: config.priceId, quantity, userId: user?.id, email: user?.email });
+    console.log("[Paddle] Opening checkout with:", JSON.stringify(checkoutParams, null, 2));
+    console.log("[Paddle] window.Paddle state:", {
+      initialized: !!window.Paddle,
+      hasCheckout: !!window.Paddle?.Checkout,
+      environment: window.Paddle?.Environment?.query?.() ?? "unknown",
+    });
 
     try {
       window.Paddle.Checkout.open(checkoutParams);

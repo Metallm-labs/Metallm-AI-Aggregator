@@ -118,8 +118,12 @@ export function registerPaddleRoutes(app: Express) {
       switch (event.event_type) {
         case "transaction.completed": {
           const txnData = event.data;
-          // Paddle v2 uses custom_data (snake_case), but check both
-          const customData = txnData.custom_data || txnData.customData || {};
+          // Paddle v2 uses custom_data (snake_case). customData may be a JSON string or object.
+          let rawCustom = txnData.custom_data || txnData.customData || null;
+          if (typeof rawCustom === "string") {
+            try { rawCustom = JSON.parse(rawCustom); } catch { rawCustom = {}; }
+          }
+          const customData = rawCustom || {};
           const userId = customData?.userId || customData?.user_id;
 
           if (!userId) {
