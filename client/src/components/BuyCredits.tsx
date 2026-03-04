@@ -30,21 +30,36 @@ function usePaddleScript(
   eventRef.current = onEvent;
 
   useEffect(() => {
-    if (!clientToken) return;
-    if (window.Paddle && loaded) return;
+    if (!clientToken) {
+      console.warn("[Paddle] No clientToken yet — waiting for config");
+      return;
+    }
+    console.log("[Paddle] Config received:", { environment, clientToken: clientToken?.slice(0, 12) + "...", loaded });
+    if (window.Paddle && loaded) {
+      console.log("[Paddle] Already initialized, skipping");
+      return;
+    }
 
     const initPaddle = () => {
-      if (!window.Paddle) return;
+      if (!window.Paddle) {
+        console.error("[Paddle] window.Paddle not found after script load");
+        return;
+      }
       try {
         if (environment === "sandbox") {
+          console.log("[Paddle] Setting sandbox environment");
           window.Paddle.Environment.set("sandbox");
+        } else {
+          console.log("[Paddle] Production environment — no Environment.set call");
         }
         window.Paddle.Initialize({
           token: clientToken,
           eventCallback: (event: any) => {
+            console.log("[Paddle Event]", event?.name, event?.data);
             eventRef.current?.(event);
           },
         });
+        console.log("[Paddle] Initialized OK — env:", environment, "token prefix:", clientToken?.slice(0, 8));
         setLoaded(true);
       } catch (e) {
         console.error("[Paddle] Init error:", e);
@@ -53,15 +68,23 @@ function usePaddleScript(
     };
 
     if (window.Paddle) {
+      console.log("[Paddle] Script already on page, re-initializing");
       initPaddle();
       return;
     }
 
+    console.log("[Paddle] Loading paddle.js script...");
     const script = document.createElement("script");
     script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
     script.async = true;
-    script.onerror = () => setError("Failed to load payment system");
-    script.onload = initPaddle;
+    script.onerror = () => {
+      console.error("[Paddle] Failed to load paddle.js script");
+      setError("Failed to load payment system");
+    };
+    script.onload = () => {
+      console.log("[Paddle] Script loaded, initializing...");
+      initPaddle();
+    };
     document.head.appendChild(script);
   }, [clientToken, environment]);
 
@@ -142,39 +165,30 @@ export function BuyCreditsDialog() {
   const { loaded: paddleLoaded, error: paddleError } = usePaddleScript(config?.clientToken, config?.environment, handlePaddleEvent);
 
   const handleBuyCredits = useCallback(() => {
+    console.log("[Paddle] handleBuyCredits — config:", config, "loaded:", paddleLoaded, "error:", paddleError);
     if (!window.Paddle || !config) {
+      console.error("[Paddle] Paddle not ready", { windowPaddle: !!window.Paddle, config });
       toast({ title: "Error", description: paddleError || "Payment system not ready. Please try again.", variant: "destructive" });
       return;
     }
 
-    try {
-      window.Paddle.Checkout.open({
-        items: [
-          {
-            priceId: config.priceId,
-            quantity: quantity,
-          },
-        ],
-        customData: {
-          userId: user?.id,
-        },
-        customer: {
-          email: user?.email || undefined,
-        },
-        settings: {
-          displayMode: "overlay",
-          theme: "dark",
-          allowLogout: false,
-        },
-      });
+    const checkoutParams = {
+      items: [{ priceId: config.priceId, quantity }],
+      customData: { userId: user?.id },
+      customer: { email: user?.email || undefined },
+      settings: { displayMode: "overlay", theme: "dark", allowLogout: false },
+    };
+    console.log("[Paddle] Opening checkout with:", { priceId: config.priceId, quantity, userId: user?.id, email: user?.email });
 
+    try {
+      window.Paddle.Checkout.open(checkoutParams);
       // Close our dialog so Paddle overlay is fully accessible
       setOpen(false);
     } catch (e) {
-      console.error("[Paddle] Checkout error:", (e as Error).message);
+      console.error("[Paddle] Checkout.open threw:", e);
       toast({ title: "Error", description: `Checkout failed: ${(e as Error).message}`, variant: "destructive" });
     }
-  }, [config, quantity, user, toast, paddleError]);
+  }, [config, quantity, user, toast, paddleError, paddleLoaded]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
