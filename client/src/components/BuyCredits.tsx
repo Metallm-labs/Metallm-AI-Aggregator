@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Coins, Plus, Minus, CreditCard, Loader2, CheckCircle, X, AlertTriangle, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { usePaddleConfig, useCreditBalance, useCreditTransactions, useVerifyTransaction } from "@/hooks/use-credits";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -173,19 +173,17 @@ export function BuyCreditsDialog() {
       return;
     }
 
-    const checkoutParams = {
+    const checkoutParams: any = {
       items: [{ priceId: config.priceId, quantity }],
-      // Paddle production requires customData to be a JSON string
-      customData: JSON.stringify({ userId: user?.id }),
-      customer: { email: user?.email || undefined },
-      settings: { displayMode: "overlay", theme: "dark", allowLogout: false },
+      customData: { userId: user?.id },
+      settings: { displayMode: "overlay", theme: "dark" },
     };
+    // Only pass customer.email if we have one
+    if (user?.email) {
+      checkoutParams.customer = { email: user.email };
+    }
     console.log("[Paddle] Opening checkout with:", JSON.stringify(checkoutParams, null, 2));
-    console.log("[Paddle] window.Paddle state:", {
-      initialized: !!window.Paddle,
-      hasCheckout: !!window.Paddle?.Checkout,
-      environment: window.Paddle?.Environment?.query?.() ?? "unknown",
-    });
+    console.log("[Paddle] window.Paddle keys:", Object.keys(window.Paddle ?? {}));
 
     try {
       window.Paddle.Checkout.open(checkoutParams);
@@ -216,6 +214,9 @@ export function BuyCreditsDialog() {
             <Coins className="w-5 h-5 text-yellow-400" />
             {showHistory ? "Credit History" : "Buy Credits"}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            {showHistory ? "View your credit transaction history" : "Purchase credits to use AI models"}
+          </DialogDescription>
         </DialogHeader>
 
         {showHistory ? (
