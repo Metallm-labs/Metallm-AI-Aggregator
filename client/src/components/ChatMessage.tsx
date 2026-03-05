@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { User, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, ChevronLeft, Zap, Globe, ExternalLink, ChevronRight, Paperclip, Brain } from "lucide-react";
 import { MarkdownRenderer } from "@/lib/markdown";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { ModelIcon } from "@/components/ModelIcon";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -118,6 +118,13 @@ export function ChatMessage({
     // Parse thinking blocks from content (Groq/DeepSeek models emit <think>...</think>)
     const { thinkingBlocks, visibleContent } = !isUser ? parseThinkingContent(content) : { thinkingBlocks: [], visibleContent: content };
     const hasThinking = thinkingBlocks.length > 0;
+
+    // Auto-expand thinking section while streaming inside a think block
+    useEffect(() => {
+        if (isStreaming && hasThinking) {
+            setShowThinking(true);
+        }
+    }, [isStreaming, hasThinking]);
 
     const handleCopy = async () => {
         await navigator.clipboard.writeText(isUser ? content : visibleContent);

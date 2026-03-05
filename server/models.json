@@ -9,7 +9,11 @@
       "iconUrl": "/icons/gemini.svg",
       "color": "blue",
       "provider": "gemini",
-      "pricing": { "inputPerMillion": 4.00, "outputPerMillion": 20.00, "free": false }
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 5,
+        "free": false
+      }
     },
     {
       "id": "nvidia/nemotron-3-nano-30b-a3b:free",
@@ -19,7 +23,11 @@
       "iconUrl": "/icons/nvidia.svg",
       "color": "lime",
       "provider": "openrouter",
-      "pricing": { "inputPerMillion": 2.750, "outputPerMillion": 20.00, "free": false }
+      "pricing": {
+        "inputPerMillion": 0.12,
+        "outputPerMillion": 0.48,
+        "free": false
+      }
     },
     {
       "id": "z-ai/glm-4.5-air:free",
@@ -29,7 +37,11 @@
       "iconUrl": "/icons/glm.svg",
       "color": "teal",
       "provider": "openrouter",
-      "pricing": { "inputPerMillion": 0.15, "outputPerMillion": 0.60, "free": false }
+      "pricing": {
+        "inputPerMillion": 0.2,
+        "outputPerMillion": 0.8,
+        "free": false
+      }
     },
     {
       "id": "arcee-ai/trinity-large-preview:free",
@@ -39,17 +51,25 @@
       "iconUrl": "/icons/mistral.svg",
       "color": "orange",
       "provider": "openrouter",
-      "pricing": { "inputPerMillion": 0.10, "outputPerMillion": 0.40, "free": false }
+      "pricing": {
+        "inputPerMillion": 0.2,
+        "outputPerMillion": 0.8,
+        "free": false
+      }
     },
     {
       "id": "llama-3.3-70b-versatile",
       "displayName": "LLaMA 3.3 70B",
       "role": "Fast & Versatile Assistant",
-      "systemPrompt": "You are LLaMA 3.3 70B by Meta, running on Groq's ultra-fast inference platform. You provide fast, accurate, and well-structured responses across all domains. You excel at reasoning, coding, writing, and following complex instructions.",
+      "systemPrompt": "You are LLaMA 3.3 70B by Meta. You provide fast, accurate, and well-structured responses across all domains. You excel at reasoning, coding, writing, and following complex instructions.",
       "iconUrl": "/icons/meta.svg",
       "color": "blue",
       "provider": "groq",
-      "pricing": { "inputPerMillion": 0.15, "outputPerMillion": 0.60, "free": false }
+      "pricing": {
+        "inputPerMillion": 1.18,
+        "outputPerMillion": 1.58,
+        "free": false
+      }
     },
     {
       "id": "meta-llama/llama-4-maverick-17b-128e-instruct",
@@ -59,17 +79,25 @@
       "iconUrl": "/icons/meta.svg",
       "color": "purple",
       "provider": "groq",
-      "pricing": { "inputPerMillion": 2.750, "outputPerMillion": 14.00, "free": false }
+      "pricing": {
+        "inputPerMillion": 0.4,
+        "outputPerMillion": 1.2,
+        "free": false
+      }
     },
     {
       "id": "meta-llama/llama-4-scout-17b-16e-instruct",
       "displayName": "LLaMA 4 Scout",
       "role": "Efficient Reasoning & Analysis",
-      "systemPrompt": "You are LLaMA 4 Scout by Meta, a highly efficient next-generation AI running on Groq. You provide intelligent, accurate, and well-structured responses. You excel at understanding context, following instructions precisely, and generating high-quality content across all domains",
+      "systemPrompt": "You are LLaMA 4 Scout by Meta, a highly efficient next-generation AI running on metallm. You provide intelligent, accurate, and well-structured responses. You excel at understanding context, following instructions precisely, and generating high-quality content across all domains",
       "iconUrl": "/icons/meta.svg",
       "color": "green",
       "provider": "groq",
-      "pricing": { "inputPerMillion": 2.750, "outputPerMillion": 14.00, "free": false }
+      "pricing": {
+        "inputPerMillion": 0.22,
+        "outputPerMillion": 0.68,
+        "free": false
+      }
     },
     {
       "id": "moonshotai/kimi-k2-instruct",
@@ -79,27 +107,39 @@
       "iconUrl": "/icons/moonshot.svg",
       "color": "cyan",
       "provider": "groq",
-      "pricing": { "inputPerMillion": 2.750, "outputPerMillion": 14.00, "free": false }
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 6,
+        "free": false
+      }
     },
     {
       "id": "qwen/qwen3-32b",
       "displayName": "Qwen 3 32B",
       "role": "Multilingual & Deep Reasoning",
-      "systemPrompt": "You are Qwen 3 32B by Alibaba Cloud, running on Groq. You excel at multilingual tasks, deep reasoning, mathematics, and coding. You provide thorough, well-structured answers and can think step by step for complex problems.",
+      "systemPrompt": "You are Qwen 3 32B by Alibaba Cloud, running on metallm. You excel at multilingual tasks, deep reasoning, mathematics, and coding. You provide thorough, well-structured answers and can think step by step for complex problems.",
       "iconUrl": "/icons/qwen.svg",
       "color": "orange",
       "provider": "groq",
-      "pricing": { "inputPerMillion": 10, "outputPerMillion": 40.00, "free": false }
+      "pricing": {
+        "inputPerMillion": 0.58,
+        "outputPerMillion": 1.18,
+        "free": false
+      }
     },
     {
       "id": "openai/gpt-oss-120b",
       "displayName": "GPT OSS 120B",
       "role": "General Purpose & Instruction",
-      "systemPrompt": "You are GPT OSS 120B by OpenAI, running on Groq's ultra-fast inference platform. You provide intelligent, accurate, and well-structured responses across all domains including reasoning, writing, coding, and analysis.",
+      "systemPrompt": "You are GPT OSS 120B by OpenAI, running on metallm. You provide intelligent, accurate, and well-structured responses across all domains including reasoning, writing, coding, and analysis.",
       "iconUrl": "/icons/openai.svg",
       "color": "lime",
       "provider": "groq",
-      "pricing": { "inputPerMillion": 2.750, "outputPerMillion": 14.00, "free": false }
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 1.2,
+        "free": false
+      }
     },
     {
       "id": "groq/compound",
@@ -109,8 +149,16 @@
       "iconUrl": "/icons/groq.svg",
       "color": "yellow",
       "provider": "groq",
-      "pricing": { "inputPerMillion": 6, "outputPerMillion": 40, "free": false }
+      "pricing": {
+        "inputPerMillion": 0.3,
+        "outputPerMillion": 1.2,
+        "free": false,
+        "toolsExtra": {
+          "basicSearch": 5,
+          "advancedSearch": 8,
+          "visitWebsite": 1
+        }
+      }
     }
   ]
 }
- 

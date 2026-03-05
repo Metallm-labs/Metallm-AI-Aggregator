@@ -7,6 +7,7 @@ import { MAX_MULTI_MODELS, ModelSettings } from "@/components/ModelSettings";
 import { MultiModelResponse } from "@/components/MultiModelResponse";
 import { ModelIcon } from "@/components/ModelIcon";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import { useConversation, useCreateConversation, useSendMessage, routePrompt, type RoutingResult, type TokenUsage } from "@/hooks/use-chat";
 import { Loader2, MessageSquare, Zap, Edit3, Send, X, Sparkles, ChevronDown, ChevronLeft, ChevronRight, RotateCcw, Globe, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -152,6 +153,7 @@ export default function Dashboard() {
   const { data: conversationData, isLoading: convLoading } = useConversation(activeConversationId);
   const createConversation = useCreateConversation();
   const { sendMessage } = useSendMessage();
+  const { toast } = useToast();
   // Prevents the activeConversationId effect from wiping isRouting when we
   // create a new conversation mid-send (the effect fires after setActiveConversationId)
   const pendingRoutingRef = useRef(false);
@@ -744,6 +746,16 @@ export default function Dashboard() {
       // Ignore abort errors (user clicked stop)
       if (error?.name !== "AbortError") {
         console.error("Send error:", error);
+        const msg: string = error?.message ?? "";
+        if (msg.toLowerCase().includes("insufficient") || msg.toLowerCase().includes("credits")) {
+          toast({
+            title: "Insufficient Credits",
+            description: "You don't have enough credits. Please buy more to continue.",
+            variant: "destructive",
+          });
+        } else if (msg) {
+          toast({ title: "Error", description: msg, variant: "destructive" });
+        }
       }
       streamingStateRef.current.delete(convId);
       if (activeConvIdRef.current === convId) {
@@ -824,7 +836,7 @@ export default function Dashboard() {
 
     const participantIds = new Set(debateCompleteState.debateConfig.map((p) => p.modelId));
 
-    // Collect all families in the debate (may be >1 if models are from the same company)
+    // Collect all families in the debate
     const participantFamilies = new Set(
       debateCompleteState.debateConfig.map((p) => {
         const m = availableModels.find((x) => x.id === p.modelId);
@@ -832,19 +844,34 @@ export default function Dashboard() {
       })
     );
 
-    // Priority 1: not a participant AND not from any participant's company
-    let judgeModel = availableModels.find((m) => {
-      if (participantIds.has(m.id)) return false;
-      if (participantFamilies.has(getModelFamily(m.id, m.displayName))) return false;
-      return true;
+    // Determine if any debate participant belongs to the same family as the main model
+    const mainModelMeta = availableModels.find((m) => m.id === mainModelId);
+    const mainFamily = getModelFamily(mainModelId, mainModelMeta?.displayName);
+    const mainFamilyInDebate = debateCompleteState.debateConfig.some((p) => {
+      const m = availableModels.find((x) => x.id === p.modelId);
+      return getModelFamily(p.modelId, m?.displayName) === mainFamily;
     });
 
-    // Priority 2: if all non-participants are from the same family, just pick any non-participant
-    if (!judgeModel) {
-      judgeModel = availableModels.find((m) => !participantIds.has(m.id));
-    }
+    let judgeModel: typeof availableModels[0] | undefined;
+    let judgeModelId: string;
 
-    const judgeModelId = judgeModel?.id ?? mainModelId;
+    if (!mainFamilyInDebate) {
+      // No family member of the main model participated → main model gives the verdict
+      judgeModelId = mainModelId;
+      judgeModel = mainModelMeta;
+    } else {
+      // A family member of the main model participated → pick a completely neutral model
+      judgeModel = availableModels.find((m) => {
+        if (participantIds.has(m.id)) return false;
+        if (participantFamilies.has(getModelFamily(m.id, m.displayName))) return false;
+        return true;
+      });
+      // Fallback: any non-participant
+      if (!judgeModel) {
+        judgeModel = availableModels.find((m) => !participantIds.has(m.id));
+      }
+      judgeModelId = judgeModel?.id ?? mainModelId;
+    }
 
     const p0 = availableModels.find((m) => m.id === debateCompleteState.debateConfig[0]?.modelId);
     const p1 = availableModels.find((m) => m.id === debateCompleteState.debateConfig[1]?.modelId);
@@ -1347,7 +1374,7 @@ export default function Dashboard() {
                           {pendingMode === "multi"
                             ? `${mainModelName} is crafting tailored prompts for ${selectedMultiModelIds.length} model${selectedMultiModelIds.length !== 1 ? "s" : ""}...`
                             : pendingMode === "debate"
-                              ? `${mainModelName} is designing debate stances for each model...`
+                              ? "Preparing debate prompts for each model..."
                               : `${mainModelName} is analyzing your prompt...`}
                         </span>
                     </div>
