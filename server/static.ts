@@ -1,6 +1,7 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import fs from "fs";
 import path from "path";
+import { isBot, getPrerenderHTML } from "./bot-prerender";
 
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
@@ -24,11 +25,21 @@ export function serveStatic(app: Express) {
 
   // SPA catch-all — serve index.html with NO cache for navigation routes.
   // Skip asset requests so missing files get a proper 404 instead of text/html.
-  app.use((req, res, next) => {
+  app.use((req: Request, res: Response, next: NextFunction) => {
     const ext = path.extname(req.path);
     if (ext && ext !== ".html") {
       return next();
     }
+
+    // ── Bot / crawler detection: serve pre-rendered static HTML ─────────────
+    const ua = req.headers["user-agent"] ?? "";
+    if (isBot(ua)) {
+      res.setHeader("Cache-Control", "public, max-age=3600"); // crawlers can cache 1h
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Robots-Tag", "index, follow");
+      return res.send(getPrerenderHTML(req.path));
+    }
+
     // Never cache index.html — it contains hashed asset references
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Pragma", "no-cache");
