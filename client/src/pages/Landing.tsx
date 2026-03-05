@@ -614,14 +614,16 @@ function AnimatedCounter({ target, suffix = "" }: { target: number; suffix?: str
 function ModelLogoCarousel() {
   const models = [
     { name: "Gemini", src: "/icons/gemini.svg" },
-    { name: "DeepSeek R1", src: "/icons/deepseek.svg" },
-    { name: "LLaMA 3.3", src: "/icons/meta.svg" },
-    { name: "Gemma 3 27B", src: "/icons/google.svg" },
-    { name: "Devstral", src: "/icons/mistral.svg" },
+    { name: "GPT", src: "/icons/openai.svg" },
+    { name: "LLaMA Scout", src: "/icons/meta.svg" },
+    { name: "LLaMA Maverick", src: "/icons/meta.svg" },
+    { name: "LLaMA", src: "/icons/meta.svg" },
     { name: "Nemotron", src: "/icons/nvidia.svg" },
-    { name: "Qwen 2.5", src: "/icons/qwen.svg" },
-    { name: "Gemma 3 12B", src: "/icons/google.svg" },
-    { name: "GLM 4.5", src: "/icons/glm.svg" },
+    { name: "Qwen", src: "/icons/qwen.svg" },
+    { name: "Kimi", src: "/icons/moonshot.svg" },
+    { name: "GLM", src: "/icons/glm.svg" },
+    { name: "Trinity", src: "/icons/mistral.svg" },
+    { name: "Groq", src: "/icons/groq.svg" },
   ];
 
   return (
@@ -660,7 +662,7 @@ const testimonials = [
     avatar: "AR",
   },
   {
-    quote: "Smart routing is magic — it sends my code questions to Devstral and my math to Nemotron automatically. I used to spend hours picking the right AI. Now MetaLLM just knows.",
+    quote: "Smart routing is magic — it sends my code questions to Kimi and my math to Nemotron automatically. I used to spend hours picking the right AI. Now MetaLLM just knows.",
     name: "Priya M.",
     role: "CS Student, Stanford",
     avatar: "PM",
@@ -671,11 +673,11 @@ const testimonials = [
 const faqs = [
   {
     q: "What is MetaLLM and how is it different from ChatGPT?",
-    a: "MetaLLM is an AI aggregator that sends your query to 9 leading AI models — Gemini, DeepSeek, LLaMA, Devstral, Nemotron, Qwen, Gemma, and GLM — simultaneously. Unlike ChatGPT (one model, one perspective), MetaLLM gives you multi-model consensus, automatic prompt enhancement, smart routing to specialists, and an AI-powered debate mode."
+    a: "MetaLLM is an AI aggregator that sends your query to multiple leading AI models — Gemini, GPT, LLaMA, Nemotron, Qwen, Kimi, GLM, Trinity, and Groq — simultaneously. Unlike ChatGPT (one model, one perspective), MetaLLM gives you multi-model consensus, automatic prompt enhancement, smart routing to specialists, and an AI-powered debate mode."
   },
   {
     q: "How does Smart Routing work?",
-    a: "When you type a query, MetaLLM's AI router analyzes your intent and context. If it's a coding question, it routes to Devstral (Mistral's code specialist). Math goes to Nemotron (NVIDIA). Creative writing to Qwen. You can also override this and choose Multi-Model or Debate mode for broader analysis."
+    a: "When you type a query, MetaLLM's AI router analyzes your intent and context. If it's a coding question, it routes to Kimi (Moonshot's agentic coding specialist). Math goes to Nemotron (NVIDIA). Creative writing to Trinity. Business analysis to GLM. You can also override this and choose Multi-Model or Debate mode for broader analysis."
   },
   {
     q: "What is Prompt Enhancement?",
@@ -683,11 +685,11 @@ const faqs = [
   },
   {
     q: "How does Debate Mode work?",
-    a: "Debate Mode assigns each AI model a unique stance on your topic — 'strongly in favour', 'devil's advocate', 'ethical critic', etc. Models argue their positions over 2 structured rounds, responding directly to each other's arguments. It's like having a panel of expert debaters analyze your question from every angle."
+    a: "Debate Mode assigns each AI model a unique stance on your topic — 'strongly in favour', 'devil's advocate', 'ethical critic', etc. Models argue their positions over 2 structured rounds, responding directly to each other's arguments. A neutral judge model then delivers the final verdict. It's like having a panel of expert debaters analyze your question from every angle."
   },
   {
     q: "Which AI models does MetaLLM support?",
-    a: "MetaLLM integrates 9 specialist models: Gemini (Google, main assistant), DeepSeek R1 (deep reasoning), LLaMA 3.3 (Meta, general knowledge), Gemma 3 27B (technical/scientific), Devstral (Mistral, code), Nemotron (NVIDIA, data/math), Qwen 2.5 (creative writing), Gemma 3 12B (research/education), and GLM 4.5 (business/strategy)."
+    a: "MetaLLM integrates specialist models from Google (Gemini), OpenAI (GPT), Meta (LLaMA), NVIDIA (Nemotron), Alibaba (Qwen), Moonshot (Kimi), ZhipuAI (GLM), Arcee (Trinity), and Groq — all queried simultaneously."
   },
   {
     q: "Does MetaLLM support web search?",
@@ -709,7 +711,7 @@ export default function Landing() {
     {
       icon: <Route className="w-6 h-6" />,
       title: "Smart Routing",
-      description: "MetaLLM's AI router analyzes every query and automatically routes it to the best specialist model — code to Devstral, math to Nemotron, research to Gemma. Zero manual selection needed.",
+      description: "MetaLLM's AI router analyzes every query and automatically routes it to the best specialist model — code to Kimi K2, math to Nemotron, business to GLM 4.5. Zero manual selection needed.",
       color: "from-amber-500/20 to-yellow-500/10",
       iconColor: "text-amber-400",
     },
@@ -730,7 +732,7 @@ export default function Landing() {
     {
       icon: <Layers className="w-6 h-6" />,
       title: "Multi-Model Parallel Query",
-      description: "Send your question to 9 AI models simultaneously — each receives a prompt tailored to its specialty. DeepSeek for reasoning, Qwen for creative, GLM for business — all at once.",
+      description: "Send your question to 11 AI models simultaneously — each receives a prompt tailored to its specialty. Kimi K2 for coding, Qwen 3 for creative writing, GLM 4.5 for business — all at once.",
       color: "from-emerald-500/20 to-green-500/10",
       iconColor: "text-emerald-400",
     },
@@ -778,7 +780,7 @@ export default function Landing() {
       title: "Founders",
       tagline: "Decisions backed by AI consensus",
       pain: "Every wrong decision costs time and money you don't have?",
-      solution: "MetaLLM gives you decision-grade intelligence from 7+ AI models so you can move fast with confidence.",
+      solution: "MetaLLM gives you decision-grade intelligence from 11 AI models so you can move fast with confidence.",
       stat: "90% more confident decisions",
       color: "border-emerald-500/30 hover:border-emerald-400/60",
       iconBg: "bg-emerald-500/10",
@@ -787,7 +789,6 @@ export default function Landing() {
   ];
 
   const stats = [
-    { value: 9, suffix: "+", label: "Specialist AI Models" },
     { value: 10, suffix: "×", label: "Faster Than Manual Research" },
     { value: 3, suffix: "", label: "Modes: Single, Multi, Debate" },
     { value: 50000, suffix: "+", label: "Queries Processed" },
@@ -809,7 +810,7 @@ export default function Landing() {
     {
       step: "03",
       title: "Models Respond in Parallel",
-      description: "In Multi mode, all 9 models — Gemini, DeepSeek, LLaMA, Devstral, Nemotron, Qwen, Gemma, GLM — respond simultaneously with tailored prompts.",
+      description: "In Multi mode, all 11 models — Gemini, GPT OSS 120B, LLaMA 4 Scout, LLaMA 4 Maverick, LLaMA 3.3, Nemotron, Qwen 3, Kimi K2, GLM 4.5, Trinity, Groq Compound — respond simultaneously with tailored prompts.",
       icon: <Layers className="w-6 h-6" />,
     },
     {
@@ -867,7 +868,7 @@ export default function Landing() {
             </a>
             <a href="/login">
               <Button className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-semibold shadow-lg shadow-amber-500/25 hover:shadow-amber-400/40 transition-all duration-300">
-                Get Started Free
+                Get Started
               </Button>
             </a>
           </div>
@@ -957,7 +958,7 @@ export default function Landing() {
               className="hero-description max-w-md text-xs sm:text-sm lg:text-base text-muted-foreground/90 mb-5 lg:mb-8 leading-relaxed"
             >
               Every minute switching between AI tools is wasted.{" "}
-              <strong className="text-white/90">MetaLLM auto-routes to the best AI, queries 9 models in parallel, and synthesizes one answer</strong>{" "}
+              <strong className="text-white/90">MetaLLM auto-routes to the best AI, queries 10+ models in parallel, and synthesizes one answer</strong>{" "}
               — with debate mode & live web search.
             </motion.p>
 
@@ -972,7 +973,7 @@ export default function Landing() {
                 href="/login"
                 className="group inline-flex items-center gap-2 text-sm sm:text-base font-semibold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-300 hover:from-amber-200 hover:to-yellow-200 transition-all duration-300"
               >
-                Start Free — No Credit Card
+                Start Using MetaLLM
                 <ArrowRight className="w-4 h-4 text-amber-400 group-hover:translate-x-1 transition-transform" />
               </a>
               <a
@@ -990,7 +991,7 @@ export default function Landing() {
               transition={{ duration: 0.7, delay: 0.5 }}
               className="text-[10px] sm:text-xs text-muted-foreground/50"
             >
-              Free forever · No credit card · 2-minute setup
+              Trusted by 5,000+ researchers &amp; founders · 2-minute setup
             </motion.p>
           </div>
         </motion.div>
@@ -1467,13 +1468,13 @@ export default function Landing() {
                   size="lg"
                   className="h-16 px-12 text-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-bold shadow-2xl shadow-amber-500/30 hover:shadow-amber-400/50 transition-all duration-300 group"
                 >
-                  Get Started Free — It Takes 30 Seconds
+                  Get Started — It Takes 30 Seconds
                   <ArrowRight className="w-6 h-6 ml-3 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </a>
               <p className="mt-4 text-sm text-muted-foreground/60 flex items-center justify-center gap-2">
                 <Lock className="w-3.5 h-3.5" />
-                No credit card required · Free forever for basic use
+                Join 5,000+ researchers, students &amp; founders using MetaLLM
               </p>
             </motion.div>
           </motion.div>
@@ -1538,7 +1539,7 @@ export default function Landing() {
               © {new Date().getFullYear()} MetaLLM. All rights reserved.
             </p>
             <p className="text-xs text-muted-foreground/40">
-              MetaLLM — AI Aggregator Platform | Multi-Model AI Analysis | GPT-4, Claude, Gemini, DeepSeek
+              MetaLLM — AI Aggregator Platform | Multi-Model AI Analysis | Gemini, GPT OSS 120B, LLaMA 4, Kimi K2, Qwen 3, Nemotron
             </p>
           </div>
         </div>

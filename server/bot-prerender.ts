@@ -59,9 +59,9 @@ export function isBot(userAgent: string): boolean {
 }
 
 export function getPrerenderHTML(path: string): string {
-  const title = "MetaLLM — AI Aggregator | Query Multiple AI Models in One Click";
+  const title = "MetaLLM — AI Aggregator | Query Multiple AI Models Simultaneously";
   const description =
-    "MetaLLM aggregates GPT-4, Claude, Gemini, DeepSeek & more into one unified AI response. Save 10× research time with multi-model AI analysis for students, researchers & founders.";
+    "MetaLLM aggregates Gemini, GPT, LLaMA, Kimi, Qwen, Nemotron & more into one unified AI response. Smart routing, prompt enhancement, AI debate mode & live web search. Built for researchers, students & founders.";
   const canonical = `https://metallm.tech${path === "/" ? "" : path}`;
 
   return `<!DOCTYPE html>
@@ -73,20 +73,20 @@ export function getPrerenderHTML(path: string): string {
   <meta name="description" content="${description}" />
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
   <meta name="googlebot" content="index, follow" />
-  <meta name="keywords" content="AI aggregator, multi-model AI, GPT-4, Claude, Gemini, DeepSeek, AI comparison, LLM aggregator, AI research tool, compare AI models, AI orchestrator, AI synthesis" />
+  <meta name="keywords" content="AI aggregator, multi-model AI, Gemini, GPT, LLaMA, Kimi, Qwen, Nemotron, GLM, Groq, AI comparison, LLM aggregator, AI research tool, compare AI models, AI orchestrator, AI synthesis" />
   <link rel="canonical" href="${canonical}" />
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="${canonical}" />
-  <meta property="og:title" content="MetaLLM — Query Multiple AI Models. Get One Unified Answer." />
-  <meta property="og:description" content="Stop switching between ChatGPT, Claude &amp; Gemini. MetaLLM queries them all simultaneously and synthesizes a comprehensive answer. Built for researchers, students &amp; founders." />
+  <meta property="og:title" content="MetaLLM — Query Multiple AI Models at Once. Get One Unified Answer." />
+  <meta property="og:description" content="Stop switching between Gemini, GPT, LLaMA &amp; Kimi. MetaLLM queries leading AI models simultaneously with smart routing, prompt enhancement &amp; debate mode." />
   <meta property="og:image" content="https://metallm.tech/logo.jpeg" />
   <meta property="og:image:alt" content="MetaLLM AI Aggregator Platform" />
   <meta property="og:site_name" content="MetaLLM" />
 
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="MetaLLM — Multi-AI Aggregator for Smarter Decisions" />
-  <meta name="twitter:description" content="One query. Every top AI model. One synthesized answer. Save hours of research with MetaLLM." />
+  <meta name="twitter:title" content="MetaLLM — Multiple AI Models. One Unified Answer." />
+  <meta name="twitter:description" content="Gemini, GPT, LLaMA, Kimi, Qwen & more — all at once. Smart routing, prompt enhancement, AI debate mode & live web search." />
   <meta name="twitter:image" content="https://metallm.tech/logo.jpeg" />
 
   <script type="application/ld+json">
@@ -96,12 +96,12 @@ export function getPrerenderHTML(path: string): string {
     "name": "MetaLLM",
     "applicationCategory": "Productivity",
     "operatingSystem": "Web",
-    "description": "MetaLLM is a multi-AI aggregator platform that queries GPT-4, Claude, Gemini, DeepSeek and more simultaneously, then synthesizes their responses into one unified, actionable analysis.",
+    "description": "MetaLLM is a multi-AI aggregator platform that queries Gemini, GPT, LLaMA, Nemotron, Qwen, Kimi, GLM, Trinity, and Groq simultaneously, then synthesizes their responses into one unified, actionable analysis.",
     "url": "https://metallm.tech",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "featureList": [
       "Multi-model AI aggregation",
-      "GPT-4, Claude, Gemini, DeepSeek integration",
+      "Gemini, GPT, LLaMA, Kimi, Qwen, Nemotron, GLM, Trinity, Groq integration",
       "Unified AI response synthesis",
       "Smart prompt routing",
       "AI Debate Mode",
@@ -128,7 +128,7 @@ export function getPrerenderHTML(path: string): string {
       {
         "@type": "Question",
         "name": "What is MetaLLM?",
-        "acceptedAnswer": { "@type": "Answer", "text": "MetaLLM is a multi-AI aggregator that sends your query to GPT-4, Claude, Gemini, DeepSeek and other top AI models simultaneously, then synthesizes all responses into one comprehensive, unified answer." }
+        "acceptedAnswer": { "@type": "Answer", "text": "MetaLLM is a multi-AI aggregator that sends your query to Gemini, GPT, LLaMA, Nemotron, Qwen, Kimi, GLM, Trinity, Groq and other top AI models simultaneously, then synthesizes all responses into one comprehensive, unified answer." }
       },
       {
         "@type": "Question",
@@ -138,12 +138,12 @@ export function getPrerenderHTML(path: string): string {
       {
         "@type": "Question",
         "name": "Which AI models does MetaLLM support?",
-        "acceptedAnswer": { "@type": "Answer", "text": "MetaLLM integrates with GPT-4 (OpenAI), Claude (Anthropic), Gemini (Google), DeepSeek, Mistral, Qwen, LLaMA (Meta), Grok, and more — all queried simultaneously." }
+        "acceptedAnswer": { "@type": "Answer", "text": "MetaLLM integrates models from Google (Gemini), OpenAI (GPT), Meta (LLaMA), NVIDIA (Nemotron), Alibaba (Qwen), Moonshot (Kimi), ZhipuAI (GLM), Arcee (Trinity), and Groq — all queried simultaneously." }
       },
       {
         "@type": "Question",
         "name": "Is MetaLLM free?",
-        "acceptedAnswer": { "@type": "Answer", "text": "MetaLLM offers a free tier. Credits can be purchased to use premium AI models at scale." }
+        "acceptedAnswer": { "@type": "Answer", "text": "MetaLLM uses a credits-based system. Purchase credits to query the world's best AI models — Gemini, GPT, LLaMA, Kimi, Qwen, Nemotron and more — all from one platform." }
       }
     ]
   }
@@ -195,26 +195,28 @@ export function getPrerenderHTML(path: string): string {
 
   <h1>Stop Guessing. Start Knowing.</h1>
   <p style="font-size:1.15rem; color:#d1d5db; max-width:600px; margin-bottom:24px;">
-    Every minute switching between AI tools is wasted. <strong style="color:#fff">MetaLLM auto-routes to the best AI, queries 9 models in parallel, and synthesizes one answer</strong> — with debate mode &amp; live web search.
+    Every minute switching between AI tools is wasted. <strong style="color:#fff">MetaLLM auto-routes to the best AI, queries multiple models in parallel, and synthesizes one answer</strong> — with debate mode &amp; live web search.
   </p>
-  <a href="/login" class="cta">Start Free — No Credit Card</a>
+  <a href="/login" class="cta">Start Using MetaLLM</a>
 
   <h2>What is MetaLLM?</h2>
   <p>
-    MetaLLM is a multi-AI aggregator platform that sends your query to <strong style="color:#fff">GPT-4, Claude, Gemini, DeepSeek, Grok, Mistral, LLaMA, Qwen</strong> and more simultaneously — then synthesizes all responses into one comprehensive, unified answer. Stop switching between 5+ AI tabs; get all perspectives in a single click.
+    MetaLLM is a multi-AI aggregator platform that sends your query to <strong style="color:#fff">Gemini, GPT, LLaMA, Nemotron, Qwen, Kimi, GLM, Trinity, and Groq</strong> simultaneously — then synthesizes all responses into one comprehensive, unified answer. Stop switching between multiple AI tabs; get all perspectives in a single click.
   </p>
 
   <h2>Supported AI Models</h2>
   <div class="models">
-    <span class="model-tag">Gemini 2.5 Flash</span>
-    <span class="model-tag">GPT-4o</span>
-    <span class="model-tag">Claude 3.5 Sonnet</span>
-    <span class="model-tag">DeepSeek R1</span>
-    <span class="model-tag">Grok 3</span>
-    <span class="model-tag">Mistral Large</span>
-    <span class="model-tag">LLaMA 3 (Meta)</span>
-    <span class="model-tag">Qwen 2.5</span>
-    <span class="model-tag">Kimi (Moonshot)</span>
+    <span class="model-tag">Gemini (Google)</span>
+    <span class="model-tag">GPT (OpenAI)</span>
+    <span class="model-tag">LLaMA Scout (Meta)</span>
+    <span class="model-tag">LLaMA Maverick (Meta)</span>
+    <span class="model-tag">LLaMA (Meta)</span>
+    <span class="model-tag">Nemotron (NVIDIA)</span>
+    <span class="model-tag">Qwen (Alibaba)</span>
+    <span class="model-tag">Kimi (Moonshot AI)</span>
+    <span class="model-tag">GLM (ZhipuAI)</span>
+    <span class="model-tag">Trinity (Arcee AI)</span>
+    <span class="model-tag">Groq</span>
   </div>
 
   <h2>Key Features</h2>
@@ -233,7 +235,7 @@ export function getPrerenderHTML(path: string): string {
     </div>
     <div class="card">
       <h3>Multi-Model Parallel Query</h3>
-      <p>Send one question to all 9 models simultaneously and compare their answers side-by-side in real time.</p>
+      <p>Send one question to all models simultaneously and compare their answers side-by-side in real time.</p>
     </div>
     <div class="card">
       <h3>Live Web Search</h3>
@@ -291,8 +293,8 @@ export function getPrerenderHTML(path: string): string {
 
   <h2>Frequently Asked Questions</h2>
 
-  <h3>Is MetaLLM free?</h3>
-  <p>MetaLLM offers a free tier for getting started. Credits can be purchased to access premium AI models at scale.</p>
+  <h3>How much does MetaLLM cost?</h3>
+  <p>MetaLLM uses a credits-based model. Purchase credits to access the world's top AI models including Gemini, GPT, LLaMA, Kimi, Qwen, Nemotron, and more — all from one platform.</p>
 
   <h3>Does MetaLLM support voice input?</h3>
   <p>Yes — MetaLLM includes voice recording so you can speak your query and get multi-model AI responses hands-free.</p>
@@ -304,12 +306,12 @@ export function getPrerenderHTML(path: string): string {
   <p>Debate Mode pits two AI models against each other on any topic, arguing opposing positions across multiple rounds. A neutral third model then delivers the final verdict.</p>
 
   <h3>Does MetaLLM support image uploads?</h3>
-  <p>Yes — you can attach images to your query and vision-capable models (like GPT-4o and Gemini) will analyze them.</p>
+  <p>Yes — you can attach images to your query and vision-capable models (like GPT and Gemini) will analyze them.</p>
 
   <h3>How is MetaLLM different from ChatGPT?</h3>
-  <p>ChatGPT gives you one model's answer. MetaLLM gives you up to 9 simultaneous answers from the world's best AI models, then synthesizes them. It's AI aggregation — not a single chatbot.</p>
+  <p>ChatGPT gives you one model's answer. MetaLLM gives you multiple simultaneous answers from the world's best AI models, then synthesizes them. It's AI aggregation — not a single chatbot.</p>
 
-  <a href="/login" class="cta">Get Started Free</a>
+  <a href="/login" class="cta">Start Using MetaLLM</a>
 
 </div>
 
@@ -318,7 +320,7 @@ export function getPrerenderHTML(path: string): string {
     <a href="/terms">Terms of Service</a> &nbsp;|&nbsp;
     <a href="/privacy">Privacy Policy</a>
   </p>
-  <p style="margin-top:8px;">AI aggregator | Multi-model AI | GPT-4, Claude, Gemini, DeepSeek in one platform</p>
+  <p style="margin-top:8px;">AI aggregator | Multi-model AI | Gemini, GPT, LLaMA, Groq, Qwen and more in one platform</p>
 </footer>
 
 </body>
