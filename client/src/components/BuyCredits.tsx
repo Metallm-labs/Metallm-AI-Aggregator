@@ -138,7 +138,7 @@ export function BuyCreditsDialog() {
             setVerifying(false);
             toast({
               title: "Balance Added!",
-              description: `$${result.creditsAdded.toFixed(2)} added. New balance: $${result.newBalance.toFixed(2)}`,
+              description: `$${result.creditsAdded.toFixed(4)} added. New balance: $${result.newBalance.toFixed(4)}`,
             });
             setTimeout(() => {
               setCheckoutComplete(false);
@@ -203,7 +203,7 @@ export function BuyCreditsDialog() {
             "text-xs font-semibold tabular-nums",
             (balance?.credits ?? 0) <= 1 ? "text-red-400" : (balance?.credits ?? 0) <= 5 ? "text-yellow-400" : "text-emerald-400"
           )}>
-            ${(balance?.credits ?? 0).toFixed(2)}
+            ${(balance?.credits ?? 0).toFixed(4)}
           </span>
           <Plus className="w-3 h-3 text-muted-foreground group-hover:text-white transition-colors" />
         </button>
@@ -275,7 +275,7 @@ export function BuyCreditsDialog() {
             <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
               <span className="text-sm text-muted-foreground">Current Balance</span>
               <span className="text-lg font-bold text-white">
-                ${(balance?.credits ?? 0).toFixed(2)}
+                ${(balance?.credits ?? 0).toFixed(4)}
               </span>
             </div>
 
