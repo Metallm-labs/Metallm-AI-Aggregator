@@ -1528,6 +1528,7 @@ export default function Landing() {
               <ul className="space-y-3">
                 <li><a href="/terms" className="text-sm text-muted-foreground hover:text-white transition-colors">Terms of Service</a></li>
                 <li><a href="/privacy" className="text-sm text-muted-foreground hover:text-white transition-colors">Privacy Policy</a></li>
+                <li><a href="/refund" className="text-sm text-muted-foreground hover:text-white transition-colors">Refund Policy</a></li>
                 <li><a href="/sitemap.xml" className="text-sm text-muted-foreground hover:text-white transition-colors">Sitemap</a></li>
               </ul>
             </div>

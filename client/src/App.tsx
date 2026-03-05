@@ -15,6 +15,7 @@ const History = lazy(() => import("@/pages/History"));
 const QueryDetail = lazy(() => import("@/pages/QueryDetail"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
+const Refund = lazy(() => import("@/pages/Refund"));
 
 // ─── Top-level error boundary ─────────────────────────────────────────────────
 class ErrorBoundary extends React.Component<
@@ -79,7 +80,8 @@ function Router() {
     location === "/" ||
     location === "/login" ||
     location === "/terms" ||
-    location === "/privacy";
+    location === "/privacy" ||
+    location === "/refund";
   const [authEnabled, setAuthEnabled] = React.useState(!isPublicRoute);
 
   React.useEffect(() => {
@@ -120,6 +122,7 @@ function Router() {
       {/* Public Legal Pages */}
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
+      <Route path="/refund" component={Refund} />
 
       {/* Protected App Routes */}
       <Route path="/dashboard">

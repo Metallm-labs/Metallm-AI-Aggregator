@@ -122,7 +122,7 @@ export function BuyCreditsDialog() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const minQuantity = config?.minQuantity ?? 5;
+  const minQuantity = 1;
 
   // Handle Paddle events (checkout completion)
   const handlePaddleEvent = useCallback((event: any) => {
@@ -137,8 +137,8 @@ export function BuyCreditsDialog() {
           onSuccess: (result) => {
             setVerifying(false);
             toast({
-              title: "Credits Added!",
-              description: `${result.creditsAdded} credits added. New balance: ${formatCredits(result.newBalance)}`,
+              title: "Balance Added!",
+              description: `$${result.creditsAdded.toFixed(2)} added. New balance: $${result.newBalance.toFixed(2)}`,
             });
             setTimeout(() => {
               setCheckoutComplete(false);
@@ -148,8 +148,8 @@ export function BuyCreditsDialog() {
           onError: () => {
             setVerifying(false);
             toast({
-              title: "Verification Pending",
-              description: "Your payment was received. Credits will be added shortly.",
+              title: "Payment Received",
+              description: "Your payment was received. Balance will be updated shortly.",
             });
             setTimeout(() => {
               setCheckoutComplete(false);
@@ -198,24 +198,24 @@ export function BuyCreditsDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1.5 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10"
-        >
-          <Coins className="w-4 h-4" />
-          <span className="font-medium">{formatCredits(balance?.credits ?? 0)}</span>
-          <Plus className="w-3 h-3 ml-0.5" />
-        </Button>
+        <button className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-white/5 transition-colors group">
+          <span className={cn(
+            "text-xs font-semibold tabular-nums",
+            (balance?.credits ?? 0) <= 1 ? "text-red-400" : (balance?.credits ?? 0) <= 5 ? "text-yellow-400" : "text-emerald-400"
+          )}>
+            ${(balance?.credits ?? 0).toFixed(2)}
+          </span>
+          <Plus className="w-3 h-3 text-muted-foreground group-hover:text-white transition-colors" />
+        </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl border-white/10">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <Coins className="w-5 h-5 text-yellow-400" />
-            {showHistory ? "Credit History" : "Buy Credits"}
+            {showHistory ? "Transaction History" : "Add Balance"}
           </DialogTitle>
           <DialogDescription className="sr-only">
-            {showHistory ? "View your credit transaction history" : "Purchase credits to use AI models"}
+            {showHistory ? "View your transaction history" : "Add balance to use AI models"}
           </DialogDescription>
         </DialogHeader>
 
@@ -265,7 +265,7 @@ export function BuyCreditsDialog() {
             ) : (
               <>
                 <CheckCircle className="w-10 h-10 text-emerald-400" />
-                <p className="text-sm text-emerald-400 font-medium">Credits added successfully!</p>
+                <p className="text-sm text-emerald-400 font-medium">Balance topped up successfully!</p>
               </>
             )}
           </div>
@@ -275,13 +275,13 @@ export function BuyCreditsDialog() {
             <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
               <span className="text-sm text-muted-foreground">Current Balance</span>
               <span className="text-lg font-bold text-white">
-                {formatCredits(balance?.credits ?? 0)} credits
+                ${(balance?.credits ?? 0).toFixed(2)}
               </span>
             </div>
 
-            {/* Quantity Selector */}
+            {/* Amount Selector */}
             <div className="space-y-3">
-              <label className="text-sm text-muted-foreground">Credits to purchase (min {minQuantity})</label>
+              <label className="text-sm text-muted-foreground">Amount to add (min $1)</label>
               <div className="flex items-center gap-3">
                 <Button
                   variant="outline"
@@ -303,7 +303,7 @@ export function BuyCreditsDialog() {
                     min={minQuantity}
                     className="w-full text-center text-2xl font-bold bg-transparent border-none text-white focus:outline-none"
                   />
-                  <p className="text-xs text-muted-foreground">credits</p>
+                  <p className="text-xs text-muted-foreground">dollars</p>
                 </div>
                 <Button
                   variant="outline"
@@ -317,7 +317,7 @@ export function BuyCreditsDialog() {
 
               {/* Quick amounts */}
               <div className="flex gap-2">
-                {[5, 10, 25, 50].map((amt) => (
+                {[1, 5, 10, 25].map((amt) => (
                   <button
                     key={amt}
                     onClick={() => setQuantity(amt)}
@@ -328,7 +328,7 @@ export function BuyCreditsDialog() {
                         : "border-white/10 text-muted-foreground hover:border-white/20 hover:text-white"
                     )}
                   >
-                    {amt}
+                    ${amt}
                   </button>
                 ))}
               </div>
@@ -337,13 +337,13 @@ export function BuyCreditsDialog() {
             {/* Price Summary */}
             <div className="p-4 rounded-xl bg-gradient-to-r from-yellow-500/10 to-amber-500/10 border border-yellow-500/20">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-yellow-200/80">Total Price</span>
+                <span className="text-sm text-yellow-200/80">Total</span>
                 <span className="text-xl font-bold text-yellow-400">${quantity.toFixed(2)} USD</span>
               </div>
-              <p className="text-xs text-yellow-200/50 mt-1">1 credit = $1.00 • Deducted based on token usage</p>
+              <p className="text-xs text-yellow-200/50 mt-1">$1 = 1 credit • Deducted based on token usage</p>
             </div>
 
-            {/* Buy Button */}
+            {/* Add Balance Button */}
             <Button
               onClick={handleBuyCredits}
               disabled={!paddleLoaded || !!paddleError}
@@ -362,7 +362,7 @@ export function BuyCreditsDialog() {
               ) : (
                 <>
                   <CreditCard className="w-4 h-4 mr-2" />
-                  Buy {quantity} Credits for ${quantity.toFixed(2)}
+                  Add ${quantity.toFixed(2)} to Balance
                 </>
               )}
             </Button>
@@ -387,7 +387,7 @@ export function BuyCreditsDialog() {
               <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
                 <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-red-300">
-                  Your balance is low. Purchase credits to continue using AI models without interruption.
+                  Your balance is low. Add balance to continue using AI models without interruption.
                 </p>
               </div>
             )}

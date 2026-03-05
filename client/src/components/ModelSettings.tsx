@@ -35,6 +35,7 @@ interface ModelSettingsProps {
     onDebateConfigChange: (p: DebateParticipant[]) => void;
     debateRounds?: number;
     onDebateRoundsChange?: (rounds: number) => void;
+    showRolesWarning?: boolean;
     onClose: () => void;
     onSave?: () => void;
 }
@@ -126,7 +127,6 @@ function SingleModeSettings({ onClose, onSave }: { onClose: () => void; onSave?:
                                         {model.id === mainModelId && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary">Main</span>}
                                     </div>
                                 </div>
-                                <span className="text-[10px] text-muted-foreground/50 font-mono truncate max-w-[150px] hidden sm:block">{model.id}</span>
                                 {expandedModel === model.id ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                             </div>
                             <AnimatePresence>
@@ -174,35 +174,26 @@ function MultiModeSettings({ availableModels, selectedIds, onSelectionChange }: 
     selectedIds: string[];
     onSelectionChange: (ids: string[]) => void;
 }) {
-    const { toast } = useToast();
     const toggle = (id: string) => {
         if (selectedIds.includes(id)) {
             if (selectedIds.length <= 1) return;
             onSelectionChange(selectedIds.filter(x => x !== id));
         } else {
-            if (selectedIds.length >= MAX_MULTI_MODELS) {
-                toast({
-                    variant: "destructive",
-                    description: `You can select up to ${MAX_MULTI_MODELS} models in All Models mode.`,
-                });
-                return;
-            }
             onSelectionChange([...selectedIds, id]);
         }
     };
-    const maxSelectable = Math.min(availableModels.length, MAX_MULTI_MODELS);
-    const allSelected = selectedIds.length >= maxSelectable;
+    const allSelected = selectedIds.length >= availableModels.length;
     return (
         <div className="p-4 max-h-[55vh] overflow-y-auto">
             <div className="max-w-4xl mx-auto space-y-2">
                 <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs text-muted-foreground">Pick which models respond to your query (max {MAX_MULTI_MODELS}).</p>
+                    <p className="text-xs text-muted-foreground">Pick which models respond to your query.</p>
                     <button type="button"
                         onClick={() =>
                             onSelectionChange(
                                 allSelected
                                     ? [availableModels[0].id]
-                                    : availableModels.slice(0, MAX_MULTI_MODELS).map(m => m.id)
+                                    : availableModels.map(m => m.id)
                             )
                         }
                         className="text-[10px] text-primary hover:text-primary/80 transition-colors">
@@ -232,7 +223,7 @@ function MultiModeSettings({ availableModels, selectedIds, onSelectionChange }: 
                     })}
                 </div>
                 <p className="text-[10px] text-muted-foreground/50 pt-1 text-center">
-                    {selectedIds.length} selected (max {MAX_MULTI_MODELS})
+                    {selectedIds.length} model{selectedIds.length !== 1 ? "s" : ""} selected
                 </p>
             </div>
         </div>
@@ -240,12 +231,13 @@ function MultiModeSettings({ availableModels, selectedIds, onSelectionChange }: 
 }
 
 // ─── Debate mode: 2-participant config ────────────────────────────────────────
-function DebateModeSettings({ availableModels, participants, onChange, debateRounds = 1, onRoundsChange }: {
+function DebateModeSettings({ availableModels, participants, onChange, debateRounds = 1, onRoundsChange, showRolesWarning }: {
     availableModels: AvailableModel[];
     participants: DebateParticipant[];
     onChange: (p: DebateParticipant[]) => void;
     debateRounds?: number;
     onRoundsChange?: (rounds: number) => void;
+    showRolesWarning?: boolean;
 }) {
     const updateParticipant = (idx: number, field: keyof DebateParticipant, value: string) => {
         onChange(participants.map((p, i) => i === idx ? { ...p, [field]: value } : p));
@@ -255,6 +247,14 @@ function DebateModeSettings({ availableModels, participants, onChange, debateRou
     return (
         <div className="p-4 max-h-[55vh] overflow-y-auto">
             <div className="max-w-4xl mx-auto">
+                {showRolesWarning && (
+                    <div className="mb-3 px-3 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/30 flex items-start gap-2">
+                        <span className="text-orange-400 mt-0.5 shrink-0">⚠️</span>
+                        <p className="text-xs text-orange-300">
+                            Please assign a <strong>Role / Perspective</strong> to both debaters before sending your message.
+                        </p>
+                    </div>
+                )}
                 <p className="text-xs text-muted-foreground mb-3">
                     Configure two debaters with their own model, role, and optional system prompt.
                 </p>
@@ -354,7 +354,7 @@ const PANEL_ICON: Partial<Record<ChatMode, JSX.Element>> = {
 
 export function ModelSettings({
     mode, availableModels, selectedMultiModelIds, onMultiModelsChange,
-    debateParticipants, onDebateConfigChange, debateRounds, onDebateRoundsChange, onClose, onSave,
+    debateParticipants, onDebateConfigChange, debateRounds, onDebateRoundsChange, showRolesWarning, onClose, onSave,
 }: ModelSettingsProps) {
     return (
         <div className="bg-card/30 backdrop-blur-sm">
@@ -371,7 +371,7 @@ export function ModelSettings({
             </div>
             {mode === "single" && <SingleModeSettings onClose={onClose} onSave={onSave} />}
             {mode === "multi" && <MultiModeSettings availableModels={availableModels} selectedIds={selectedMultiModelIds} onSelectionChange={onMultiModelsChange} />}
-            {mode === "debate" && <DebateModeSettings availableModels={availableModels} participants={debateParticipants} onChange={onDebateConfigChange} debateRounds={debateRounds} onRoundsChange={onDebateRoundsChange} />}
+            {mode === "debate" && <DebateModeSettings availableModels={availableModels} participants={debateParticipants} onChange={onDebateConfigChange} debateRounds={debateRounds} onRoundsChange={onDebateRoundsChange} showRolesWarning={showRolesWarning} />}
         </div>
     );
 }

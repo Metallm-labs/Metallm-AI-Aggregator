@@ -13,6 +13,7 @@ import { Loader2, MessageSquare, Zap, Edit3, Send, X, Sparkles, ChevronDown, Che
 import { motion, AnimatePresence } from "framer-motion";
 import type { Message } from "@shared/schema";
 import { TokenCounter, type ModelTokenUsage } from "@/components/TokenCounter";
+import { BuyCreditsDialog } from "@/components/BuyCredits";
 
 interface StreamingMessage {
   modelName: string;
@@ -68,6 +69,7 @@ export default function Dashboard() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [typingModel, setTypingModel] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRolesWarning, setShowRolesWarning] = useState(false);
 
   // Enhanced prompt approval state
   const [isRouting, setIsRouting] = useState(false);
@@ -217,7 +219,7 @@ export default function Dashboard() {
         setMainModelId(data.mainModelId);
         setSelectedMultiModelIds((prev) => {
           const validPrev = prev.filter((id) => data.models.some((m: any) => m.id === id));
-          if (validPrev.length > 0) return validPrev.slice(0, MAX_MULTI_MODELS);
+          if (validPrev.length > 0) return validPrev;
           return data.models.slice(0, MAX_MULTI_MODELS).map((m: any) => m.id);
         });
         setDebateParticipants((prev) => prev.length > 0 ? prev : [
@@ -458,6 +460,17 @@ export default function Dashboard() {
     // Remap "direct" mode → "single" for internal routing
     const resolvedMode = mode === "direct" ? "single" : mode as "single" | "multi" | "debate";
 
+    // Debate mode: require both debaters to have a role before sending
+    if (resolvedMode === "debate") {
+      const allRolesSet = debateParticipants.every(p => p.customRole.trim() !== "");
+      if (!allRolesSet) {
+        setShowSettings(true);
+        setShowRolesWarning(true);
+        setTimeout(() => setShowRolesWarning(false), 6000);
+        return;
+      }
+    }
+
     // Persist so retry/edit can replay the same model
     lastSendModeRef.current = mode;
     lastSendDirectModelIdRef.current = directModelId;
@@ -472,7 +485,7 @@ export default function Dashboard() {
     setPendingAttachmentPayload(attachmentPayload);
     setRoutingResult(null);
     setPerModelPrompts([]);
-    const effectiveSelectedModelIds = selectedMultiModelIds.slice(0, MAX_MULTI_MODELS);
+    const effectiveSelectedModelIds = selectedMultiModelIds;
 
     // Create conversation if needed (shared by both paths)
     let convId = activeConversationId;
@@ -780,7 +793,7 @@ export default function Dashboard() {
       undefined,
       undefined,
       pendingWebSearch,
-      selectedMultiModelIds.slice(0, MAX_MULTI_MODELS),
+      selectedMultiModelIds,
       debateParticipants,
       undefined,
       pendingAttachmentPayload
@@ -989,7 +1002,7 @@ export default function Dashboard() {
         targetModelId,
         activeConversationId,
         false,
-        selectedMultiModelIds.slice(0, MAX_MULTI_MODELS),
+        selectedMultiModelIds,
         debateParticipants,
         undefined,
         undefined,
@@ -1022,7 +1035,7 @@ export default function Dashboard() {
         targetModelId,
         activeConversationId,
         false,
-        selectedMultiModelIds.slice(0, MAX_MULTI_MODELS),
+        selectedMultiModelIds,
         debateParticipants,
       );
     } catch (error) {
@@ -1172,9 +1185,6 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      {/* Token Counter - floating top-right */}
-      <TokenCounter tokensByModel={tokensByModel} onExportChat={exportChat} />
-
       <Sidebar
         activeConversationId={activeConversationId}
         onSelectConversation={setActiveConversationId}
@@ -1185,10 +1195,16 @@ export default function Dashboard() {
 
       <main
         className={cn(
-          "flex-1 flex flex-col h-screen transition-all duration-200 overflow-x-hidden",
+          "relative flex-1 flex flex-col h-screen transition-all duration-200 overflow-x-hidden",
           sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
         )}
       >
+        {/* ── Floating icons: balance + token counter (no header bar) ── */}
+        <div className="absolute top-2 right-3 z-30 flex items-center gap-0.5">
+          <BuyCreditsDialog />
+          <TokenCounter tokensByModel={tokensByModel} onExportChat={exportChat} inline />
+        </div>
+
         <div
           ref={scrollAreaRef}
           className="flex-1 overflow-y-auto overflow-x-hidden"
@@ -1400,55 +1416,6 @@ export default function Dashboard() {
                           </span>
                         </div>
 
-                        {routingResult.routingType === "specialized" && (
-                          <div className="relative">
-                            <button
-                              onClick={() => setShowModelDropdown(!showModelDropdown)}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-sm"
-                            >
-                              <ModelIcon modelName={getSelectedModel()?.displayName || ""} iconUrl={getSelectedModel()?.iconUrl} size={18} />
-                              <div className="text-left">
-                                <div className="text-xs font-medium text-white">{getSelectedModel()?.displayName || "Select Model"}</div>
-                              </div>
-                              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                            </button>
-                            <AnimatePresence>
-                              {showModelDropdown && (
-                                <motion.div
-                                  initial={{ opacity: 0, y: -5 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: -5 }}
-                                  className="absolute right-0 top-full mt-1 w-72 bg-card border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
-                                >
-                                  <div className="p-2 max-h-64 overflow-y-auto">
-                                    {availableModels.map(model => (
-                                      <button
-                                        key={model.id}
-                                        onClick={() => {
-                                          setSelectedModelId(model.id);
-                                          setShowModelDropdown(false);
-                                        }}
-                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all ${selectedModelId === model.id
-                                          ? "bg-primary/15 border border-primary/30"
-                                          : "hover:bg-white/5 border border-transparent"
-                                          }`}
-                                      >
-                                        <ModelIcon modelName={model.displayName} iconUrl={model.iconUrl} size={20} />
-                                        <div className="flex-1 min-w-0">
-                                          <div className="text-xs font-medium text-white">{model.displayName}</div>
-                                          <div className="text-[10px] text-muted-foreground">{model.role}</div>
-                                        </div>
-                                        {selectedModelId === model.id && (
-                                          <span className="text-primary text-xs">✓</span>
-                                        )}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        )}
                       </div>
                       {routingResult.reason && (
                         <p className="text-[11px] text-muted-foreground/70 mt-1.5 italic">
@@ -1624,12 +1591,13 @@ export default function Dashboard() {
                 mode={currentChatMode}
                 availableModels={availableModels}
                 selectedMultiModelIds={selectedMultiModelIds}
-                onMultiModelsChange={(ids) => setSelectedMultiModelIds(ids.slice(0, MAX_MULTI_MODELS))}
+                onMultiModelsChange={setSelectedMultiModelIds}
                 debateParticipants={debateParticipants}
                 onDebateConfigChange={setDebateParticipants}
                 debateRounds={debateRounds}
                 onDebateRoundsChange={setDebateRounds}
-                onClose={() => setShowSettings(false)}
+                showRolesWarning={showRolesWarning}
+                onClose={() => { setShowSettings(false); setShowRolesWarning(false); }}
                 onSave={fetchModels}
               />
             </motion.div>

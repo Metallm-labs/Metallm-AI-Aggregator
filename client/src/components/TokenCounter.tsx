@@ -17,6 +17,8 @@ export interface ModelTokenUsage {
 export interface TokenCounterProps {
   tokensByModel: Map<string, ModelTokenUsage>;
   onExportChat?: () => void;
+  /** When true, renders inline (no fixed positioning) so it can be placed in a top bar */
+  inline?: boolean;
 }
 
 // Pricing is sourced from models.json via ModelTokenUsage.pricing
@@ -70,8 +72,14 @@ function formatTokenCount(count: number): string {
   return count.toString();
 }
 
-export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps) {
+export function TokenCounter({ tokensByModel, onExportChat, inline }: TokenCounterProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const wrapperCls = inline
+    ? "relative flex items-center gap-0.5"
+    : "fixed top-4 right-4 z-50 flex items-center gap-0.5";
+  const panelCls = inline
+    ? "absolute top-full right-0 mt-2 z-50 w-[380px] max-h-[70vh] overflow-y-auto rounded-xl bg-card/95 backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/30"
+    : "fixed top-14 right-4 z-50 w-[380px] max-h-[70vh] overflow-y-auto rounded-xl bg-card/95 backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/30";
 
   const models = Array.from(tokensByModel.values());
   // Only count available models in totals
@@ -96,7 +104,7 @@ export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps)
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="fixed top-4 right-4 z-50 flex items-center gap-0.5"
+        className={wrapperCls}
       >
         <motion.button
           whileHover={{ scale: 1.04 }}
@@ -151,7 +159,7 @@ export function TokenCounter({ tokensByModel, onExportChat }: TokenCounterProps)
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
               transition={{ type: "spring", damping: 25, stiffness: 350 }}
-              className="fixed top-14 right-4 z-50 w-[380px] max-h-[70vh] overflow-y-auto rounded-xl bg-card/95 backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/30"
+              className={panelCls}
             >
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
