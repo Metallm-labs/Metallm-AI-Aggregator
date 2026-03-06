@@ -5,7 +5,7 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
-import { sendVerificationEmail } from "./email";
+import { sendVerificationEmail, sendWelcomeEmail } from "./email";
 import crypto from "crypto";
 import { pool } from "../../db";
 
@@ -135,6 +135,11 @@ export async function setupGoogleAuth(app: Express) {
               authProvider: "google",
             });
 
+            // Send welcome email to new Google users (fire-and-forget)
+            sendWelcomeEmail(email, firstName).catch((err) =>
+              console.error("Failed to send welcome email:", err)
+            );
+
             done(null, newUser);
           } catch (error) {
             done(error as Error);
@@ -251,6 +256,11 @@ export async function setupGoogleAuth(app: Express) {
 
       // Verify user
       await authStorage.verifyUser(user.id);
+
+      // Send welcome email on first verification (fire-and-forget)
+      sendWelcomeEmail(user.email!, user.firstName || "").catch((err) =>
+        console.error("Failed to send welcome email:", err)
+      );
 
       // Log user in
       req.login(user, (err) => {
