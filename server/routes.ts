@@ -428,8 +428,30 @@ Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
             maxTokens: 2500,
             temperature: 0.3,
           });
-          const jsonStr = raw.replace(/```json|```/g, "").trim();
-          const parsed = JSON.parse(jsonStr);
+
+          // Robustly extract JSON array — handles preamble text, markdown fences, etc.
+          let parsed: any[] | null = null;
+
+          // Attempt 1: JSON array inside markdown fences
+          const fenceMatch = raw.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+          if (fenceMatch) {
+            try { parsed = JSON.parse(fenceMatch[1]); } catch { /* continue */ }
+          }
+
+          // Attempt 2: First [...] block in the response
+          if (!parsed) {
+            const bracketMatch = raw.match(/(\[[\s\S]*\])/);
+            if (bracketMatch) {
+              try { parsed = JSON.parse(bracketMatch[1]); } catch { /* continue */ }
+            }
+          }
+
+          // Attempt 3: Strip fences and try the whole thing
+          if (!parsed) {
+            const jsonStr = raw.replace(/```json|```/g, "").trim();
+            try { parsed = JSON.parse(jsonStr); } catch { /* continue */ }
+          }
+
           if (Array.isArray(parsed)) {
             perModelPrompts = parsed.map((p: any) => {
               const m = selectedModels.find((m) => m.id === p.modelId);
