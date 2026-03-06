@@ -406,17 +406,19 @@ export async function registerRoutes(
           : currentModels;
 
         // Generate a tailored prompt for each model based on its role/specialty
-        const perModelPromptReq = `You are an expert prompt engineer. A user has submitted a request that will be answered by multiple AI models simultaneously, each with a unique specialty. Your task is to write a tailored, optimized version of the user's prompt for EACH model, making the most of that model's specific strengths and role.
+        const perModelPromptReq = `You are an expert prompt engineer. A user has submitted a request that will be answered by multiple AI models simultaneously, each with a unique specialty. Your job is to write a focused version of the user's prompt for EACH model — adjusting only the APPROACH and FRAMING to match that model's specialty role.
 
 User request: "${content}"
 
 Models to tailor for:
 ${selectedModels.map((m, i) => `${i + 1}. id="${m.id}" name="${m.displayName}" specialty="${m.role}"`).join("\n")}
 
-Rules:
-- Each prompt must address the SAME underlying question but be framed to play to that model's specialty
-- Keep the user's intent intact
-- Return ONLY a valid JSON array — no markdown fences, no explanation
+STRICT RULES — follow exactly:
+1. NEVER change the language — always write the prompt in the SAME language as the user's original request
+2. NEVER change the topic — the underlying question must remain identical to what the user asked
+3. ONLY adjust the angle, depth, and framing to suit the model's specialty (e.g. ask a reasoning model to reason step-by-step, ask a coding model to focus on implementation)
+4. Keep prompts concise — do NOT pad, embellish, or add unrelated content
+5. Return ONLY a valid JSON array — no markdown fences, no preamble, no explanation
 
 Format: [{"modelId":"<exact id>","prompt":"<tailored prompt>"}]`;
 

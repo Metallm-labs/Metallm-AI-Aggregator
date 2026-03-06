@@ -87,6 +87,7 @@ export default function Dashboard() {
   const [currentChatMode, setCurrentChatMode] = useState<ChatMode>("single");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedMultiModelIds, setSelectedMultiModelIds] = useState<string[]>([]);
+  const [multiEnhancerEnabled, setMultiEnhancerEnabled] = useState(true);
   const [debateParticipants, setDebateParticipants] = useState<DebateParticipant[]>([]);
   const [perModelPrompts, setPerModelPrompts] = useState<Array<{ modelId: string; displayName: string; prompt: string; stance?: string }>>([]); 
   const [webSearchStatus, setWebSearchStatus] = useState<WebSearchStatus | null>(null);
@@ -504,7 +505,9 @@ export default function Dashboard() {
     }
 
     // ── Enhancer OFF: skip routing, send directly ──────────────────────────
-    if (!enhancerEnabled) {
+    // Also skip if in multi mode and the user has disabled the multi enhancer
+    const effectiveEnhancerEnabled = enhancerEnabled && (resolvedMode !== "multi" || multiEnhancerEnabled);
+    if (!effectiveEnhancerEnabled) {
       handleApproveAndSend(content, resolvedMode, content, undefined, convId, webSearch, effectiveSelectedModelIds, debateParticipants, undefined, attachmentPayload);
       return;
     }
@@ -1592,6 +1595,8 @@ export default function Dashboard() {
                 availableModels={availableModels}
                 selectedMultiModelIds={selectedMultiModelIds}
                 onMultiModelsChange={setSelectedMultiModelIds}
+                multiEnhancerEnabled={multiEnhancerEnabled}
+                onMultiEnhancerChange={setMultiEnhancerEnabled}
                 debateParticipants={debateParticipants}
                 onDebateConfigChange={setDebateParticipants}
                 debateRounds={debateRounds}

@@ -31,6 +31,8 @@ interface ModelSettingsProps {
     availableModels: AvailableModel[];
     selectedMultiModelIds: string[];
     onMultiModelsChange: (ids: string[]) => void;
+    multiEnhancerEnabled?: boolean;
+    onMultiEnhancerChange?: (enabled: boolean) => void;
     debateParticipants: DebateParticipant[];
     onDebateConfigChange: (p: DebateParticipant[]) => void;
     debateRounds?: number;
@@ -169,10 +171,12 @@ function SingleModeSettings({ onClose, onSave }: { onClose: () => void; onSave?:
 }
 
 // ─── Multi mode: model selection checkboxes ────────────────────────────────────
-function MultiModeSettings({ availableModels, selectedIds, onSelectionChange }: {
+function MultiModeSettings({ availableModels, selectedIds, onSelectionChange, enhancerEnabled, onEnhancerChange }: {
     availableModels: AvailableModel[];
     selectedIds: string[];
     onSelectionChange: (ids: string[]) => void;
+    enhancerEnabled?: boolean;
+    onEnhancerChange?: (v: boolean) => void;
 }) {
     const toggle = (id: string) => {
         if (selectedIds.includes(id)) {
@@ -186,6 +190,32 @@ function MultiModeSettings({ availableModels, selectedIds, onSelectionChange }: 
     return (
         <div className="p-4 max-h-[55vh] overflow-y-auto">
             <div className="max-w-4xl mx-auto space-y-2">
+                {/* ── Prompt Enhancer toggle ── */}
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 mb-3">
+                    <div>
+                        <p className="text-xs font-medium text-white">Prompt Enhancer</p>
+                        <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                            {enhancerEnabled
+                                ? "Tailors your prompt for each model's specialty before sending."
+                                : "Disabled — sends your exact prompt to all models unchanged."}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => onEnhancerChange?.(!enhancerEnabled)}
+                        className={cn(
+                            "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                            enhancerEnabled ? "bg-purple-500" : "bg-white/20"
+                        )}
+                    >
+                        <span
+                            className={cn(
+                                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                enhancerEnabled ? "translate-x-4" : "translate-x-0"
+                            )}
+                        />
+                    </button>
+                </div>
                 <div className="flex items-center justify-between mb-3">
                     <p className="text-xs text-muted-foreground">Pick which models respond to your query.</p>
                     <button type="button"
@@ -354,6 +384,7 @@ const PANEL_ICON: Partial<Record<ChatMode, JSX.Element>> = {
 
 export function ModelSettings({
     mode, availableModels, selectedMultiModelIds, onMultiModelsChange,
+    multiEnhancerEnabled, onMultiEnhancerChange,
     debateParticipants, onDebateConfigChange, debateRounds, onDebateRoundsChange, showRolesWarning, onClose, onSave,
 }: ModelSettingsProps) {
     return (
@@ -370,7 +401,7 @@ export function ModelSettings({
                 </Button>
             </div>
             {mode === "single" && <SingleModeSettings onClose={onClose} onSave={onSave} />}
-            {mode === "multi" && <MultiModeSettings availableModels={availableModels} selectedIds={selectedMultiModelIds} onSelectionChange={onMultiModelsChange} />}
+            {mode === "multi" && <MultiModeSettings availableModels={availableModels} selectedIds={selectedMultiModelIds} onSelectionChange={onMultiModelsChange} enhancerEnabled={multiEnhancerEnabled} onEnhancerChange={onMultiEnhancerChange} />}
             {mode === "debate" && <DebateModeSettings availableModels={availableModels} participants={debateParticipants} onChange={onDebateConfigChange} debateRounds={debateRounds} onRoundsChange={onDebateRoundsChange} showRolesWarning={showRolesWarning} />}
         </div>
     );

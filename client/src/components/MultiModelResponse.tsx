@@ -1,30 +1,77 @@
 import { useState, useEffect } from "react";
 import { Message } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, ChevronRight, Maximize2, Minimize2, Check, Copy } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import remarkGfm from "remark-gfm";
+import { ChevronDown, Copy, Check, Brain, Zap } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ModelIcon } from "@/components/ModelIcon";
+import { MarkdownRenderer } from "@/lib/markdown";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+
+// ── Parse <think> blocks out of model content ─────────────────────────────────
+function parseThinkingContent(raw: string): { thinkingBlocks: string[]; visibleContent: string } {
+    const thinkingBlocks: string[] = [];
+    const cleaned = raw.replace(/<think>([\s\S]*?)<\/think>/gi, (_match, inner: string) => {
+        const trimmed = inner.trim();
+        if (trimmed) thinkingBlocks.push(trimmed);
+        return "";
+    });
+    const openIdx = cleaned.lastIndexOf("<think>");
+    const closeIdx = cleaned.lastIndexOf("</think>");
+    let visibleContent = cleaned;
+    if (openIdx !== -1 && openIdx > closeIdx) {
+        const partial = cleaned.slice(openIdx + 7).trim();
+        if (partial) thinkingBlocks.push(partial + " ▌");
+        visibleContent = cleaned.slice(0, openIdx);
+    }
+    return { thinkingBlocks, visibleContent: visibleContent.trim() };
+}
+
+// ── Model colour palette (mirrors ChatMessage) ────────────────────────────────
+const modelConfig: Record<string, { color: string; bgColor: string }> = {
+    "DeepSeek R1":      { color: "text-purple-400",  bgColor: "bg-purple-500/20" },
+    "Nemotron":         { color: "text-lime-400",    bgColor: "bg-lime-500/20" },
+    "GLM 4.5":          { color: "text-teal-400",    bgColor: "bg-teal-500/20" },
+    "Trinity Large":    { color: "text-orange-400",  bgColor: "bg-orange-500/20" },
+    "LLaMA 3.3 70B":    { color: "text-blue-400",    bgColor: "bg-blue-500/20" },
+    "LLaMA 4 Maverick": { color: "text-violet-400",  bgColor: "bg-violet-500/20" },
+    "LLaMA 4 Scout":    { color: "text-green-400",   bgColor: "bg-green-500/20" },
+    "Kimi K2":          { color: "text-cyan-400",    bgColor: "bg-cyan-500/20" },
+    "Qwen 3 32B":       { color: "text-orange-400",  bgColor: "bg-orange-500/20" },
+    "GPT OSS 120B":     { color: "text-lime-400",    bgColor: "bg-lime-500/20" },
+    "Groq Compound":    { color: "text-yellow-400",  bgColor: "bg-yellow-500/20" },
+    "Gemini":           { color: "text-blue-400",    bgColor: "bg-blue-500/20" },
+    "Summary":          { color: "text-yellow-400",  bgColor: "bg-gradient-to-br from-yellow-500/20 to-orange-500/20" },
+};
+const getModelCfg = (name: string | null) =>
+    modelConfig[name ?? ""] ?? { color: "text-gray-400", bgColor: "bg-gray-500/20" };
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface MultiModelResponseProps {
     messages: Message[];
-    streamingContent?: Map<string, string>; // modelName -> content
+    streamingContent?: Map<string, string>;
     onRetry?: () => void;
 }
 
 export function MultiModelResponse({ messages, streamingContent, onRetry }: MultiModelResponseProps) {
-    // Merge executed messages with streaming content
-    const allModels = [...messages];
+    const { toast } = useToast();
 
-    // If we have streaming content, check if it's for a model not yet in messages, or update existing?
-    // Actually, Dashboard separates them. Completed messages are in `messages`. Streaming are in `streamingContent`.
-    // So we should combine them.
+    // ── Merge completed + streaming ─────────────────────────────────────────
+    // When streaming is active, REPLACE existing messages for streaming models
+    // so the same model never appears twice in the switcher row.
+    const allModels: Message[] = messages.map(msg => {
+        const streamContent = streamingContent?.get(msg.modelName ?? "");
+        if (streamContent !== undefined) {
+            return { ...msg, id: -1, content: streamContent } as Message;
+        }
+        return msg;
+    });
     if (streamingContent) {
         streamingContent.forEach((content, modelName) => {
             if (!allModels.find(m => m.modelName === modelName)) {
                 allModels.push({
-                    id: -1, // temporary ID
+                    id: -1,
                     conversationId: -1,
                     role: "assistant",
                     content,
@@ -36,162 +83,217 @@ export function MultiModelResponse({ messages, streamingContent, onRetry }: Mult
         });
     }
 
-    // Find summary and regular models
     const summaryMsg = allModels.find(m => (m.metadata as any)?.isSummary || m.modelName === "✨ Summary");
     const otherModels = allModels.filter(m => m !== summaryMsg);
 
-    // Default to summary if available, otherwise first model
-    const [selectedModel, setSelectedModel] = useState<string | null>(summaryMsg?.modelName || otherModels[0]?.modelName || null);
+    const [selectedModel, setSelectedModel] = useState<string | null>(
+        summaryMsg?.modelName ?? otherModels[0]?.modelName ?? null
+    );
 
-    // Update selection if it was null and now we have models (e.g. started streaming)
+    // When the message list changes (e.g. retry clears old messages), reset
+    // the selection to the first available model so we don't keep a stale name.
     useEffect(() => {
-        if (!selectedModel && (summaryMsg || otherModels.length > 0)) {
-            setSelectedModel(summaryMsg?.modelName || otherModels[0]?.modelName);
+        const available = allModels.map(m => m.modelName);
+        if (!selectedModel || !available.includes(selectedModel)) {
+            setSelectedModel(summaryMsg?.modelName ?? otherModels[0]?.modelName ?? null);
         }
-    }, [summaryMsg, otherModels, selectedModel]);
+    }, [messages, streamingContent]);
 
     const activeMsg = allModels.find(m => m.modelName === selectedModel);
+    const isSummary = !!(activeMsg?.metadata as any)?.isSummary || activeMsg?.modelName === "✨ Summary";
+    const isStreaming = activeMsg?.id === -1;
 
+    const { thinkingBlocks, visibleContent } = activeMsg
+        ? parseThinkingContent(activeMsg.content)
+        : { thinkingBlocks: [], visibleContent: "" };
+    const hasThinking = thinkingBlocks.length > 0;
+
+    const [showThinking, setShowThinking] = useState(false);
     const [copied, setCopied] = useState(false);
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
+
+    useEffect(() => {
+        if (isStreaming && hasThinking) setShowThinking(true);
+    }, [isStreaming, hasThinking]);
+
+    useEffect(() => { setShowThinking(false); }, [selectedModel]);
 
     if (!activeMsg && allModels.length === 0) return null;
 
+    const activeCfg = getModelCfg(activeMsg?.modelName ?? null);
+
+    const handleCopy = async () => {
+        await navigator.clipboard.writeText(visibleContent || activeMsg?.content || "");
+        setCopied(true);
+        toast({ description: "Copied to clipboard" });
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    // Summary always last in the switcher row
+    const tabOrder = [...otherModels, ...(summaryMsg ? [summaryMsg] : [])];
+
     return (
-        <div className="w-full max-w-4xl mx-auto my-6">
-            <div className="rounded-xl border border-white/10 bg-card overflow-hidden shadow-xl">
-                {/* Header / Tabs */}
-                <div className="flex flex-col border-b border-white/10 bg-white/5">
-                    <div className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                        <span>Multi-Model Analysis ({otherModels.length} models)</span>
-                        {onRetry && (
-                            <button onClick={onRetry} className="hover:text-white transition-colors">
-                                Retry All
-                            </button>
-                        )}
-                    </div>
-
-                    <div className="flex overflow-x-auto no-scrollbar gap-1 px-2 pb-2">
-                        {/* Summary Tab */}
-                        {summaryMsg && (
-                            <button
-                                onClick={() => setSelectedModel(summaryMsg.modelName)}
-                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${selectedModel === summaryMsg.modelName
-                                        ? "bg-primary/20 text-primary border border-primary/20"
-                                        : "hover:bg-white/10 text-muted-foreground border border-transparent"
-                                    }`}
-                            >
-                                <span>✨</span>
-                                <span>Summary</span>
-                            </button>
-                        )}
-
-                        {/* Other Models Tabs */}
-                        {otherModels.map((m) => (
-                            <button
-                                key={m.modelName}
-                                onClick={() => setSelectedModel(m.modelName)}
-                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${selectedModel === m.modelName
-                                        ? "bg-white/10 text-white border border-white/20 shadow-sm"
-                                        : "hover:bg-white/5 text-muted-foreground border border-transparent"
-                                    }`}
-                            >
-                                <span>{getIconForModel(m.modelName)}</span>
-                                <span>{m.modelName}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Content Area */}
-                <div className="p-6 min-h-[200px] bg-card">
-                    <AnimatePresence mode="wait">
-                        {activeMsg ? (
-                            <motion.div
-                                key={activeMsg.modelName}
-                                initial={{ opacity: 0, y: 5 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -5 }}
-                                transition={{ duration: 0.2 }}
-                            >
-                                <div className="flex items-center justify-between mb-4 pb-4 border-b border-white/5">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-2xl">{getIconForModel(activeMsg.modelName)}</span>
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-white">{activeMsg.modelName}</h3>
-                                            <p className="text-xs text-muted-foreground">
-                                                {(activeMsg.metadata as any)?.provider || "AI Model"} • {(activeMsg.metadata as any)?.role || "Assistant"}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => copyToClipboard(activeMsg.content)}
-                                        className="p-2 hover:bg-white/10 rounded-lg transition-colors text-muted-foreground hover:text-white"
-                                        title="Copy response"
-                                    >
-                                        {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                                    </button>
-                                </div>
-
-                                <div className="prose prose-invert max-w-none text-sm leading-relaxed text-gray-300">
-                                    <ReactMarkdown
-                                        remarkPlugins={[remarkGfm]}
-                                        components={{
-                                            code({ node, inline, className, children, ...props }: any) {
-                                                const match = /language-(\w+)/.exec(className || "");
-                                                return !inline && match ? (
-                                                    <div className="relative group">
-                                                        <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <span className="text-xs text-muted-foreground">{match[1]}</span>
-                                                        </div>
-                                                        <SyntaxHighlighter
-                                                            style={oneDark}
-                                                            language={match[1]}
-                                                            PreTag="div"
-                                                            {...props}
-                                                            customStyle={{ margin: 0, borderRadius: "0.5rem", background: "#1e1e1e" }}
-                                                        >
-                                                            {String(children).replace(/\n$/, "")}
-                                                        </SyntaxHighlighter>
-                                                    </div>
-                                                ) : (
-                                                    <code className={`${className} bg-white/10 px-1.5 py-0.5 rounded text-white`} {...props}>
-                                                        {children}
-                                                    </code>
-                                                );
-                                            },
-                                        }}
-                                    >
-                                        {activeMsg.content || "..."}
-                                    </ReactMarkdown>
-                                </div>
-                            </motion.div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                                <div className="animate-pulse">Waiting for responses...</div>
-                            </div>
-                        )}
-                    </AnimatePresence>
-                </div>
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex gap-0 sm:gap-3 px-3 sm:px-4 py-3 group w-full min-w-0 overflow-x-hidden"
+        >
+            {/* ── Left avatar — active model, desktop only ── */}
+            <div className={cn(
+                "hidden sm:flex w-8 h-8 rounded-full items-center justify-center flex-shrink-0 mt-0.5 transition-all",
+                activeCfg.bgColor
+            )}>
+                <ModelIcon modelName={activeMsg?.modelName ?? ""} size={18} />
             </div>
-        </div>
-    );
-}
 
-function getIconForModel(name: string | null) {
-    if (!name) return "🤖";
-    if (name.includes("Gemini")) return "✨";
-    if (name.includes("DeepSeek")) return "🔬";
-    if (name.includes("LLaMA")) return "🦙";
-    if (name.includes("Gemma")) return "💎";
-    if (name.includes("Devstral")) return "⚡";
-    if (name.includes("Nemotron")) return "🧮";
-    if (name.includes("Qwen")) return "✍️";
-    if (name.includes("GLM")) return "📊";
-    if (name.includes("Summary")) return "📋";
-    return "🤖";
+            {/* ── Right side ── */}
+            <div className="min-w-0 flex-1">
+
+                {/* ── Header: active name + role + switcher row ── */}
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    {/* Mobile inline avatar */}
+                    <div className={cn("sm:hidden w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0", activeCfg.bgColor)}>
+                        <ModelIcon modelName={activeMsg?.modelName ?? ""} size={16} />
+                    </div>
+
+                    {/* Active model name */}
+                    <span className={cn("text-xs font-medium", activeCfg.color)}>
+                        {activeMsg?.modelName ?? ""}
+                    </span>
+
+                    {/* Role badge */}
+                    {(activeMsg?.metadata as any)?.role && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-muted-foreground border border-white/10">
+                            {(activeMsg?.metadata as any)?.role}
+                        </span>
+                    )}
+
+                    {/* Summary badge */}
+                    {isSummary && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 flex items-center gap-1">
+                            <Zap className="w-2.5 h-2.5" /> Final Summary
+                        </span>
+                    )}
+
+                    <div className="flex-1" />
+
+                    {/* Model switcher avatars */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                        {tabOrder.map((m) => {
+                            const cfg = getModelCfg(m.modelName);
+                            const isActive = m.modelName === selectedModel;
+                            const modelStreaming = m.id === -1;
+                            return (
+                                <button
+                                    key={m.modelName}
+                                    onClick={() => setSelectedModel(m.modelName)}
+                                    title={m.modelName ?? ""}
+                                    className={cn(
+                                        "relative w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all flex-shrink-0",
+                                        cfg.bgColor,
+                                        isActive
+                                            ? "ring-2 ring-white/50 scale-110 shadow-md"
+                                            : "opacity-40 hover:opacity-75 hover:scale-105"
+                                    )}
+                                >
+                                    <ModelIcon modelName={m.modelName ?? ""} size={14} />
+                                    {modelStreaming && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full animate-pulse border border-black/40" />
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* ── Content area ── */}
+                <AnimatePresence mode="wait">
+                    {activeMsg && (
+                        <motion.div
+                            key={activeMsg.modelName}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.15 }}
+                        >
+                            {/* Thinking / reasoning block */}
+                            {hasThinking && (
+                                <div className="mb-3">
+                                    <button
+                                        onClick={() => setShowThinking(s => !s)}
+                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/15 transition-colors text-[11px] text-purple-300 hover:text-purple-200 w-full text-left"
+                                    >
+                                        <Brain className="w-3 h-3 flex-shrink-0" />
+                                        <span className="font-medium">
+                                            {isStreaming && !activeMsg.content.includes("</think>") ? "Thinking…" : "View Reasoning"}
+                                        </span>
+                                        <ChevronDown className={cn("w-3 h-3 ml-auto transition-transform flex-shrink-0", showThinking && "rotate-180")} />
+                                    </button>
+                                    <AnimatePresence>
+                                        {showThinking && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: "auto", opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="mt-1.5 px-3 py-2.5 rounded-lg bg-purple-500/5 border border-purple-500/15 text-xs text-purple-200/70 leading-relaxed whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                                                    {thinkingBlocks.join("\n\n---\n\n")}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            )}
+
+                            {/* Prose content */}
+                            <div className={cn(
+                                "py-1",
+                                isSummary && "rounded-2xl px-4 py-3 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/15"
+                            )}>
+                                <div className="prose prose-invert prose-base max-w-none min-w-0 [&>p]:text-gray-100 [&>p]:font-normal [&>p]:leading-[1.8] sm:[&>p]:leading-relaxed [&>ul]:text-gray-100 [&>ol]:text-gray-100 [&>li]:text-gray-100 [&>li]:leading-[1.8] sm:[&>li]:leading-relaxed [&>code]:text-[#9cdcfe] [&>pre]:bg-[#1e1e1e] [&_pre]:max-w-full [&_pre]:overflow-x-auto">
+                                    <MarkdownRenderer content={visibleContent || (isStreaming ? "" : activeMsg.content)} />
+                                    {isStreaming && (
+                                        <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* Waiting state — no messages yet */}
+                    {!activeMsg && (
+                        <motion.div
+                            key="waiting"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="flex items-center gap-2 py-2 text-xs text-muted-foreground"
+                        >
+                            <div className="flex gap-1">
+                                <span className="w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                                <span className="w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                                <span className="w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                            </div>
+                            Waiting for responses…
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Action row */}
+                {!isStreaming && activeMsg && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-white/5 hover:bg-white/10 border border-white/10"
+                            onClick={handleCopy}
+                            title="Copy"
+                        >
+                            {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                        </Button>
+                    </div>
+                )}
+            </div>
+        </motion.div>
+    );
 }
