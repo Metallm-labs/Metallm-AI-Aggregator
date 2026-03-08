@@ -13,9 +13,10 @@ interface SidebarProps {
   onNewChat?: () => void;
   onConversationDeleted?: (id: number) => void;
   onCollapseChange?: (collapsed: boolean) => void;
+  onProfileClick?: () => void;
 }
 
-export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectConversation, onNewChat, onConversationDeleted, onCollapseChange }: SidebarProps) {
+export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectConversation, onNewChat, onConversationDeleted, onCollapseChange, onProfileClick }: SidebarProps) {
   const { logout, user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -196,7 +197,11 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
       <div className={cn("p-3 mt-auto border-t border-white/5 bg-black/20", collapsed && "p-2")}>
 
         {!collapsed && (
-          <div className="flex items-center gap-3 mb-3 px-1">
+          <div
+            className="flex items-center gap-3 mb-3 px-1 rounded-lg py-1 cursor-pointer hover:bg-white/5 transition-colors group"
+            onClick={() => { onProfileClick?.(); setIsOpen(false); }}
+            title="Account settings"
+          >
             <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
               {user?.profileImageUrl ? (
                 <img
@@ -222,7 +227,34 @@ export const Sidebar = memo(function Sidebar({ activeConversationId, onSelectCon
                 {user?.email || "user@example.com"}
               </p>
             </div>
+            <span className="text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors pr-1">⚙</span>
           </div>
+        )}
+
+        {collapsed && (
+          <button
+            className="w-full flex items-center justify-center mb-2"
+            onClick={() => onProfileClick?.()}
+            title="Account settings"
+          >
+            <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 hover:ring-2 hover:ring-white/20 transition-all">
+              {user?.profileImageUrl ? (
+                <img
+                  src={user.profileImageUrl}
+                  alt={user.firstName || "User"}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget.nextSibling as HTMLElement).style.display = 'flex'; }}
+                />
+              ) : null}
+              <div
+                className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-500 items-center justify-center text-xs font-bold text-white"
+                style={{ display: user?.profileImageUrl ? 'none' : 'flex' }}
+              >
+                {user?.firstName?.[0]?.toUpperCase() || "U"}
+              </div>
+            </div>
+          </button>
         )}
 
         <Button

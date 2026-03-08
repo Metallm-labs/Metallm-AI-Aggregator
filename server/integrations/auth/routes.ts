@@ -19,4 +19,21 @@ export function registerAuthRoutes(app: Express): void {
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
+
+  // Delete authenticated user's account
+  app.delete("/api/auth/account", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id || req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "No user ID found" });
+      }
+      await authStorage.deleteUser(userId);
+      // Destroy the session so the client is logged out immediately
+      req.session?.destroy?.(() => {});
+      res.json({ message: "Account deleted" });
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      res.status(500).json({ message: "Failed to delete account" });
+    }
+  });
 }

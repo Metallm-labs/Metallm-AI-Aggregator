@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { Message } from "@shared/schema";
 import { TokenCounter, type ModelTokenUsage } from "@/components/TokenCounter";
 import { BuyCreditsDialog } from "@/components/BuyCredits";
+import { UserSettingsPanel } from "@/components/UserSettingsPanel";
 
 interface StreamingMessage {
   modelName: string;
@@ -70,6 +71,7 @@ export default function Dashboard() {
   const [typingModel, setTypingModel] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showRolesWarning, setShowRolesWarning] = useState(false);
+  const [showUserSettings, setShowUserSettings] = useState(false);
 
   // Enhanced prompt approval state
   const [isRouting, setIsRouting] = useState(false);
@@ -390,6 +392,7 @@ export default function Dashboard() {
     setRoutingResult(null);
     setPendingAttachmentPayload(undefined);
     setTokensByModel(new Map());
+    setShowUserSettings(false);
   }, []);
 
   // Export current conversation as Markdown
@@ -1190,10 +1193,11 @@ export default function Dashboard() {
     <div className="flex min-h-screen bg-background text-foreground">
       <Sidebar
         activeConversationId={activeConversationId}
-        onSelectConversation={setActiveConversationId}
+        onSelectConversation={(id) => { setActiveConversationId(id); setShowUserSettings(false); }}
         onNewChat={handleNewChat}
         onConversationDeleted={handleConversationDeleted}
         onCollapseChange={setSidebarCollapsed}
+        onProfileClick={() => setShowUserSettings(v => !v)}
       />
 
       <main
@@ -1213,7 +1217,13 @@ export default function Dashboard() {
           className="flex-1 overflow-y-auto overflow-x-hidden"
           onScroll={handleScrollAreaScroll}
         >
-          {messages.length === 0 && !isStreaming && !routingResult && !isRouting ? (
+          {showUserSettings ? (
+            <UserSettingsPanel
+              availableModels={availableModels}
+              mainModelId={mainModelId}
+              onMainModelChange={(id) => { setMainModelId(id); }}
+            />
+          ) : messages.length === 0 && !isStreaming && !routingResult && !isRouting ? (
             <div className="min-h-full flex flex-col items-center justify-center p-8 text-center">
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -1583,7 +1593,7 @@ export default function Dashboard() {
         </div>
 
         <AnimatePresence>
-          {showSettings && (
+          {showSettings && !showUserSettings && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
@@ -1609,6 +1619,7 @@ export default function Dashboard() {
           )}
         </AnimatePresence>
 
+        {!showUserSettings && (
         <ChatInput
           onSend={handleSend}
           onStop={handleStop}
@@ -1626,6 +1637,7 @@ export default function Dashboard() {
           editingMessage={editingMessage}
           onCancelEdit={() => setEditingMessage(null)}
         />
+        )}
       </main>
     </div>
   );

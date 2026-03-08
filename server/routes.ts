@@ -20,6 +20,8 @@ import {
 } from "./openrouter";
 import { calculateTokenCost, deductCredits, getUserCredits } from "./integrations/paddle";
 import { registerPaddleRoutes } from "./integrations/paddle/routes";
+import { registerOxapayRoutes } from "./integrations/oxapay/routes";
+import { sendEmail } from "./integrations/auth/email";
 
 // In-memory model config store
 let currentModels: ModelConfig[] = [...DEFAULT_MODELS];
@@ -243,8 +245,53 @@ export async function registerRoutes(
   // Setup Paddle Payment Routes
   registerPaddleRoutes(app);
 
+  // Setup OxaPay Crypto Payment Routes
+  registerOxapayRoutes(app);
+
   // =============================================
-  // === Model Configuration API ===
+  // === Feedback API ===
+  // =============================================
+  app.post("/api/feedback", isAuthenticated, async (req: any, res) => {
+    try {
+      const { feedback } = req.body;
+      if (!feedback || typeof feedback !== "string" || !feedback.trim()) {
+        return res.status(400).json({ message: "Feedback is required" });
+      }
+      const userId = req.user?.id || req.user?.claims?.sub || "unknown";
+      const userEmail = req.user?.email || "unknown";
+      const userName = req.user?.firstName
+        ? `${req.user.firstName}${req.user.lastName ? " " + req.user.lastName : ""}`
+        : "Unknown";
+
+      const feedbackEmail = process.env.FEEDBACK_EMAIL;
+      if (!feedbackEmail) throw new Error("FEEDBACK_EMAIL env variable is not set");
+
+      await sendEmail({
+        to: feedbackEmail,
+        subject: `[Feedback] from ${userName} <${userEmail}>`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 24px 20px; color: #333;">
+            <h2 style="margin-bottom: 4px;">New Feedback Received</h2>
+            <p style="margin-top: 0; color: #666;">Submitted via the MetaLLM dashboard</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;" />
+            <p><strong>From:</strong> ${userName}</p>
+            <p><strong>Email:</strong> ${userEmail}</p>
+            <p><strong>User ID:</strong> ${userId}</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;" />
+            <p><strong>Message:</strong></p>
+            <blockquote style="background:#f9f9f9;border-left:4px solid #ccc;margin:8px 0;padding:12px 16px;white-space:pre-wrap;">${feedback.trim()}</blockquote>
+          </div>
+        `,
+        text: `New Feedback from ${userName} (${userEmail}):\n\n${feedback.trim()}`,
+      });
+
+      res.json({ message: "Feedback received" });
+    } catch (error) {
+      console.error("Feedback error:", error);
+      res.status(500).json({ message: "Failed to send feedback" });
+    }
+  });
+
   // =============================================
 
   // Get available models with their roles

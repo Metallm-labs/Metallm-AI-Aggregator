@@ -13,6 +13,7 @@ export interface IAuthStorage {
   verifyPassword(password: string, hashedPassword: string): Promise<boolean>;
   saveOtp(userId: string, otp: string, expiresAt: Date): Promise<void>;
   verifyUser(userId: string): Promise<void>;
+  deleteUser(id: string): Promise<void>;
 }
 
 class AuthStorage implements IAuthStorage {
@@ -78,6 +79,10 @@ class AuthStorage implements IAuthStorage {
       .update(users)
       .set({ isVerified: true, otpCode: null, otpExpiresAt: null })
       .where(eq(users.id, userId));
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
   }
 }
 

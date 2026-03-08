@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Coins, Plus, Minus, CreditCard, Loader2, CheckCircle, X, AlertTriangle, History } from "lucide-react";
+import { Coins, Plus, Minus, CreditCard, Loader2, CheckCircle, X, AlertTriangle, History, Bitcoin, ExternalLink, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { usePaddleConfig, useCreditBalance, useCreditTransactions, useVerifyTransaction } from "@/hooks/use-credits";
+import { usePaddleConfig, useCreditBalance, useCreditTransactions, useVerifyTransaction, useCreateCryptoInvoice, useCheckCryptoStatus } from "@/hooks/use-credits";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -115,14 +115,47 @@ export function BuyCreditsDialog() {
   const [checkoutComplete, setCheckoutComplete] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
+  // Crypto (OxaPay) state
+  const [cryptoTrackId, setCryptoTrackId] = useState<string | null>(null);
+  const [cryptoPayLink, setCryptoPayLink] = useState<string | null>(null);
+  const [cryptoPolling, setCryptoPolling] = useState(false);
+
   const { data: config } = usePaddleConfig();
   const { data: balance } = useCreditBalance();
   const { data: transactions } = useCreditTransactions();
   const verifyTransaction = useVerifyTransaction();
+  const createCryptoInvoice = useCreateCryptoInvoice();
+  const { data: cryptoStatus } = useCheckCryptoStatus(cryptoTrackId, cryptoPolling);
   const { user } = useAuth();
   const { toast } = useToast();
 
   const minQuantity = 1;
+
+  // Handle crypto payment status changes
+  useEffect(() => {
+    if (!cryptoStatus) return;
+    if (cryptoStatus.status === "paid") {
+      setCryptoPolling(false);
+      toast({
+        title: "Crypto Payment Confirmed!",
+        description: `$${cryptoStatus.creditsAdded?.toFixed(2) ?? quantity.toFixed(2)} added to your balance.`,
+      });
+      setTimeout(() => {
+        setCryptoTrackId(null);
+        setCryptoPayLink(null);
+        setOpen(false);
+      }, 2500);
+    } else if (cryptoStatus.status === "expired" || cryptoStatus.status === "error") {
+      setCryptoPolling(false);
+      toast({
+        title: "Payment Expired",
+        description: "The crypto payment window has expired. Please try again.",
+        variant: "destructive",
+      });
+      setCryptoTrackId(null);
+      setCryptoPayLink(null);
+    }
+  }, [cryptoStatus, toast, quantity]);
 
   // Handle Paddle events (checkout completion)
   const handlePaddleEvent = useCallback((event: any) => {
@@ -194,6 +227,19 @@ export function BuyCreditsDialog() {
       toast({ title: "Error", description: `Checkout failed: ${(e as Error).message}`, variant: "destructive" });
     }
   }, [config, quantity, user, toast, paddleError, paddleLoaded]);
+
+  const handleCryptoPayment = useCallback(async () => {
+    try {
+      const result = await createCryptoInvoice.mutateAsync(quantity);
+      setCryptoTrackId(result.trackId);
+      setCryptoPayLink(result.payLink);
+      setCryptoPolling(true);
+      // Open payment page in new tab
+      window.open(result.payLink, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+    }
+  }, [quantity, createCryptoInvoice, toast]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -369,6 +415,78 @@ export function BuyCreditsDialog() {
 
             {paddleError && (
               <p className="text-xs text-red-400 text-center">{paddleError}</p>
+            )}
+
+            {/* ── Crypto Payment (OxaPay) ── */}
+            {cryptoTrackId && cryptoPayLink ? (
+              /* Pending crypto payment — show status */
+              <div className="p-4 rounded-xl border border-purple-500/30 bg-purple-500/5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Bitcoin className="w-5 h-5 text-purple-400" />
+                  <p className="text-sm font-medium text-purple-300">Crypto Payment Pending</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="w-3.5 h-3.5 animate-pulse text-yellow-400" />
+                  <span>
+                    {cryptoStatus?.status === "confirming"
+                      ? "Confirming on blockchain…"
+                      : "Waiting for your payment…"}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 border-purple-500/30 hover:border-purple-400 text-purple-300 gap-1.5"
+                    onClick={() => window.open(cryptoPayLink, "_blank", "noopener,noreferrer")}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Open Payment Page
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-red-400"
+                    onClick={() => {
+                      setCryptoTrackId(null);
+                      setCryptoPayLink(null);
+                      setCryptoPolling(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  This window auto-updates when payment is detected.
+                </p>
+              </div>
+            ) : (
+              /* Pay with Crypto button */
+              <div className="relative">
+                <div className="absolute inset-x-0 -top-3 flex items-center">
+                  <div className="flex-1 border-t border-white/10" />
+                  <span className="px-2 text-xs text-muted-foreground">or</span>
+                  <div className="flex-1 border-t border-white/10" />
+                </div>
+                <Button
+                  onClick={handleCryptoPayment}
+                  disabled={createCryptoInvoice.isPending}
+                  variant="outline"
+                  className="w-full mt-1 border-purple-500/30 hover:border-purple-400 hover:bg-purple-500/10 text-purple-300 hover:text-purple-200 gap-2 h-11"
+                >
+                  {createCryptoInvoice.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Creating invoice…
+                    </>
+                  ) : (
+                    <>
+                      <Bitcoin className="w-4 h-4" />
+                      Pay with Crypto
+                    </>
+                  )}
+                </Button>
+              </div>
             )}
 
             {/* History link */}

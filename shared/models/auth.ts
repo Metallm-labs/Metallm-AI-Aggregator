@@ -65,8 +65,26 @@ export const creditTransactions = pgTable("credit_transactions", {
   index("idx_credit_tx_type").on(table.type),
 ]);
 
+// === OxaPay (Crypto) Transactions ===
+export const oxapayTransactions = pgTable("oxapay_transactions", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  userId: varchar("user_id").notNull(),
+  trackId: varchar("track_id").notNull().unique(),
+  orderId: varchar("order_id").notNull(),
+  status: varchar("status").notNull().default("waiting"), // waiting | paid | expired | error
+  amountUsd: numeric("amount_usd", { precision: 12, scale: 2 }).notNull(),
+  creditsAdded: numeric("credits_added", { precision: 12, scale: 4 }).notNull().default("0"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_oxapay_tx_user").on(table.userId),
+  index("idx_oxapay_tx_track").on(table.trackId),
+]);
+
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type PaddleTransaction = typeof paddleTransactions.$inferSelect;
 export type CreditTransaction = typeof creditTransactions.$inferSelect;
+export type OxapayTransaction = typeof oxapayTransactions.$inferSelect;
 

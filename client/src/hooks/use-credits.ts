@@ -96,3 +96,66 @@ export function useVerifyTransaction() {
 export function updateCreditBalance(queryClient: ReturnType<typeof useQueryClient>, newBalance: number) {
   queryClient.setQueryData(["/api/credits/balance"], { credits: newBalance });
 }
+
+// ============================================================
+// OxaPay (Crypto) Hooks
+// ============================================================
+
+interface OxapayInvoiceResult {
+  trackId: string;
+  payLink: string;
+  amount: number;
+}
+
+interface OxapayStatusResult {
+  status: string; // waiting | confirming | paid | expired | error
+  creditsAdded?: number;
+  balance?: number;
+}
+
+export function useCreateCryptoInvoice() {
+  return useMutation<OxapayInvoiceResult, Error, number>({
+    mutationFn: async (amountUsd: number) => {
+      const res = await fetch("/api/oxapay/create-invoice", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amountUsd }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: "Failed to create invoice" }));
+        throw new Error(error.message);
+      }
+      return res.json();
+    },
+  });
+}
+
+export function useCheckCryptoStatus(trackId: string | null, enabled: boolean) {
+  const queryClient = useQueryClient();
+
+  return useQuery<OxapayStatusResult>({
+    queryKey: ["/api/oxapay/status", trackId],
+    queryFn: async () => {
+      const res = await fetch(`/api/oxapay/status/${trackId}`, { credentials: "include" });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: "Failed to check status" }));
+        throw new Error(error.message);
+      }
+      return res.json();
+    },
+    enabled: !!trackId && enabled,
+    refetchInterval: (query: any) => {
+      const data = query.state.data as OxapayStatusResult | undefined;
+      if (!data) return 3000;
+      const done = data.status === "paid" || data.status === "expired" || data.status === "error";
+      return done ? false : 4000; // poll every 4s until done
+    },
+    onSuccess: (data: OxapayStatusResult) => {
+      if (data.status === "paid" && data.balance !== undefined) {
+        queryClient.setQueryData(["/api/credits/balance"], { credits: data.balance });
+        queryClient.invalidateQueries({ queryKey: ["/api/credits/transactions"] });
+      }
+    },
+  } as any);
+}
