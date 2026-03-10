@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Coins, Plus, Minus, CreditCard, Loader2, CheckCircle, X, AlertTriangle, History, Bitcoin, ExternalLink, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { usePaddleConfig, useCreditBalance, useCreditTransactions, useVerifyTransaction, useCreateCryptoInvoice, useCheckCryptoStatus } from "@/hooks/use-credits";
+import { usePaddleConfig, useCreditBalance, useCreditTransactions, useVerifyTransaction, useCreateCryptoInvoice, useCheckCryptoStatus, useCreateLsCheckout } from "@/hooks/use-credits";
+import { useQbcWallet, useQbcStatus } from "@/hooks/use-qbitcoin";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -120,14 +121,24 @@ export function BuyCreditsDialog() {
   const [cryptoPayLink, setCryptoPayLink] = useState<string | null>(null);
   const [cryptoPolling, setCryptoPolling] = useState(false);
 
+  // QBitcoin state
+  const [qbcOpen, setQbcOpen] = useState(false);
+  const [qbcAddress, setQbcAddress] = useState<string | null>(null);
+  const [qbcCopied, setQbcCopied] = useState(false);
+
   const { data: config } = usePaddleConfig();
   const { data: balance } = useCreditBalance();
   const { data: transactions } = useCreditTransactions();
   const verifyTransaction = useVerifyTransaction();
   const createCryptoInvoice = useCreateCryptoInvoice();
   const { data: cryptoStatus } = useCheckCryptoStatus(cryptoTrackId, cryptoPolling);
+  const getQbcWallet = useQbcWallet();
+  const { data: qbcStatus } = useQbcStatus(qbcOpen);
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // Lemon Squeezy checkout
+  const createLsCheckout = useCreateLsCheckout();
 
   const minQuantity = 1;
 
@@ -234,12 +245,47 @@ export function BuyCreditsDialog() {
       setCryptoTrackId(result.trackId);
       setCryptoPayLink(result.payLink);
       setCryptoPolling(true);
-      // Open payment page in new tab
-      window.open(result.payLink, "_blank", "noopener,noreferrer");
+      // Redirect directly to the OxaPay payment page
+      window.location.href = result.payLink;
     } catch (err) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     }
   }, [quantity, createCryptoInvoice, toast]);
+
+  // Lemon Squeezy — redirect to hosted checkout page
+  const handleLsCheckout = useCallback(async () => {
+    try {
+      const { checkoutUrl } = await createLsCheckout.mutateAsync(quantity);
+      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+    }
+  }, [quantity, createLsCheckout, toast]);
+
+  const handleQbcPayment = useCallback(async () => {
+    try {
+      const result = await getQbcWallet.mutateAsync();
+      setQbcAddress(result.address);
+      setQbcOpen(true);
+    } catch (err) {
+      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+    }
+  }, [getQbcWallet, toast]);
+
+  // Auto-close QBC panel when credits are added
+  useEffect(() => {
+    if (qbcStatus?.status === "confirmed" && qbcStatus.creditsAdded > 0) {
+      toast({
+        title: "QBitcoin Payment Confirmed!",
+        description: `${qbcStatus.creditsAdded} credit${qbcStatus.creditsAdded !== 1 ? "s" : ""} added to your balance.`,
+      });
+      setTimeout(() => {
+        setQbcOpen(false);
+        setQbcAddress(null);
+        setOpen(false);
+      }, 2500);
+    }
+  }, [qbcStatus, toast]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -389,21 +435,16 @@ export function BuyCreditsDialog() {
               <p className="text-xs text-yellow-200/50 mt-1">$1 = 1 credit • Deducted based on token usage</p>
             </div>
 
-            {/* Add Balance Button */}
+            {/* Add Balance Button — Lemon Squeezy */}
             <Button
-              onClick={handleBuyCredits}
-              disabled={!paddleLoaded || !!paddleError}
+              onClick={handleLsCheckout}
+              disabled={createLsCheckout.isPending}
               className="w-full bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-semibold h-12"
             >
-              {paddleError ? (
-                <>
-                  <AlertTriangle className="w-4 h-4 mr-2" />
-                  Payment system error
-                </>
-              ) : !paddleLoaded ? (
+              {createLsCheckout.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Loading payment system...
+                  Opening checkout…
                 </>
               ) : (
                 <>
@@ -412,10 +453,6 @@ export function BuyCreditsDialog() {
                 </>
               )}
             </Button>
-
-            {paddleError && (
-              <p className="text-xs text-red-400 text-center">{paddleError}</p>
-            )}
 
             {/* ── Crypto Payment (OxaPay) ── */}
             {cryptoTrackId && cryptoPayLink ? (
@@ -486,6 +523,91 @@ export function BuyCreditsDialog() {
                     </>
                   )}
                 </Button>
+                {/* QBitcoin link */}
+                <div className="flex justify-center pt-1">
+                  <button
+                    onClick={handleQbcPayment}
+                    disabled={getQbcWallet.isPending}
+                    className="text-xs text-muted-foreground underline hover:text-amber-400 transition-colors disabled:opacity-50"
+                  >
+                    {getQbcWallet.isPending ? "Generating wallet…" : "Pay with QBitcoin (QBC)"}
+                  </button>
+                </div>
+
+                {/* QBitcoin deposit panel */}
+                {qbcOpen && qbcAddress && (
+                  <div className="mt-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-amber-300">QBitcoin Deposit</span>
+                      <button
+                        onClick={() => { setQbcOpen(false); setQbcAddress(null); }}
+                        className="text-muted-foreground hover:text-white"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Price & minimum */}
+                    {qbcStatus && (
+                      <p className="text-xs text-muted-foreground">
+                        Min: <span className="text-white">{qbcStatus.minQbc?.toFixed(0) ?? "—"} QBC</span>
+                        {" "}(~${qbcStatus.minQbc && qbcStatus.qbcPrice ? (qbcStatus.minQbc * qbcStatus.qbcPrice).toFixed(2) : "15"} USD)
+                        {" "}• Rate: <span className="text-white">${qbcStatus.qbcPrice?.toFixed(6) ?? "—"}</span>
+                      </p>
+                    )}
+
+                    {/* Address with copy */}
+                    <div className="flex items-center gap-2 p-2 rounded bg-black/30 border border-white/10">
+                      <code className="flex-1 text-xs text-amber-200 break-all font-mono leading-relaxed">
+                        {qbcAddress}
+                      </code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(qbcAddress);
+                          setQbcCopied(true);
+                          setTimeout(() => setQbcCopied(false), 2000);
+                        }}
+                        className="shrink-0 text-muted-foreground hover:text-white transition-colors"
+                        title="Copy address"
+                      >
+                        {qbcCopied ? <CheckCircle className="w-4 h-4 text-green-400" /> : <ExternalLink className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    {/* Confirmation progress */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Confirmations</span>
+                        <span className={qbcStatus?.confirmations && qbcStatus.confirmations >= 3 ? "text-green-400" : "text-amber-300"}>
+                          {Math.min(qbcStatus?.confirmations ?? 0, 3)} / 3
+                        </span>
+                      </div>
+                      <div className="flex gap-1">
+                        {[0, 1, 2].map((i) => (
+                          <div
+                            key={i}
+                            className={cn(
+                              "flex-1 h-1.5 rounded-full",
+                              (qbcStatus?.confirmations ?? 0) > i ? "bg-green-500" : "bg-white/10"
+                            )}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Balance */}
+                    {qbcStatus && qbcStatus.balanceQbc > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Received: <span className="text-white">{qbcStatus.balanceQbc.toFixed(4)} QBC</span>
+                      </p>
+                    )}
+
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      Send at least {qbcStatus?.minQbc?.toFixed(0) ?? "50000"} QBC to this address. Credits are added after 3 confirmations.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

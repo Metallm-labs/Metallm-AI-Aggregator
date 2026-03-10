@@ -20,7 +20,13 @@ import {
 } from "./openrouter";
 import { calculateTokenCost, deductCredits, getUserCredits } from "./integrations/paddle";
 import { registerPaddleRoutes } from "./integrations/paddle/routes";
+import { registerLemonSqueezyRoutes } from "./integrations/lemonsqueezy/routes";
 import { registerOxapayRoutes } from "./integrations/oxapay/routes";
+import { registerQbcRoutes } from "./integrations/qbitcoin/routes";
+
+// PAYMENT_PROVIDER controls which payment gateway handles card/fiat payments.
+// Set to "lemonsqueezy" or "paddle" in your .env file.
+const PAYMENT_PROVIDER = (process.env.PAYMENT_PROVIDER || "lemonsqueezy").toLowerCase();
 import { sendEmail } from "./integrations/auth/email";
 
 // In-memory model config store
@@ -242,11 +248,19 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
-  // Setup Paddle Payment Routes
-  registerPaddleRoutes(app);
+  // Setup Payment Routes — controlled by PAYMENT_PROVIDER env variable
+  if (PAYMENT_PROVIDER === "paddle") {
+    registerPaddleRoutes(app);
+  } else {
+    // Default: Lemon Squeezy
+    registerLemonSqueezyRoutes(app);
+  }
 
   // Setup OxaPay Crypto Payment Routes
   registerOxapayRoutes(app);
+
+  // Setup QBitcoin Payment Routes
+  registerQbcRoutes(app);
 
   // =============================================
   // === Feedback API ===

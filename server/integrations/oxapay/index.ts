@@ -4,8 +4,9 @@
 import crypto from "crypto";
 import { db } from "../../db";
 import { users, oxapayTransactions, creditTransactions } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, lte, inArray } from "drizzle-orm";
 import * as logger from "../../logger";
+import { sendEmail } from "../auth/email";
 
 const OXAPAY_ENVIRONMENT = process.env.OXAPAY_ENVIRONMENT || "production"; // 'sandbox' | 'production'
 
@@ -181,6 +182,28 @@ export async function processOxapayPayment(
     { trackId, orderId: existing.orderId },
   );
 
+  // Notify admin of successful payment
+  const notifyEmail = process.env.WELCOME_EMAIL || "welcome@metallm.tech";
+  const [userRow] = await db.select({ email: users.email }).from(users).where(eq(users.id, existing.userId));
+  sendEmail({
+    to: notifyEmail,
+    subject: `New Crypto Payment — $${amountUsd.toFixed(2)} USD (OxaPay)`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#333;">
+        <h2 style="margin-bottom:8px;">💳 New OxaPay Payment Received</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <tr><td style="padding:6px 0;color:#666;">User</td><td style="padding:6px 0;">${userRow?.email ?? existing.userId}</td></tr>
+          <tr><td style="padding:6px 0;color:#666;">Amount</td><td style="padding:6px 0;font-weight:bold;">$${amountUsd.toFixed(2)} USD</td></tr>
+          <tr><td style="padding:6px 0;color:#666;">Credits Added</td><td style="padding:6px 0;">${creditsToAdd}</td></tr>
+          <tr><td style="padding:6px 0;color:#666;">New Balance</td><td style="padding:6px 0;">${newBalance.toFixed(4)}</td></tr>
+          <tr><td style="padding:6px 0;color:#666;">Track ID</td><td style="padding:6px 0;font-family:monospace;">${trackId}</td></tr>
+          <tr><td style="padding:6px 0;color:#666;">Order ID</td><td style="padding:6px 0;font-family:monospace;">${existing.orderId}</td></tr>
+          <tr><td style="padding:6px 0;color:#666;">Payment Method</td><td style="padding:6px 0;">Crypto (OxaPay)</td></tr>
+        </table>
+      </div>`,
+    text: `New OxaPay payment from ${userRow?.email ?? existing.userId}: $${amountUsd.toFixed(2)} USD | Credits: ${creditsToAdd} | TrackID: ${trackId}`,
+  }).catch((e) => logger.error("oxapay", `Notification email failed: ${e.message}`));
+
   return { creditsAdded: creditsToAdd, newBalance, alreadyProcessed: false };
 }
 
@@ -198,6 +221,36 @@ export async function getOxapayTransaction(trackId: string) {
     .where(eq(oxapayTransactions.trackId, trackId));
   return tx;
 }
+
+// ============================================================
+// Cleanup: delete waiting/expired OxaPay rows older than 30 min
+// ============================================================
+
+export async function cleanupExpiredOxapayTransactions(): Promise<void> {
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
+  try {
+    const deleted = await db
+      .delete(oxapayTransactions)
+      .where(
+        and(
+          inArray(oxapayTransactions.status, ["waiting", "expired"]),
+          lte(oxapayTransactions.createdAt, cutoff)
+        )
+      )
+      .returning({ id: oxapayTransactions.id });
+
+    if (deleted.length > 0) {
+      logger.info("oxapay", `Cleaned up ${deleted.length} expired pending transaction(s)`);
+    }
+  } catch (err) {
+    logger.error("oxapay", `Cleanup error: ${(err as Error).message}`);
+  }
+}
+
+// Run cleanup every 10 minutes
+setInterval(cleanupExpiredOxapayTransactions, 10 * 60 * 1000);
+// Also run once at startup (with a small delay to let DB connect)
+setTimeout(cleanupExpiredOxapayTransactions, 15_000);
 
 // ============================================================
 // Credit helpers (mirrors paddle/index.ts)

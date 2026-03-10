@@ -159,3 +159,49 @@ export function useCheckCryptoStatus(trackId: string | null, enabled: boolean) {
     },
   } as any);
 }
+
+// ============================================================
+// Lemon Squeezy Hooks
+// ============================================================
+
+interface LsConfig {
+  storeId: string;
+  variantId: string;
+  minQuantity: number;
+  creditRatio: number;
+}
+
+interface LsCheckoutResult {
+  checkoutUrl: string;
+  checkoutId: string;
+}
+
+export function useLsConfig() {
+  return useQuery<LsConfig>({
+    queryKey: ["/api/lemonsqueezy/config"],
+    queryFn: async () => {
+      const res = await fetch("/api/lemonsqueezy/config", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch Lemon Squeezy config");
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 30,
+  });
+}
+
+export function useCreateLsCheckout() {
+  return useMutation<LsCheckoutResult, Error, number>({
+    mutationFn: async (amountUsd: number) => {
+      const res = await fetch("/api/lemonsqueezy/create-checkout", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amountUsd }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: "Failed to create checkout" }));
+        throw new Error(error.message);
+      }
+      return res.json();
+    },
+  });
+}

@@ -65,6 +65,39 @@ export const creditTransactions = pgTable("credit_transactions", {
   index("idx_credit_tx_type").on(table.type),
 ]);
 
+// === QBitcoin Deposit Wallets ===
+// One dedicated deposit address per user — generated with Falcon-512
+export const qbcWallets = pgTable("qbc_wallets", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  userId: varchar("user_id").notNull().unique(), // one wallet per user
+  address: varchar("address").notNull().unique(),
+  publicKey: varchar("public_key").notNull(),
+  encryptedSecretKey: varchar("encrypted_secret_key").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_qbc_wallets_user").on(table.userId),
+  index("idx_qbc_wallets_address").on(table.address),
+]);
+
+// === QBitcoin Deposit Transactions ===
+export const qbcDeposits = pgTable("qbc_deposits", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  userId: varchar("user_id").notNull(),
+  txHash: varchar("tx_hash").notNull().unique(),
+  amountShor: varchar("amount_shor").notNull(),    // raw shor amount
+  amountQbc: varchar("amount_qbc").notNull(),      // human-readable QBC
+  amountUsd: varchar("amount_usd").notNull(),      // USD equivalent at time of deposit
+  creditsAdded: varchar("credits_added").notNull().default("0"),
+  confirmations: integer("confirmations").notNull().default(0),
+  status: varchar("status").notNull().default("pending"), // pending | confirmed | forwarded
+  forwardTxHash: varchar("forward_tx_hash"),              // sweep tx to main wallet
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_qbc_deposits_user").on(table.userId),
+  index("idx_qbc_deposits_txhash").on(table.txHash),
+]);
+
 // === OxaPay (Crypto) Transactions ===
 export const oxapayTransactions = pgTable("oxapay_transactions", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
