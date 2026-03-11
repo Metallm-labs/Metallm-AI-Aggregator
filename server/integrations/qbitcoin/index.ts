@@ -59,8 +59,8 @@ if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length !== 64) {
 export const SHOR_PER_QBC = 1_000_000_000;
 // Default network fee per transaction
 export const FEE_SHOR = 1_000_000; // 0.001 QBC
-// Minimum deposit in USD (set to 0 for testing — re-enable in production)
-export const MIN_DEPOSIT_USD = 0;
+// Minimum deposit in USD
+export const MIN_DEPOSIT_USD = 15;
 // Required confirmations before crediting
 export const REQUIRED_CONFIRMATIONS = 3;
 // 1 USD = 1 credit
@@ -92,36 +92,47 @@ function decryptSecretKey(stored: string): string {
 }
 
 // ============================================================
-// Price feed — Exbitron QBC/USDT
+// Price feed — Fixed QBC/USD price
+// (Exbitron live feed commented out below)
 // ============================================================
-let _cachedPrice: { price: number; fetchedAt: number } | null = null;
-const PRICE_TTL_MS = 60_000; // 1 minute cache
+// Fixed price: 1 QBC = $0.0001 USD
+const FIXED_QBC_USD_PRICE = 0.0001;
 
 export async function getQbcUsdPrice(): Promise<number> {
-  const now = Date.now();
-  if (_cachedPrice && now - _cachedPrice.fetchedAt < PRICE_TTL_MS) {
-    return _cachedPrice.price;
-  }
-  try {
-    const res = await fetch("https://api.exbitron.com/api/v1/cg/tickers", {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`Exbitron HTTP ${res.status}`);
-    const tickers: Array<{ ticker_id: string; last_price: string }> = await res.json();
-    const qbc = tickers.find((t) => t.ticker_id === "QBC-USDT");
-    if (!qbc || !qbc.last_price) throw new Error("QBC-USDT ticker not found");
-    const price = parseFloat(qbc.last_price);
-    if (!isFinite(price) || price <= 0) throw new Error(`Bad QBC price: ${qbc.last_price}`);
-    _cachedPrice = { price, fetchedAt: now };
-    logger.info("qbitcoin", `QBC price: $${price}`);
-    return price;
-  } catch (err) {
-    logger.error("qbitcoin", "Failed to fetch QBC price from Exbitron", err);
-    // Return stale price if available, otherwise fallback
-    if (_cachedPrice) return _cachedPrice.price;
-    return 0.0003; // fallback
-  }
+  logger.info("qbitcoin", `QBC price (fixed): $${FIXED_QBC_USD_PRICE}`);
+  return FIXED_QBC_USD_PRICE;
 }
+
+// ============================================================
+// [COMMENTED OUT] Exbitron live price feed — re-enable when needed
+// ============================================================
+// let _cachedPrice: { price: number; fetchedAt: number } | null = null;
+// const PRICE_TTL_MS = 60_000; // 1 minute cache
+//
+// export async function getQbcUsdPrice(): Promise<number> {
+//   const now = Date.now();
+//   if (_cachedPrice && now - _cachedPrice.fetchedAt < PRICE_TTL_MS) {
+//     return _cachedPrice.price;
+//   }
+//   try {
+//     const res = await fetch("https://api.exbitron.com/api/v1/cg/tickers", {
+//       signal: AbortSignal.timeout(8000),
+//     });
+//     if (!res.ok) throw new Error(`Exbitron HTTP ${res.status}`);
+//     const tickers: Array<{ ticker_id: string; last_price: string }> = await res.json();
+//     const qbc = tickers.find((t) => t.ticker_id === "QBC-USDT");
+//     if (!qbc || !qbc.last_price) throw new Error("QBC-USDT ticker not found");
+//     const price = parseFloat(qbc.last_price);
+//     if (!isFinite(price) || price <= 0) throw new Error(`Bad QBC price: ${qbc.last_price}`);
+//     _cachedPrice = { price, fetchedAt: now };
+//     logger.info("qbitcoin", `QBC price: $${price}`);
+//     return price;
+//   } catch (err) {
+//     logger.error("qbitcoin", "Failed to fetch QBC price from Exbitron", err);
+//     if (_cachedPrice) return _cachedPrice.price;
+//     // NOTE: no fallback — remove comment block and use this function to re-enable live pricing
+//   }
+// }
 
 // ============================================================
 // QBC Node API helpers
