@@ -1,0 +1,407 @@
+{
+  "defaultMainModelId": "gpt-5.4-mini",
+  "models": [
+     
+    {
+      "id": "gpt-5.5-2026-04-23",
+      "displayName": "GPT-5.5",
+      "role": "Flagship Coding, Reasoning & Professional Workflows",
+      "systemPrompt": "You are GPT-5.5 by OpenAI, running on metallm. You are the flagship model for coding, advanced reasoning, and professional workflows. Deliver precise, dependable, and deeply reasoned outputs with production-grade technical quality. For factual or time-sensitive topics, prioritize provided web context and cite sources clearly.",
+      "iconUrl": "/icons/openai.svg",
+      "color": "emerald",
+      "provider": "openai",
+      "tier": 1,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 10,
+        "cachedInputPerMillion": 0.25,
+        "outputPerMillion": 45,
+        "webSearchPerCall": 0.03,
+        "free": false
+      }
+    },
+     
+    {
+      "id": "claude-opus-4-7",
+      "displayName": "Claude Opus 4.7",
+      "role": "Top-Tier Agents, Coding & Deep Analysis",
+      "systemPrompt": "You are Claude Opus 4.7 by Anthropic, running on metallm. You specialize in top-tier agentic tasks, coding architecture, and deep analysis. Provide rigorous, structured, and high-accuracy responses with strong planning and decomposition. For factual or time-sensitive claims, rely on provided web context and cite sources.",
+      "iconUrl": "/icons/claude.png",
+      "color": "amber",
+      "provider": "anthropic",
+      "tier": 1,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 8,
+        "outputPerMillion": 35,
+        "webSearchPerCall": 0.03,
+        "free": false
+      }
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "displayName": "Claude Sonnet 4.6",
+      "role": "Balanced Coding, Refactoring & Technical Writing",
+      "systemPrompt": "You are Claude Sonnet 4.6 by Anthropic, running on metallm. You are optimized for balanced coding, refactoring, and technical writing. Produce clean, maintainable, and practical solutions with concise rationale. When web context is provided, use it for factual or time-sensitive statements and cite sources.",
+      "iconUrl": "/icons/claude.png",
+      "color": "orange",
+      "provider": "anthropic",
+      "tier": 1,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 25,
+        "webSearchPerCall": 0.3,
+        "free": false
+      }
+    },
+    {
+      "id": "gpt-5.4",
+      "displayName": "GPT-5.4",
+      "role": " Advance Reasoning & Professional Workflows",
+      "systemPrompt": "You are GPT-5.4 by OpenAI, running on metallm. You are the flagship model for coding, advanced reasoning, and professional workflows. Deliver precise, dependable, and deeply reasoned outputs with production-grade technical quality. For factual or time-sensitive topics, prioritize provided web context and cite sources clearly.",
+      "iconUrl": "/icons/openai.svg",
+      "color": "emerald",
+      "provider": "openai",
+      "tier": 1,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 3.5,
+        "cachedInputPerMillion": 0.25,
+        "outputPerMillion": 25,
+        "webSearchPerCall": 0.02,
+        "free": false
+      }
+    },
+    {
+      "id": "google/gemini-3.1-pro-preview",
+      "displayName": "Gemini 3.1 Pro Preview",
+      "role": "Long-Context Reasoning, Research & Multimodal",
+      "systemPrompt": "You are Gemini 3.1 Pro Preview by Google, running on metallm. You are optimized for long-context reasoning, web-backed research, and multimodal understanding. Synthesize large context accurately and present structured conclusions. For factual or time-sensitive topics, prioritize web context and cite sources.",
+      "iconUrl": "/icons/gemini.svg",
+      "color": "blue",
+      "provider": "openrouter",
+      "tier": 1,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "inputPerMillion": 4,
+        "inputPerMillionOver200k": 6,
+        "outputPerMillion": 18,
+        "outputPerMillionOver200k": 18,
+        "cachedInputPerMillion": 0.20,
+        "cachedInputPerMillionOver200k": 0.40,
+        "cacheWritePerMillion": 0.375,
+        "inputAudioPerMillion": 2,
+        "inputAudioPerMillionOver200k": 4,
+        "cachedInputAudioPerMillion": 0.20,
+        "cachedInputAudioPerMillionOver200k": 0.40,
+        "webSearchPerCall": 0.01,
+        "free": false
+      }
+    },
+    {
+      "id": "grok-4.3",
+      "displayName": "Grok 4.3",
+      "role": "Real-Time Search, Social Signals & Reasoning",
+      "systemPrompt": "You are Grok 4.3 by xAI, running on metallm. You are optimized for real-time search, social-signal awareness, and deep reasoning. Provide direct, evidence-backed responses and highlight uncertainty when needed. For factual or time-sensitive topics, use available web sources and cite them.",
+      "iconUrl": "/icons/grok.svg",
+      "color": "slate",
+      "provider": "grok",
+      "tier": 1,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 4,
+        "outputPerMillion": 12,
+        "webSearchPerCall": 0.09,
+        "free": false
+      }
+    },
+    {
+      "id": "grok-4.20-0309-reasoning",
+      "displayName": "Grok 4.20 309 Reasoning",
+      "role": "Social Signals & Reasoning",
+      "systemPrompt": "You are Grok 4.20 0309 Reasoning by xAI, running on metallm. You are optimized for real-time search, social-signal awareness, and deep reasoning. Provide direct, evidence-backed responses and highlight uncertainty when needed. For factual or time-sensitive topics, use available web sources and cite them.",
+      "iconUrl": "/icons/grok.svg",
+      "color": "slate",
+      "provider": "grok",
+      "tier": 1,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 4,
+        "outputPerMillion": 12,
+        "webSearchPerCall": 0.08,
+        "free": false
+      }
+    },
+    {
+      "id": "qwen/qwen3.6-plus",
+      "displayName": "Qwen 3.6 Plus",
+      "role": "Strong   Reasoning & Multilingual",
+      "systemPrompt": "You are Qwen 3.6 Plus by Alibaba, running on metallm. You are optimized for strong cost-performance reasoning and multilingual tasks. Deliver practical, high-quality answers with clear structure and concise logic. Use web context when provided for factual accuracy and cite sources.",
+      "iconUrl": "/icons/qwen.svg",
+      "color": "orange",
+      "provider": "openrouter",
+      "tier": 2,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 5,
+        "outputPerMillion": 10,
+        "webSearchPerCall": 0.009,
+        "free": false
+      }
+    },
+    {
+      "id": "moonshotai/kimi-k2.6",
+      "displayName": "Kimi K2.6",
+      "role": "Strong   Reasoning & Multilingual",
+      "systemPrompt": "You are Kimi K2.6 by Moonshot AI, running on metallm. You are optimized for strong cost-performance reasoning and multilingual tasks. Deliver practical, high-quality answers with clear structure and concise logic. Use web context when provided for factual accuracy and cite sources.",
+      "iconUrl": "/icons/moonshot.svg",
+      "color": "orange",
+      "provider": "openrouter",
+      "tier": 2,
+      "maxOutputTokens": 16000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 8,
+        "webSearchPerCall": 0.009,
+        "free": false
+      }
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "displayName": "Claude Haiku 4.5",
+      "role": "Fast Summaries, Support & Lightweight Coding",
+      "systemPrompt": "You are Claude Haiku 4.5 by Anthropic, running on metallm. You are tuned for fast summaries, support workflows, and lightweight coding help. Keep responses concise, high-signal, and easy to execute. When web context is provided, prioritize it for factual and time-sensitive claims and cite sources.",
+      "iconUrl": "/icons/claude.png",
+      "color": "orange",
+      "provider": "anthropic",
+      "tier": 2,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 7,
+        "webSearchPerCall": 0.009,
+        "free": false
+      }
+    },
+    
+    {
+      "id": "gpt-5.4-mini",
+      "displayName": "GPT-5.4 mini",
+      "role": "Cost-Optimized Coding, Agents & Daily Assistant",
+      "systemPrompt": "You are GPT-5.4 mini by OpenAI, running on metallm. You are optimized for cost-efficient coding, agent steps, and daily assistant tasks. Provide fast, accurate, and concise outputs with strong instruction-following. When web context is available, prioritize recent sources for time-sensitive claims and cite them.",
+      "iconUrl": "/icons/openai.svg",
+      "color": "sky",
+      "provider": "openai",
+      "tier": 2,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "inputPerMillion": 1.5,
+        "cachedInputPerMillion": 0.045,
+        "outputPerMillion": 8,
+        "webSearchPerCall": 0.008,
+        "free": false
+      }
+    },
+    {
+      "id": "xiaomi/mimo-v2-pro",
+      "displayName": "Mimo V2 Pro",
+      "role": "Strong Cost-Performance Reasoning & Multilingual",
+      "systemPrompt": "You are Mimo v2 pro, running on metallm. You are optimized for strong cost-performance reasoning and multilingual tasks. Deliver practical, high-quality answers with clear structure and concise logic. Use web context when provided for factual accuracy and cite sources.",
+      "iconUrl": "/icons/xiaomi.png",
+      "color": "orange",
+      "provider": "openrouter",
+      "tier": 2,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 3,
+        "outputPerMillion": 6,
+        "webSearchPerCall": 0.009,
+        "free": false
+      }
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "displayName": "Gemini-2.5-flash",
+      "role": "Best Price-Performance Reasoning & Web Search",
+      "systemPrompt": "You are Gemini 2.5 Flash by Google, running on metallm. You are the best price-performance model for reasoning and web search tasks. Provide fast, structured, and accurate answers with strong instruction-following. For current events and factual claims, rely on web context and cite sources.",
+      "iconUrl": "/icons/gemini.svg",
+      "color": "blue",
+      "provider": "gemini",
+      "tier": 2,
+      "maxOutputTokens": 65535,
+      "pricing": {
+        "inputPerMillion": 0.6,
+        "outputPerMillion": 5,
+        "webSearchPerCall": 0.009,
+        "free": false
+      }
+    },
+    {
+      "id": "nvidia/nemotron-3-super-120b-a12b:free",
+      "displayName": "Nemotron",
+      "role": "Budget Math, Data Analysis & Structured Tasks",
+      "systemPrompt": "You are Nemotron by NVIDIA, running on metallm. You are optimized for budget-friendly math, data analysis, and structured problem solving. Provide precise calculations, clear assumptions, and reproducible reasoning.",
+      "iconUrl": "/icons/nvidia.svg",
+      "color": "lime",
+      "provider": "openrouter",
+      "tier": 3,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 0.12,
+        "outputPerMillion": 0.48,
+        "webSearchPerCall": 0.004,
+        "free": false
+      }
+    },
+    {
+      "id": "z-ai/glm-4.5-air:free",
+      "displayName": "GLM 4.5",
+      "role": "Business Analysis, Planning & Decision Support",
+      "systemPrompt": "You are GLM 4.5, running on metallm. You specialize in business analysis, planning, and decision support. Deliver practical recommendations, trade-off analysis, and clear action plans in a professional format.",
+      "iconUrl": "/icons/glm.svg",
+      "color": "teal",
+      "provider": "openrouter",
+      "tier": 3,
+      "maxOutputTokens": 32768,
+      "pricing": {
+        "inputPerMillion": 0.2,
+        "outputPerMillion": 0.8,
+        "webSearchPerCall": 0.004,
+        "free": false
+      }
+    },
+    {
+      "id": "llama-3.3-70b-versatile",
+      "displayName": "LLaMA 3 Versatile",
+      "role": "Fast & Free Multilingual Chat & Code",
+      "systemPrompt": "You are LLaMA 3 Versatile by Meta, running on metallm. You are a fast, free model for general chat, coding, and multilingual tasks. Provide concise, helpful, and accurate answers.",
+      "iconUrl": "/icons/meta.svg",
+      "color": "blue",
+      "provider": "groq",
+      "tier": 3,
+      "maxOutputTokens": 8192,
+            "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0,
+        "free": true
+      }
+    },
+     
+    {
+      "id":  "openai/gpt-oss-120b",
+      "displayName": "GPT OSS 120B",
+      "role": "Powerful Free Reasoning & Code Generation",
+      "systemPrompt": "You are GPT OSS 120B by OpenAI, running on metallm. You are a powerful free model for advanced reasoning, coding, and general tasks. Deliver high-quality, structured, and accurate responses.",
+      "iconUrl": "/icons/openai.svg",
+      "color": "blue",
+      "provider": "groq",
+      "tier": 3,
+      "maxOutputTokens": 32768,
+            "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0,
+        "free": true
+      }
+    }
+  ],
+  "mediaModels": {
+    "image": [
+      {
+        "id": "gpt-image-2-2026-04-21",
+        "displayName": "GPT 5.4 Image 2",
+        "role": "Top-Tier AI Image Generation with Text Understanding",
+        "iconUrl": "/icons/openai.svg",
+        "color": "emerald",
+        "provider": "openai",
+        "type": "image",
+        "pricing": {
+          "inputPerMillion": 18,
+          "outputPerMillion": 35,
+          "cachedInputPerMillion": 6
+        },
+        "config": {
+          "aspectRatios": ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"],
+          "imageSizes": ["1K", "2K", "4K"],
+          "defaultAspectRatio": "1:1",
+          "defaultImageSize": "1K"
+        }
+      },
+      {
+        "id": "google/gemini-3-pro-image-preview",
+        "displayName": "Gemini 3 Pro Image",
+        "role": "Advanced Image Generation with Text Rendering & Identity Preservation",
+        "iconUrl": "/icons/gemini.svg",
+        "color": "blue",
+        "provider": "openrouter",
+        "type": "image",
+        "pricing": {
+          "inputPerMillion": 5,
+          "outputPerMillion": 30,
+          "cachedInputPerMillion": 5
+        },
+        "config": {
+          "aspectRatios": ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"],
+          "imageSizes": ["1K", "2K", "4K"],
+          "defaultAspectRatio": "1:1",
+          "defaultImageSize": "1K"
+        }
+      },
+      {
+        "id": "black-forest-labs/flux.2-pro",
+        "displayName": "Flux 2 Pro",
+        "role": "High-Quality Image Generation with Strong Prompt Adherence",
+        "iconUrl": "/icons/flux.svg",
+        "color": "violet",
+        "provider": "openrouter",
+        "type": "image",
+        "pricing": {
+          "outputPerMegapixel": 0.1,
+          "inputPerMegapixel": 0.15
+        },
+        "config": {
+          "aspectRatios": ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"],
+          "imageSizes": ["1K", "2K", "4K"],
+          "defaultAspectRatio": "1:1",
+          "defaultImageSize": "1K"
+        }
+      },
+      {
+        "id": "grok-imagine-image",
+        "displayName": "Grok Aurora",
+        "role": "Fast & Affordable Image Generation by xAI",
+        "iconUrl": "/icons/grok.svg",
+        "color": "slate",
+        "provider": "grok",
+        "type": "image",
+        "pricing": {
+          "perImage": 0.1
+        },
+        "config": {
+          "aspectRatios": ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "2:1", "1:2"],
+          "imageSizes": ["1k", "2k"],
+          "defaultAspectRatio": "1:1",
+          "defaultImageSize": "1k"
+        }
+      },
+      {
+        "id": "grok-imagine-image-pro",
+        "displayName": "Grok Aurora Pro",
+        "role": "Premium High-Quality Image Generation by xAI",
+        "iconUrl": "/icons/grok.svg",
+        "color": "slate",
+        "provider": "grok",
+        "type": "image",
+        "pricing": {
+          "perImage": 0.2
+        },
+        "config": {
+          "aspectRatios": ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "2:1", "1:2"],
+          "imageSizes": ["1k", "2k"],
+          "defaultAspectRatio": "1:1",
+          "defaultImageSize": "1k"
+        }
+      }
+    ]
+  }
+}

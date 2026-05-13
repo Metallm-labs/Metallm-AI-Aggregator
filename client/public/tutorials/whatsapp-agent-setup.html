@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How to Create a WhatsApp AI Agent for Your Business - Metallm Tutorial</title>
+  <meta name="description" content="Create a WhatsApp AI agent in 5 minutes — no code, no developers. Handles orders, answers questions, sends menus 24/7. Free trial with 20 messages. WATI & Respond.io alternative.">
+  <meta name="keywords" content="WhatsApp AI agent, business automation, no code chatbot, Metallm, WhatsApp business, AI customer support, WATI alternative, Respond.io alternative, WhatsApp bot for business">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://metallm.tech/tutorials/whatsapp-agent-setup.html">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Create a WhatsApp AI Agent for Your Business — No Code, 5 Minutes">
+  <meta property="og:description" content="Create a WhatsApp AI agent in 5 minutes — no code, no developers. Handles orders, answers questions, sends menus 24/7. Free trial. WATI & Respond.io alternative.">
+  <meta property="og:url" content="https://metallm.tech/tutorials/whatsapp-agent-setup.html">
+  <meta property="og:image" content="https://metallm.tech/agent_guides_screenshots/step6(whatsapp).png">
+  <meta property="og:site_name" content="Metallm">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Create a WhatsApp AI Agent for Your Business — No Code, 5 Minutes">
+  <meta name="twitter:description" content="No-code WhatsApp AI agent. Handles orders, customer support, sends menus 24/7. Free trial with 20 messages.">
+  <meta name="twitter:image" content="https://metallm.tech/agent_guides_screenshots/step6(whatsapp).png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- HowTo Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "How to Create a WhatsApp AI Agent for Your Business",
+    "description": "Create a no-code WhatsApp AI agent that handles customer inquiries, takes orders, and provides 24/7 support for your business using Metallm.",
+    "totalTime": "PT5M",
+    "tool": [
+      { "@type": "HowToTool", "name": "Web browser" },
+      { "@type": "HowToTool", "name": "Metallm account (free)" },
+      { "@type": "HowToTool", "name": "WhatsApp on phone" }
+    ],
+    "step": [
+      {
+        "@type": "HowToStep",
+        "position": 1,
+        "name": "Sign Up and Start Agent Creation",
+        "text": "Go to metallm.tech/agent, create a free account, and click Create Agent to start the setup wizard.",
+        "url": "https://metallm.tech/tutorials/whatsapp-agent-setup.html#step1"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 2,
+        "name": "Enter Your Business Name",
+        "text": "Type your business name exactly as customers know it. The AI agent will use this name when introducing itself.",
+        "url": "https://metallm.tech/tutorials/whatsapp-agent-setup.html#step2",
+        "image": "https://metallm.tech/agent_guides_screenshots/step1.png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 3,
+        "name": "Add Your Website URL",
+        "text": "Provide your website URL so the AI agent can automatically learn about your products, services, and business details.",
+        "url": "https://metallm.tech/tutorials/whatsapp-agent-setup.html#step3",
+        "image": "https://metallm.tech/agent_guides_screenshots/step2(web).png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 4,
+        "name": "Add Media and Instructions",
+        "text": "Upload menu images, catalogs, or price lists. Add custom instructions like greeting language, delivery policies, or operating hours.",
+        "url": "https://metallm.tech/tutorials/whatsapp-agent-setup.html#step4",
+        "image": "https://metallm.tech/agent_guides_screenshots/step3(media).png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 5,
+        "name": "Wait for Agent Personalization",
+        "text": "Metallm automatically personalizes your agent by configuring identity, products, and startup instructions. Takes 15-30 seconds.",
+        "url": "https://metallm.tech/tutorials/whatsapp-agent-setup.html#step5",
+        "image": "https://metallm.tech/agent_guides_screenshots/step4(personlize).png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 6,
+        "name": "Review Your Agent Dashboard",
+        "text": "View and edit agent configuration files including identity, products, tools, and bootstrap settings from the dashboard.",
+        "url": "https://metallm.tech/tutorials/whatsapp-agent-setup.html#step6",
+        "image": "https://metallm.tech/agent_guides_screenshots/step5(files).png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 7,
+        "name": "Connect WhatsApp via QR Code",
+        "text": "Open WhatsApp on your phone, go to Settings > Linked Devices, tap Link a Device, and scan the QR code shown on screen. Your AI agent is now live.",
+        "url": "https://metallm.tech/tutorials/whatsapp-agent-setup.html#step7",
+        "image": "https://metallm.tech/agent_guides_screenshots/step6(whatsapp).png"
+      }
+    ]
+  }
+  </script>
+
+  <!-- FAQPage Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How much does a WhatsApp AI agent cost on Metallm?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Metallm offers a free trial with 20 messages to test your WhatsApp AI agent. After the trial, affordable subscription plans are available based on message volume. No per-message API fees like WATI or Respond.io charge."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do I need coding skills to create a WhatsApp AI agent?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Metallm's WhatsApp agent setup is completely no-code. You fill in your business details, upload media, and connect WhatsApp with a QR scan. The entire process takes under 5 minutes."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Metallm a good alternative to WATI or Respond.io?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Unlike WATI and Respond.io which require the WhatsApp Business API (approval process, phone number verification, template messages), Metallm connects via QR code in seconds. It also uses advanced AI that understands context naturally, instead of rigid flow-based chatbots."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can the WhatsApp AI agent send images and menus?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. You can upload menu images, product catalogs, deal banners, and price lists during setup. The AI agent automatically sends relevant media when customers ask about your products or menu."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What happens if my WhatsApp disconnects?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Metallm automatically detects disconnection and provides a new QR code for reconnection. Your agent configuration and conversation history are preserved. Simply scan the new QR code to resume."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What types of businesses can use a WhatsApp AI agent?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Any business that communicates with customers on WhatsApp — restaurants (orders, menu sharing), salons (appointment booking), retail stores (product inquiries, stock availability), real estate (property details), clinics (appointment scheduling), and service businesses (pricing, availability)."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <!-- Mobile Sidebar Toggle -->
+  <button class="sidebar-toggle" aria-label="Toggle menu">&#9776;</button>
+
+  <div class="tutorials-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/tutorials/" style="text-decoration:none;">
+          <div class="sidebar-logo">Metallm <span>Tutorials</span></div>
+        </a>
+        <p class="sidebar-subtitle">Step-by-step guides</p>
+      </div>
+
+      <!-- WhatsApp Agent Guide - Open -->
+      <div class="sidebar-section">
+        <button class="sidebar-section-toggle">
+          WhatsApp Agent Guide <span class="chevron">&#9660;</span>
+        </button>
+        <div class="sidebar-section-content">
+          <ul class="sidebar-nav">
+            <li><a href="#overview" class="active"><span class="toc-number">1</span>Overview</a></li>
+            <li><a href="#problem"><span class="toc-number">2</span>The Problem</a></li>
+            <li><a href="#solution"><span class="toc-number">3</span>Metallm Solution</a></li>
+            <li><a href="#step1"><span class="toc-number">4</span>Enter Business Name</a></li>
+            <li><a href="#step2"><span class="toc-number">5</span>Add Website URL</a></li>
+            <li><a href="#step3"><span class="toc-number">6</span>Add Media &amp; Instructions</a></li>
+            <li><a href="#step4"><span class="toc-number">7</span>Agent Personalization</a></li>
+            <li><a href="#step5"><span class="toc-number">8</span>Agent Dashboard</a></li>
+            <li><a href="#step6"><span class="toc-number">9</span>Connect WhatsApp</a></li>
+            <li><a href="#use-cases"><span class="toc-number">10</span>Use Cases</a></li>
+            <li><a href="#comparison"><span class="toc-number">11</span>vs WATI/Respond.io</a></li>
+            <li><a href="#troubleshooting"><span class="toc-number">12</span>Troubleshooting</a></li>
+            <li><a href="#faq"><span class="toc-number">13</span>FAQ</a></li>
+            <li><a href="#final"><span class="toc-number">14</span>Start Using</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AI Aggregator Guide - Collapsed -->
+      <div class="sidebar-section">
+        <button class="sidebar-section-toggle collapsed">
+          AI Aggregator Guide <span class="chevron">&#9660;</span>
+        </button>
+        <div class="sidebar-section-content collapsed">
+          <ul class="sidebar-nav">
+            <li><a href="metallm-ai-aggregator-guide.html#overview">Overview</a></li>
+            <li><a href="metallm-ai-aggregator-guide.html#direct-mode">Direct Mode</a></li>
+            <li><a href="metallm-ai-aggregator-guide.html#smart-route">Smart Route</a></li>
+            <li><a href="metallm-ai-aggregator-guide.html#debate-mode">Debate Mode</a></li>
+            <li><a href="metallm-ai-aggregator-guide.html#multi-mode">Multi Mode</a></li>
+            <li><a href="metallm-ai-aggregator-guide.html#image-mode">Image Mode</a></li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+      <!-- Hero -->
+      <section class="tutorial-hero" data-section="overview">
+        <h1>How to Create a WhatsApp AI Agent for Your Business (No Code)</h1>
+        <p>Learn how to set up an AI-powered WhatsApp agent that handles customer inquiries, takes orders, and provides 24/7 support for your business — without writing a single line of code.</p>
+        <div class="tutorial-meta">
+          <span>&#128214; 5 min read</span>
+          <span>&#9989; No coding required</span>
+          <span>&#128640; Free trial available</span>
+        </div>
+      </section>
+
+      <!-- Problem Section -->
+      <section class="problem-section" data-section="problem">
+        <h2>The Problem Businesses Face</h2>
+        <ul>
+          <li>Customers expect instant replies on WhatsApp but you can't be online 24/7</li>
+          <li>Hiring customer support staff is expensive, especially for small businesses</li>
+          <li>Repetitive questions waste your team's time — menu prices, business hours, order status</li>
+          <li>Missed messages mean lost sales and unhappy customers</li>
+          <li>Building a custom chatbot requires developers, APIs, and months of work</li>
+          <li>Existing chatbot tools are too complex or require technical knowledge</li>
+        </ul>
+      </section>
+
+      <!-- Solution Section -->
+      <section class="solution-section" data-section="solution">
+        <h2>Metallm Solution</h2>
+        <ul>
+          <li>Create a fully personalized WhatsApp AI agent in under 5 minutes</li>
+          <li>No code, no developers, no API setup required</li>
+          <li>Your agent knows your business — products, prices, hours, policies</li>
+          <li>Handles customer questions, takes orders, and sends media (menus, catalogs)</li>
+          <li>Powered by advanced AI that understands context and speaks naturally</li>
+          <li>Works 24/7 — never misses a message, never takes a day off</li>
+          <li>Connect your WhatsApp in seconds with a simple QR code scan</li>
+        </ul>
+      </section>
+
+      <!-- Steps Section -->
+      <section class="steps-section">
+        <h2>Step-by-Step Setup Guide</h2>
+
+        <!-- Step 1 -->
+        <div class="step-card" data-section="step1">
+          <div class="step-number">1</div>
+          <h3>Go to Metallm Agent Page &amp; Sign Up</h3>
+          <p>Open your browser and navigate to <a href="https://metallm.tech/agent" target="_blank" rel="noopener">metallm.tech/agent</a>. If you don't have an account yet, click <strong>Sign Up</strong> to create a free business account. You'll get 20 free messages to test your agent.</p>
+          <p>Once logged in, click <strong>"Create Agent"</strong> to start the setup wizard. You'll see "CREATE YOUR AGENT" at the top with Step 1/8.</p>
+          <div class="step-tip"><strong>Tip:</strong> Use your business email for sign up so your team can access the agent later.</div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="step-card" data-section="step2">
+          <div class="step-number">2</div>
+          <h3>Enter Your Business Name</h3>
+          <p>The first question is <strong>"What is your business name?"</strong> — type your business name exactly as you want customers to see it. This name will be used by the AI agent when introducing itself to customers.</p>
+          <p>For example: "RK Pizza", "Ali Electronics", "Noor Beauty Salon", etc.</p>
+          <div class="step-screenshot">
+            <img src="/agent_guides_screenshots/step1.png" alt="Step 1 - Enter your business name in the create agent wizard" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> Use your brand name exactly as customers know it — the agent will use this name in conversations.</div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="step-card" data-section="step3">
+          <div class="step-number">3</div>
+          <h3>Add Your Website URL (Optional but Recommended)</h3>
+          <p>In Step 5/8, you'll be asked <strong>"What is your website?"</strong> — this is optional but highly recommended. If you provide your website URL, the AI agent will crawl it to learn about your products, services, and business details automatically.</p>
+          <p>This means less manual setup for you. The agent becomes smarter and more accurate with your website data.</p>
+          <div class="step-screenshot">
+            <img src="/agent_guides_screenshots/step2(web).png" alt="Step 5 - Add your website URL for better agent personalization" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> Even a simple website or Facebook page URL helps the agent understand your business better.</div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="step-card" data-section="step4">
+          <div class="step-number">4</div>
+          <h3>Add Media &amp; Extra Instructions</h3>
+          <p>In the final setup step (Step 8/8), you can <strong>add media files</strong> like your menu images, product catalogs, deal banners, or price lists. These will be saved in your agent's workspace and the AI can send them to customers when asked.</p>
+          <p>You can also type <strong>extra business instructions</strong> — like "Always greet in Urdu first", "Mention our delivery is free above Rs. 1000", or "Don't take orders after 11 PM".</p>
+          <div class="step-screenshot">
+            <img src="/agent_guides_screenshots/step3(media).png" alt="Step 8 - Add media files and extra instructions for your agent" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> Upload your menu or product catalog images — customers often ask for these on WhatsApp and your agent can send them instantly.</div>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="step-card" data-section="step5">
+          <div class="step-number">5</div>
+          <h3>Wait for Agent Personalization</h3>
+          <p>After clicking <strong>"Create Agent"</strong>, Metallm will personalize your AI agent automatically. You'll see a loading screen saying <strong>"Personalizing your agent..."</strong> — the system is:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li>Evaluating tools and filling out configuration files</li>
+            <li>Writing notes to PRODUCTS.md (your product database)</li>
+            <li>Setting up IDENTITY.md (agent personality and role)</li>
+            <li>Configuring BOOTSTRAP.md (startup instructions)</li>
+          </ul>
+          <p>This usually takes 15-30 seconds. Don't close the page.</p>
+          <div class="step-screenshot">
+            <img src="/agent_guides_screenshots/step4(personlize).png" alt="Agent personalization in progress - AI configuring your business agent" loading="lazy">
+          </div>
+        </div>
+
+        <!-- Step 6 -->
+        <div class="step-card" data-section="step6">
+          <div class="step-number">6</div>
+          <h3>Your Agent Dashboard is Ready</h3>
+          <p>Once personalization is complete, you'll see your <strong>Agent Dashboard</strong>. Here you can:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li><strong>View and edit Agent Files</strong> — IDENTITY.md, SOUL.md, AGENTS.md, USER.md, BOOTSTRAP.md, TOOLS.md, PRODUCTS.md</li>
+            <li><strong>Check your trial status</strong> — 20 free messages included</li>
+            <li><strong>Switch between Chat and Settings</strong> tabs</li>
+            <li><strong>Manage sessions</strong> — Main and Bootstrap sessions</li>
+          </ul>
+          <p>The IDENTITY.md file contains your business details like name, agent role, tone, signature emoji, and languages. You can edit any of these files to customize your agent further.</p>
+          <div class="step-screenshot">
+            <img src="/agent_guides_screenshots/step5(files).png" alt="Agent dashboard showing configuration files and settings" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> Click "Save File" after editing any agent file. You can change the agent's tone, add more products, or update instructions anytime.</div>
+        </div>
+
+        <!-- Step 7 -->
+        <div class="step-card" data-section="step7">
+          <div class="step-number">7</div>
+          <h3>Connect Your WhatsApp</h3>
+          <p>The final step! Click <strong>"Go to Settings"</strong> or the connect button to link your WhatsApp. A QR code will appear with instructions:</p>
+          <ol style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li>Open WhatsApp on your phone</li>
+            <li>Go to <strong>Settings &rarr; Linked Devices</strong></li>
+            <li>Tap <strong>"Link a Device"</strong></li>
+            <li>Scan the QR code shown on screen</li>
+          </ol>
+          <p>Once scanned, you'll see <strong>"QR ready"</strong> confirmation. Click "Check Linked" to verify the connection. Your AI agent is now live on your WhatsApp!</p>
+          <div class="step-screenshot">
+            <img src="/agent_guides_screenshots/step6(whatsapp).png" alt="Scan QR code to connect WhatsApp to your AI agent" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> Use a dedicated WhatsApp number for your business agent. If the QR expires, click "New QR" to generate a fresh one.</div>
+        </div>
+      </section>
+
+      <!-- Use Cases Section -->
+      <section class="steps-section" data-section="use-cases">
+        <h2>Who Can Use a WhatsApp AI Agent?</h2>
+
+        <div class="step-card">
+          <h3>Restaurants &amp; Food Delivery</h3>
+          <p>Your AI agent can share the menu, take orders, confirm delivery times, and answer questions about ingredients or dietary options. Customers message "show menu" and instantly receive your menu images. The agent handles peak-hour order volume without delays — no more missed orders during rush time.</p>
+          <p><strong>Example interaction:</strong> Customer sends "What's your pizza deal today?" → Agent replies with today's deals, sends the deals banner image, and asks if they want to place an order.</p>
+        </div>
+
+        <div class="step-card">
+          <h3>Salons &amp; Beauty Services</h3>
+          <p>Handle appointment bookings, share service menus with pricing, answer FAQs about treatments, and send before/after photos. Your agent knows your availability, prices, and services — customers can book without calling.</p>
+          <p><strong>Example interaction:</strong> Customer sends "How much for hair coloring?" → Agent shares the pricing list, explains available color options, and offers to book an appointment.</p>
+        </div>
+
+        <div class="step-card">
+          <h3>Retail &amp; E-Commerce Stores</h3>
+          <p>Answer product inquiries, check stock availability, share product catalogs, process simple orders, and handle return/exchange questions. Works for clothing, electronics, groceries, and any physical or digital product business.</p>
+          <p><strong>Example interaction:</strong> Customer sends "Do you have iPhone 16 Pro in stock?" → Agent confirms availability, shares pricing and color options, and guides towards purchase.</p>
+        </div>
+
+        <div class="step-card">
+          <h3>Real Estate &amp; Services</h3>
+          <p>Share property details, answer pricing questions, schedule viewings, and qualify leads. For service businesses (plumbers, electricians, tutors), handle scheduling, pricing inquiries, and availability — all without you being online.</p>
+          <p><strong>Example interaction:</strong> Customer sends "Any 2-bedroom apartments in Gulberg?" → Agent shares available listings with photos, prices, and offers to schedule a visit.</p>
+        </div>
+      </section>
+
+      <!-- Comparison Section -->
+      <section class="steps-section" data-section="comparison">
+        <h2>Metallm vs WATI vs Respond.io</h2>
+
+        <div class="step-card">
+          <h3>Why Metallm is Different</h3>
+          <p>Most WhatsApp automation tools like WATI and Respond.io require the <strong>official WhatsApp Business API</strong> — which means a lengthy approval process, phone number verification with Meta, template message approvals, and per-conversation pricing. They also use <strong>flow-based chatbots</strong> that follow rigid decision trees and break when customers ask unexpected questions.</p>
+
+          <p>Metallm takes a fundamentally different approach:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li><strong>No API approval needed</strong> — connect via QR code in seconds, same as WhatsApp Web</li>
+            <li><strong>Real AI, not flow charts</strong> — powered by advanced language models that understand context, tone, and intent naturally</li>
+            <li><strong>Setup in 5 minutes</strong> — WATI/Respond.io require hours of flow builder configuration</li>
+            <li><strong>No per-message API fees</strong> — flat subscription instead of Meta's per-conversation pricing</li>
+            <li><strong>Handles unexpected questions</strong> — AI adapts to any customer query, not just pre-programmed flows</li>
+            <li><strong>Sends media intelligently</strong> — agent decides when to share menus, catalogs, or images based on conversation context</li>
+            <li><strong>No developer needed</strong> — WATI webhooks and Respond.io integrations require technical setup</li>
+          </ul>
+
+          <div class="step-tip"><strong>Bottom line:</strong> If you want a simple, intelligent WhatsApp agent that works in minutes without technical knowledge or Meta approval, Metallm is the fastest path. WATI and Respond.io are better suited for large enterprises that need official API features like green badge verification.</div>
+        </div>
+      </section>
+
+      <!-- Troubleshooting Section -->
+      <section class="steps-section" data-section="troubleshooting">
+        <h2>Troubleshooting &amp; Common Issues</h2>
+
+        <div class="step-card">
+          <h3>QR Code Expired</h3>
+          <p>QR codes expire after a short time for security. If the QR code on screen has expired, click <strong>"New QR"</strong> to generate a fresh one. Make sure to scan quickly after it appears.</p>
+        </div>
+
+        <div class="step-card">
+          <h3>WhatsApp Disconnected</h3>
+          <p>If your phone loses internet or WhatsApp logs out linked devices, the agent will go offline. Metallm detects this automatically and shows a reconnection option. Simply scan a new QR code to restore the connection. Your agent configuration is preserved.</p>
+        </div>
+
+        <div class="step-card">
+          <h3>Agent Giving Wrong Answers</h3>
+          <p>If the agent provides inaccurate information about your business, go to the Agent Dashboard and edit the relevant files:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li><strong>PRODUCTS.md</strong> — update product names, prices, and availability</li>
+            <li><strong>IDENTITY.md</strong> — update business hours, location, or policies</li>
+            <li><strong>Extra Instructions</strong> — add specific rules like "Don't offer discounts" or "Always ask for delivery address"</li>
+          </ul>
+          <p>Changes take effect immediately after saving — no restart needed.</p>
+        </div>
+
+        <div class="step-card">
+          <h3>Agent Not Sending Media</h3>
+          <p>Make sure you uploaded your media files (menu images, catalogs) during setup or from the dashboard. The agent can only send files that exist in its workspace. Supported formats: JPG, PNG, PDF. Keep file sizes under 5MB for fast delivery.</p>
+        </div>
+      </section>
+
+      <!-- FAQ Section (visible) -->
+      <section class="faq-section" data-section="faq">
+        <h2>Frequently Asked Questions</h2>
+
+        <div class="faq-item">
+          <h3>How much does it cost?</h3>
+          <p>Metallm offers a free trial with 20 messages. After that, affordable subscription plans are available based on your message volume. Unlike WATI or Respond.io, there are no per-message API fees or Meta conversation charges.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>Do I need coding skills?</h3>
+          <p>No. The entire setup is visual and no-code. You fill in business details, upload media, and scan a QR code. Takes under 5 minutes from start to live agent.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>Is this better than WATI or Respond.io?</h3>
+          <p>For small and medium businesses that want quick setup without the WhatsApp Business API approval process — yes. Metallm uses real AI instead of rigid flow-based chatbots, connects via QR code (no Meta verification), and requires zero technical knowledge. WATI/Respond.io suit large enterprises needing official API features.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>Can the agent send images and menus?</h3>
+          <p>Yes. Upload your menu images, product catalogs, or deal banners during setup. The AI agent automatically sends relevant media when customers ask about your products.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>What happens if WhatsApp disconnects?</h3>
+          <p>Metallm detects disconnection automatically and provides a new QR code. Your agent configuration and history are preserved — just scan again to resume.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>What businesses can use this?</h3>
+          <p>Any business communicating on WhatsApp — restaurants, salons, retail stores, real estate, clinics, tutoring centers, service providers. If your customers message you on WhatsApp, an AI agent can handle it.</p>
+        </div>
+      </section>
+
+      <!-- Final Section -->
+      <section data-section="final">
+        <div class="cta-section">
+          <h2>Your WhatsApp AI Agent is Live!</h2>
+          <p>Customers can now message your WhatsApp number and get instant, intelligent responses 24/7. Your agent handles orders, answers questions, and sends media — all automatically.</p>
+          <a href="https://metallm.tech/agent" target="_blank" rel="noopener" class="cta-button">Create Your Agent Now &rarr;</a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

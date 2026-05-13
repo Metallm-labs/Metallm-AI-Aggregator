@@ -1,0 +1,93 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /business-agent
+Disallow: /history
+Disallow: /query/
+
+# ─── Search Engine Crawlers ───
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Yandex
+Allow: /
+
+# ─── AI Search Crawlers (power AI search results) ───
+User-agent: OAI-SearchBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /ai-sitemap.xml
+
+User-agent: ChatGPT-User
+Allow: /
+Allow: /llms.txt
+
+User-agent: Claude-SearchBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /ai-sitemap.xml
+
+User-agent: PerplexityBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /ai-sitemap.xml
+
+User-agent: Google-Extended
+Allow: /
+Allow: /llms.txt
+
+User-agent: GoogleOther
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+Allow: /llms.txt
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: YouBot
+Allow: /
+Allow: /llms.txt
+
+# ─── AI Training Crawlers (allow for visibility) ───
+User-agent: GPTBot
+Allow: /
+Allow: /llms.txt
+Allow: /ai-sitemap.xml
+
+User-agent: ClaudeBot
+Allow: /
+Allow: /llms.txt
+Allow: /ai-sitemap.xml
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+Allow: /llms.txt
+
+User-agent: Meta-ExternalFetcher
+Allow: /
+
+# Sitemaps
+Sitemap: https://metallm.tech/sitemap.xml
+Sitemap: https://metallm.tech/ai-sitemap.xml
+
+# AI Content Files
+# llms.txt: https://metallm.tech/llms.txt
+# llms-full.txt: https://metallm.tech/llms-full.txt

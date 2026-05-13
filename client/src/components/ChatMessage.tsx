@@ -1,0 +1,562 @@
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+import { User, Copy, RotateCcw, Edit, ChevronDown, ChevronUp, ChevronLeft, Zap, Globe, ExternalLink, ChevronRight, Paperclip, Brain } from "lucide-react";
+import { MarkdownRenderer } from "@/lib/markdown";
+import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { ModelIcon } from "@/components/ModelIcon";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+
+// Extract hostname for favicon
+function getFavicon(url: string): string {
+    try {
+        const host = new URL(url).hostname;
+        return `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
+    } catch {
+        return "";
+    }
+}
+
+function formatAttachmentSize(bytes?: number): string {
+    if (typeof bytes !== "number" || !Number.isFinite(bytes)) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ── Parse <think> blocks out of model content ──────────────────────────────
+function parseThinkingContent(raw: string): { thinkingBlocks: string[]; visibleContent: string } {
+    const thinkingBlocks: string[] = [];
+    // Match complete <think>...</think> blocks (case-insensitive, multiline)
+    const cleaned = raw.replace(/<think>([\s\S]*?)<\/think>/gi, (_match, inner: string) => {
+        const trimmed = inner.trim();
+        if (trimmed) thinkingBlocks.push(trimmed);
+        return "";
+    });
+    // Handle unclosed <think> block during streaming
+    const openIdx = cleaned.lastIndexOf("<think>");
+    const closeIdx = cleaned.lastIndexOf("</think>");
+    let visibleContent = cleaned;
+    if (openIdx !== -1 && openIdx > closeIdx) {
+        // Currently streaming inside a think block — hide the partial tag
+        const partial = cleaned.slice(openIdx + 7).trim();
+        if (partial) thinkingBlocks.push(partial + " ▌");
+        visibleContent = cleaned.slice(0, openIdx);
+    }
+    return { thinkingBlocks, visibleContent: visibleContent.trim() };
+}
+
+// Dynamic model colors configuration
+const modelConfig: Record<string, { color: string; bgColor: string }> = {
+    // OpenRouter Models
+    "DeepSeek R1": { color: "text-purple-400", bgColor: "bg-purple-500/20" },
+    "LLaMA 3.3": { color: "text-green-400", bgColor: "bg-green-500/20" },
+    "Gemma 3 27B": { color: "text-blue-400", bgColor: "bg-blue-500/20" },
+    "Devstral": { color: "text-cyan-400", bgColor: "bg-cyan-500/20" },
+    "Nemotron": { color: "text-lime-400", bgColor: "bg-lime-500/20" },
+    "Qwen 2.5": { color: "text-pink-400", bgColor: "bg-pink-500/20" },
+    "Gemma 3 12B": { color: "text-amber-400", bgColor: "bg-amber-500/20" },
+    "GLM 4.5": { color: "text-teal-400", bgColor: "bg-teal-500/20" },
+    "Trinity Large": { color: "text-orange-400", bgColor: "bg-orange-500/20" },
+    // Groq Models
+    "LLaMA 3.3 70B": { color: "text-blue-400", bgColor: "bg-blue-500/20" },
+    "LLaMA 4 Maverick": { color: "text-violet-400", bgColor: "bg-violet-500/20" },
+    "LLaMA 4 Scout": { color: "text-green-400", bgColor: "bg-green-500/20" },
+    "Kimi K2": { color: "text-cyan-400", bgColor: "bg-cyan-500/20" },
+    "Qwen 3 32B": { color: "text-orange-400", bgColor: "bg-orange-500/20" },
+    "GPT OSS 120B": { color: "text-lime-400", bgColor: "bg-lime-500/20" },
+    "Groq Compound": { color: "text-yellow-400", bgColor: "bg-yellow-500/20" },
+    // Summary
+    "Summary": { color: "text-yellow-400", bgColor: "bg-gradient-to-br from-yellow-500/20 to-orange-500/20" },
+    // Legacy models
+    Gemini: { color: "text-blue-400", bgColor: "bg-blue-500/20" },
+    Claude: { color: "text-orange-400", bgColor: "bg-orange-500/20" },
+    Grok: { color: "text-cyan-400", bgColor: "bg-cyan-500/20" },
+    LLaMA: { color: "text-green-400", bgColor: "bg-green-500/20" },
+};
+
+const getModelConfig = (name: string) => {
+    if (modelConfig[name]) return modelConfig[name];
+    
+    if (name) {
+        const lower = name.toLowerCase();
+        if (lower.includes("gpt")) return { color: "text-emerald-400", bgColor: "bg-emerald-500/20" };
+        if (lower.includes("claude")) return { color: "text-orange-400", bgColor: "bg-orange-500/20" };
+        if (lower.includes("gemini")) return { color: "text-blue-400", bgColor: "bg-blue-500/20" };
+        if (lower.includes("grok")) return { color: "text-slate-400", bgColor: "bg-slate-500/20" };
+        if (lower.includes("llama")) return { color: "text-green-400", bgColor: "bg-green-500/20" };
+        if (lower.includes("qwen")) return { color: "text-orange-400", bgColor: "bg-orange-500/20" };
+        if (lower.includes("gemma")) return { color: "text-blue-400", bgColor: "bg-blue-500/20" };
+        if (lower.includes("mistral") || lower.includes("devstral") || lower.includes("trinity")) return { color: "text-cyan-400", bgColor: "bg-cyan-500/20" };
+        if (lower.includes("nemotron")) return { color: "text-lime-400", bgColor: "bg-lime-500/20" };
+        if (lower.includes("kimi") || lower.includes("moonshot")) return { color: "text-cyan-400", bgColor: "bg-cyan-500/20" };
+        if (lower.includes("groq")) return { color: "text-yellow-400", bgColor: "bg-yellow-500/20" };
+        if (lower.includes("deepseek")) return { color: "text-purple-400", bgColor: "bg-purple-500/20" };
+        if (lower.includes("glm")) return { color: "text-teal-400", bgColor: "bg-teal-500/20" };
+    }
+    
+    return { color: "text-gray-400", bgColor: "bg-gray-500/20" };
+};
+
+interface ChatMessageProps {
+    role: "user" | "assistant" | "system";
+    content: string;
+    modelName?: string | null;
+    isStreaming?: boolean;
+    timestamp?: Date;
+    onRetry?: () => void;
+    onEdit?: (newContent: string) => void;
+    metadata?: any;
+    isCollapsible?: boolean;
+    defaultCollapsed?: boolean;
+    disableEntryAnimation?: boolean;
+    versionInfo?: { current: number; total: number; onPrev: () => void; onNext: () => void };
+}
+
+export function ChatMessage({
+    role, content, modelName, isStreaming, timestamp, onRetry, onEdit,
+    metadata, isCollapsible, defaultCollapsed, disableEntryAnimation, versionInfo
+}: ChatMessageProps) {
+    const isUser = role === "user";
+    const config = modelName ? getModelConfig(modelName) : getModelConfig("Gemini");
+    const { toast } = useToast();
+    const shouldAnimateEntry = !disableEntryAnimation && !isStreaming;
+    const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
+    const [showSources, setShowSources] = useState(false);
+    const [showThinking, setShowThinking] = useState(false);
+    const [previewImage, setPreviewImage] = useState<{ name: string; url: string } | null>(null);
+    const isSummary = modelName === "Summary" || metadata?.isSummary;
+    const userAttachments = Array.isArray(metadata?.attachments) ? metadata.attachments as Array<{
+        name: string;
+        type: string;
+        size: number;
+        isImage?: boolean;
+        previewDataUrl?: string;
+        fullDataUrl?: string;
+    }> : [];
+
+    // Parse thinking blocks from content (Groq/DeepSeek models emit <think>...</think>)
+    const { thinkingBlocks, visibleContent } = !isUser ? parseThinkingContent(content) : { thinkingBlocks: [], visibleContent: content };
+    const hasThinking = thinkingBlocks.length > 0;
+
+    // Auto-expand thinking section while streaming inside a think block
+    useEffect(() => {
+        if (isStreaming && hasThinking) {
+            setShowThinking(true);
+        }
+    }, [isStreaming, hasThinking]);
+
+    const handleCopy = async () => {
+        await navigator.clipboard.writeText(isUser ? content : visibleContent);
+        toast({ description: "Copied to clipboard" });
+    };
+
+    const formatTime = (date: Date) => {
+        return new Date(date).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    };
+
+    return (
+        <motion.div
+            initial={shouldAnimateEntry ? { opacity: 0, y: 10 } : false}
+            animate={shouldAnimateEntry ? { opacity: 1, y: 0 } : undefined}
+            className={cn(
+                "flex gap-0 sm:gap-3 px-3 sm:px-4 py-3 group w-full min-w-0 overflow-x-hidden",
+                isUser ? "flex-row-reverse" : "flex-row",
+                isSummary && "bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border-t border-b border-yellow-500/10"
+            )}
+        >
+            {/* Avatar — hidden on mobile for both user and assistant (assistant gets inline avatar instead) */}
+            <div
+                className={cn(
+                    "w-8 h-8 rounded-full items-center justify-center flex-shrink-0 text-sm transition-all mt-0.5",
+                    "hidden sm:flex",
+                    isUser
+                        ? "bg-gradient-to-br from-primary to-secondary text-white"
+                        : config.bgColor,
+                    isCollapsible && "cursor-pointer hover:scale-110 hover:ring-2 hover:ring-white/20"
+                )}
+                onClick={() => isCollapsible && setIsExpanded(!isExpanded)}
+                title={isCollapsible ? (isExpanded ? "Click to collapse" : "Click to expand") : undefined}
+            >
+                {isUser ? <User className="w-4 h-4" /> : <ModelIcon modelName={modelName || ""} size={18} />}
+            </div>
+
+            {/* Message Content */}
+            <div className={cn(
+                "min-w-0 flex-1",
+                isUser ? "flex flex-col items-end max-w-[92%] sm:max-w-[78%]" : "max-w-full min-w-0"
+            )}>
+
+                {/* Model name + role — no web search badge here */}
+                {!isUser && modelName && (
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        {/* Inline avatar — mobile only; replaces the hidden side avatar */}
+                        <div
+                            className={cn(
+                                "sm:hidden w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0",
+                                config.bgColor,
+                                isCollapsible && "cursor-pointer"
+                            )}
+                            onClick={() => isCollapsible && setIsExpanded(!isExpanded)}
+                        >
+                            <ModelIcon modelName={modelName || ""} size={16} />
+                        </div>
+                        <span className={cn("text-xs font-medium", config.color)}>{modelName}</span>
+                        {metadata?.role && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-muted-foreground border border-white/10">
+                                {metadata.role}
+                            </span>
+                        )}
+                        {isSummary && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 flex items-center gap-1">
+                                <Zap className="w-2.5 h-2.5" /> Final Summary
+                            </span>
+                        )}
+                        {isCollapsible && (
+                            <button
+                                onClick={() => setIsExpanded(!isExpanded)}
+                                className="text-muted-foreground hover:text-white transition-colors"
+                            >
+                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Message body */}
+                <AnimatePresence>
+                    {isExpanded && (
+                        <motion.div
+                            initial={isCollapsible ? { height: 0, opacity: 0 } : false}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={isCollapsible ? { height: 0, opacity: 0 } : undefined}
+                            className={cn("relative", isCollapsible && "overflow-hidden")}
+                        >
+                            {isUser ? (
+                                /* ── User bubble ── */
+                                <div className="rounded-2xl bg-primary text-white rounded-br-sm px-4 py-3">
+                                    <p className="text-[15px] sm:text-base font-medium whitespace-pre-wrap leading-[1.75] sm:leading-relaxed">{content}</p>
+                                </div>
+                            ) : (
+                                /* ── Assistant — clean, no box ── */
+                                <div className={cn(
+                                    isSummary
+                                        ? "rounded-2xl px-4 py-3 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/15 rounded-bl-sm"
+                                        : "py-1"
+                                )}>
+                                    {/* ── Expandable Thinking / Reasoning Section ── */}
+                                    {hasThinking && (
+                                        <div className="mb-3">
+                                            <button
+                                                onClick={() => setShowThinking(s => !s)}
+                                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/15 transition-colors text-[11px] text-purple-300 hover:text-purple-200 w-full text-left"
+                                            >
+                                                <Brain className="w-3 h-3 flex-shrink-0" />
+                                                <span className="font-medium">
+                                                    {isStreaming && !content.includes("</think>") ? "Thinking…" : "View Reasoning"}
+                                                </span>
+                                                <ChevronDown className={cn("w-3 h-3 ml-auto transition-transform flex-shrink-0", showThinking && "rotate-180")} />
+                                            </button>
+                                            <AnimatePresence>
+                                                {showThinking && (
+                                                    <motion.div
+                                                        initial={{ height: 0, opacity: 0 }}
+                                                        animate={{ height: "auto", opacity: 1 }}
+                                                        exit={{ height: 0, opacity: 0 }}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="overflow-hidden"
+                                                    >
+                                                        <div className="mt-1.5 px-3 py-2.5 rounded-lg bg-purple-500/5 border border-purple-500/15 text-xs text-purple-200/70 leading-relaxed whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                                                            {thinkingBlocks.join("\n\n---\n\n")}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    )}
+                                    <div className="prose prose-invert prose-base max-w-none min-w-0 [&>p]:text-gray-100 [&>p]:font-normal [&>p]:leading-[1.8] sm:[&>p]:leading-relaxed [&>ul]:text-gray-100 [&>ol]:text-gray-100 [&>li]:text-gray-100 [&>li]:leading-[1.8] sm:[&>li]:leading-relaxed [&>code]:text-[#9cdcfe] [&>pre]:bg-[#1e1e1e] [&_pre]:max-w-full [&_pre]:overflow-x-auto">
+                                        <MarkdownRenderer content={visibleContent || (isStreaming ? "" : content)} enableMermaid={!isStreaming} />
+                                        {isStreaming && (
+                                            <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* User attachments preview (outside bubble) */}
+                {isUser && isExpanded && userAttachments.length > 0 && (
+                    <div className="mt-2 w-full flex flex-wrap gap-2 justify-end">
+                        {userAttachments.map((file, index) => {
+                            if (file.isImage && file.previewDataUrl) {
+                                return (
+                                    <div key={`${file.name}-${index}`} className="w-[132px] rounded-lg overflow-hidden border border-white/15 bg-card/60">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreviewImage({ name: file.name, url: file.fullDataUrl || file.previewDataUrl! })}
+                                            className="block w-full hover:opacity-90 transition-opacity"
+                                        >
+                                            <img
+                                                src={file.previewDataUrl}
+                                                alt={file.name}
+                                                className="w-full h-24 object-cover"
+                                            />
+                                        </button>
+                                        <div className="px-2 py-1 text-[10px] truncate text-muted-foreground">
+                                            {file.name}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return (
+                                <div key={`${file.name}-${index}`} className="max-w-[220px] flex items-center gap-1.5 rounded-lg border border-white/15 bg-card/60 px-2 py-1.5">
+                                    <Paperclip className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+                                    <div className="min-w-0">
+                                        <div className="text-[11px] truncate text-white">{file.name}</div>
+                                        <div className="text-[10px] text-muted-foreground">{formatAttachmentSize(file.size)}</div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* Collapsed preview */}
+                {!isExpanded && isCollapsible && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-xs text-muted-foreground/60 italic cursor-pointer hover:text-muted-foreground/80"
+                        onClick={() => setIsExpanded(true)}
+                    >
+                        Click to expand response...
+                    </motion.div>
+                )}
+
+                {/* ── Sources row + action buttons ── */}
+                {!isStreaming && isExpanded && !isUser && (
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+
+                        {/* Favicon preview strip + expand button */}
+                        {metadata?.sources?.length > 0 && (
+                            <button
+                                onClick={() => setShowSources(s => !s)}
+                                className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors text-[11px] text-muted-foreground hover:text-white"
+                            >
+                                {/* First 4 favicons */}
+                                <div className="flex items-center -space-x-1">
+                                    {(metadata.sources as { title: string; url: string }[]).slice(0, 4).map((src, i) => (
+                                        <img
+                                            key={i}
+                                            src={getFavicon(src.url)}
+                                            alt=""
+                                            width={14}
+                                            height={14}
+                                            className="rounded-sm ring-1 ring-black/30 bg-white/5"
+                                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                        />
+                                    ))}
+                                </div>
+                                <Globe className="w-3 h-3 text-blue-400" />
+                                <span>{metadata.sources.length} source{metadata.sources.length > 1 ? "s" : ""}</span>
+                                <ChevronRight className={cn("w-3 h-3 transition-transform", showSources && "rotate-90")} />
+                            </button>
+                        )}
+
+                        {/* Copy */}
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-white/5 hover:bg-white/10 border border-white/10"
+                            onClick={handleCopy}
+                            title="Copy"
+                        >
+                            <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        {versionInfo && (
+                            <div className="flex items-center gap-0.5 rounded-lg bg-white/5 border border-white/10 px-1 py-0.5 text-[11px] text-muted-foreground">
+                                <button
+                                    onClick={versionInfo.onPrev}
+                                    disabled={versionInfo.current <= 1}
+                                    className="p-0.5 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Previous response"
+                                >
+                                    <ChevronLeft className="w-3 h-3" />
+                                </button>
+                                <span className="px-1 tabular-nums font-medium">{versionInfo.current}/{versionInfo.total}</span>
+                                <button
+                                    onClick={versionInfo.onNext}
+                                    disabled={versionInfo.current >= versionInfo.total}
+                                    className="p-0.5 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Next response"
+                                >
+                                    <ChevronRight className="w-3 h-3" />
+                                </button>
+                            </div>
+                        )}
+                        {onRetry && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-white/5 hover:bg-white/10 border border-white/10"
+                                onClick={onRetry}
+                                title="Try again"
+                            >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                            </Button>
+                        )}
+                    </div>
+                )}
+
+                {/* User action buttons */}
+                {!isStreaming && isExpanded && isUser && (
+                    <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 justify-end">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 bg-card hover:bg-card/80 border border-white/10"
+                            onClick={handleCopy}
+                            title="Copy"
+                        >
+                            <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        {onEdit && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 bg-card hover:bg-card/80 border border-white/10"
+                                onClick={() => onEdit?.(content)}
+                                title="Edit"
+                            >
+                                <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                        )}
+                    </div>
+                )}
+
+                {/* Expanded sources list */}
+                <AnimatePresence>
+                    {showSources && metadata?.sources?.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="overflow-hidden"
+                        >
+                            <div className="mt-2 pt-2 border-t border-white/8 flex flex-col gap-1">
+                                {(metadata.sources as { title: string; url: string }[]).map((source, i) => (
+                                    <a
+                                        key={i}
+                                        href={source.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 text-[11px] text-muted-foreground hover:text-white transition-colors py-0.5 group/src"
+                                    >
+                                        <img
+                                            src={getFavicon(source.url)}
+                                            alt=""
+                                            width={14}
+                                            height={14}
+                                            className="rounded-sm flex-shrink-0 bg-white/5"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).replaceWith((() => {
+                                                    const el = document.createElement("span");
+                                                    el.className = "w-3.5 h-3.5 flex-shrink-0";
+                                                    return el;
+                                                })());
+                                            }}
+                                        />
+                                        <span className="truncate group-hover/src:underline">{source.title || source.url}</span>
+                                        <ExternalLink className="w-2.5 h-2.5 flex-shrink-0 opacity-0 group-hover/src:opacity-60" />
+                                    </a>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Timestamp */}
+                {timestamp && isExpanded && (
+                    <div className="text-[10px] text-muted-foreground/40 mt-1.5">
+                        {formatTime(timestamp)}
+                    </div>
+                )}
+
+                <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+                    <DialogContent className="max-w-5xl w-[95vw] p-3 bg-black/95 border-white/10">
+                        {previewImage && (
+                            <div className="w-full">
+                                <div className="text-xs text-muted-foreground mb-2 truncate">{previewImage.name}</div>
+                                <img
+                                    src={previewImage.url}
+                                    alt={previewImage.name}
+                                    className="w-full max-h-[80vh] object-contain rounded-md"
+                                />
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
+            </div>
+        </motion.div>
+    );
+}
+
+// Routing indicator component
+export function RoutingIndicator({ modelName, role, reason, type }: {
+    modelName: string;
+    role: string;
+    reason: string;
+    type: "casual" | "specialized";
+}) {
+    const config = getModelConfig(modelName);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-2 px-4 py-2 mx-4 rounded-lg bg-white/5 border border-white/10 text-xs"
+        >
+            <Zap className="w-3 h-3 text-yellow-400" />
+            <span className="text-muted-foreground">
+                {type === "specialized" ? "Routing to specialist:" : "Handling as general query:"}
+            </span>
+            <span className={cn("font-medium flex items-center gap-1", config.color)}>
+                <ModelIcon modelName={modelName} size={12} /> {modelName}
+            </span>
+            <span className="text-muted-foreground/60">({role})</span>
+        </motion.div>
+    );
+}
+
+// Typing indicator
+export function TypingIndicator({ modelName }: { modelName: string }) {
+    const config = getModelConfig(modelName);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="flex gap-3 px-4 py-3"
+        >
+            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", config.bgColor)}>
+                <ModelIcon modelName={modelName} size={18} />
+            </div>
+            <div className="flex items-center gap-1">
+                <span className={cn("text-xs font-medium mr-2", config.color)}>{modelName}</span>
+                <div className="flex gap-1">
+                    <div className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+            </div>
+        </motion.div>
+    );
+}

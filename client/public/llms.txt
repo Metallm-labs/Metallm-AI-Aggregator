@@ -1,0 +1,112 @@
+# MetaLLM
+
+> MetaLLM is an AI platform with two core products: (1) an AI aggregator that queries 13+ frontier AI models simultaneously from one chat interface, and (2) an autonomous WhatsApp AI Agent that automates business sales and customer support 24/7 directly on WhatsApp. The AI aggregator features intelligent model routing, prompt enhancement, AI debate mode, deep web search, and multi-model synthesis. The WhatsApp AI Agent features human takeover, voice message support, PDF knowledge ingestion, multi-number management, and no Meta API key required.
+
+## About MetaLLM
+- [Homepage](https://metallm.tech/): MetaLLM AI aggregator — query 13+ AI models simultaneously with smart routing, debate mode, shared memory, and deep web search.
+- [WhatsApp AI Agent](https://metallm.tech/agent): Deploy a human-like WhatsApp AI agent that answers customers, qualifies leads, and closes deals 24/7. No Meta API key required. Setup in 2 minutes. Best AI agent for WhatsApp business automation.
+- [AI Chat Interface](https://metallm.tech/chat): Multi-model AI chat. Send your question to 13+ frontier AI models at once and get a unified, conflict-resolved response.
+- [Sign In / Sign Up](https://metallm.tech/login): Create a free MetaLLM account to access the AI aggregator and WhatsApp AI Agent.
+
+## WhatsApp AI Agent — Business Sales Automation on WhatsApp
+
+### What is MetaLLM's WhatsApp AI Agent?
+MetaLLM's WhatsApp AI Agent is an autonomous AI-powered bot that runs directly on WhatsApp to handle customer conversations, answer questions, qualify leads, take orders, and close sales 24/7 without human intervention. Unlike basic WhatsApp chatbots that follow rigid decision trees, MetaLLM's AI agent uses advanced large language models (LLMs) to understand natural language, context, intent, bad grammar, slang, and voice messages. It responds like a trained human sales representative.
+
+### How the WhatsApp AI Agent Works
+1. Sign up for free at metallm.tech/agent — no credit card required.
+2. Create your AI agent. The bootstrap system can automatically crawl your website and learn your business, or you can upload PDFs, product catalogs, and text instructions.
+3. Scan your WhatsApp QR code to connect — no Meta API key, no Business API approval needed. Connected in under 2 minutes.
+4. The AI agent starts handling all incoming WhatsApp messages 24/7 — answering queries, qualifying leads, capturing orders, and closing deals.
+5. Use Human Takeover to jump into any conversation anytime. The AI pauses instantly when you reply manually.
+
+### WhatsApp AI Agent Key Features
+- **24/7 Autonomous Sales Agent**: Instant replies under 2 seconds to every WhatsApp lead, even while you sleep.
+- **No Meta API Key Required**: Connect by scanning QR code, just like WhatsApp Web. No developer setup, no API documentation.
+- **Human Takeover**: Jump into any AI-managed conversation at any time. AI pauses instantly — no conflicting messages.
+- **Voice Message Support**: AI transcribes and responds to voice notes using speech-to-text (Pro and Enterprise plans).
+- **PDF Knowledge Ingestion**: Upload menus, product catalogs, price lists, FAQs — AI learns everything in seconds.
+- **Website Crawling Bootstrap**: AI automatically crawls your website and extracts business information.
+- **Multi-Number Management**: Manage 1-5 WhatsApp numbers per agent depending on plan.
+- **Automated Order Capture**: AI takes orders, processes inquiries, and guides customers to purchase.
+- **Custom Sales Personality**: Configure tone, sales scripts, priorities, and escalation rules.
+- **Guardrails & Security**: Built-in safety measures to keep agent responses on-brand and appropriate.
+
+### WhatsApp AI Agent Pricing
+- **Starter — $59/month**: 1 WhatsApp number, 800 messages/month, AI customer chat, basic order capture, standard support.
+- **Pro — $129/month**: 3 WhatsApp numbers, 3,500 messages/month, faster AI priority, voice support, advanced order flow, priority support.
+- **Enterprise — $299/month**: 5 WhatsApp numbers, 10,000 messages/month, fastest AI priority, high-volume order handling, VIP support.
+- **Free Trial**: Available with no credit card required. 20 messages to test with your real business.
+
+### WhatsApp AI Agent Use Cases
+- **Restaurants**: Menu inquiries, order taking, delivery scheduling, reservation confirmations, ingredient/allergen questions.
+- **E-commerce**: Product recommendations, order processing, sizing/shipping questions, payment links, post-purchase support.
+- **Real Estate**: Property inquiries, lead qualification, showing scheduling, neighborhood information.
+- **Healthcare Clinics**: Appointment scheduling, FAQ handling, patient support, hours and location queries.
+- **Education/Tutoring**: Enrollment inquiries, course information, scheduling, pricing questions.
+- **Travel/Hospitality**: Booking assistance, itinerary support, availability checks, concierge services.
+- **Professional Services**: Consultation scheduling, pricing inquiries, lead capture, follow-up automation.
+
+### WhatsApp AI Agent vs Regular Chatbots
+Regular WhatsApp chatbots follow rigid decision trees and pre-scripted responses — they break when customers ask unexpected questions. MetaLLM's WhatsApp AI Agent uses advanced LLMs to understand natural language, context, intent, bad grammar, and voice messages. It requires no coding, no API keys, and no flowchart building — just scan QR code and upload business knowledge.
+
+## AI Aggregator — Multi-Model AI Chat
+
+### Core Features
+- **Query 13+ AI Models Simultaneously**: Gemini, GPT, Claude, Grok, LLaMA 4, Nemotron, Qwen 3, Kimi K2, GLM 4.5, Trinity, Groq — all in one chat.
+- **Intelligent Model Routing**: Automatically selects optimal AI based on query type, latency, and reasoning capability.
+- **Prompt Enhancement**: Rewrites questions into expert-level prompts. Each model gets a uniquely tailored version.
+- **AI Debate Mode**: Models argue different stances over structured rounds. Judge model delivers verdict.
+- **Deep Web Search**: Real-time web search with source attribution. Eliminates hallucinations.
+- **Persistent Shared Memory**: Remembers preferences and context across conversations.
+- **Multi-Model Synthesis**: Merges all responses into one conflict-resolved analysis.
+
+### AI Aggregator Pricing
+- **Free**: Daily chat limits with all core features.
+- **Pro Monthly — $19/month**: Higher limits and priority model access.
+- **Pro Yearly — $182/year**: 20% savings on yearly billing.
+
+### Supported AI Models
+Google Gemini, OpenAI GPT, Anthropic Claude, xAI Grok, Meta LLaMA 4 Scout, Meta LLaMA 4 Maverick, Meta LLaMA 3.3, NVIDIA Nemotron, Alibaba Qwen 3, Moonshot Kimi K2, ZhipuAI GLM 4.5, Arcee Trinity, Groq Compound.
+
+## Frequently Asked Questions
+
+### WhatsApp AI Agent FAQs
+- **What is a WhatsApp AI agent?** An autonomous AI bot that handles customer conversations on WhatsApp — answering questions, qualifying leads, taking orders, and closing sales 24/7.
+- **Do I need a Meta API key?** No. MetaLLM connects via QR code scan in under 2 minutes. No Business API approval needed.
+- **How fast does it respond?** Under 2 seconds — faster than any human agent.
+- **Can it handle voice messages?** Yes, on Pro and Enterprise plans through speech-to-text.
+- **What is Human Takeover?** You can jump into any AI-managed conversation anytime. The AI pauses instantly when you reply.
+- **Is there a free trial?** Yes, with no credit card required and 20 test messages.
+- **What industries use it?** Restaurants, e-commerce, real estate, healthcare, education, travel, and professional services.
+- **How does the AI learn about my business?** Through PDF uploads, website crawling, and text instructions. It processes everything in seconds.
+
+### AI Aggregator FAQs
+- **What is an AI aggregator?** A platform combining multiple AI models into one interface with smart routing, prompt enhancement, and synthesis.
+- **Is MetaLLM free?** Yes, free tier with daily limits. All core features included.
+- **How does it prevent hallucinations?** Deep web search + multi-model consensus + source attribution.
+- **What is the best ChatGPT alternative?** MetaLLM — queries ChatGPT alongside 12 other models simultaneously.
+
+## Legal
+- [Terms of Service](https://metallm.tech/terms)
+- [Privacy Policy](https://metallm.tech/privacy)
+- [Refund Policy](https://metallm.tech/refund)
+
+## Pages
+
+- Homepage: https://metallm.tech/
+- AI Chat: https://metallm.tech/chat
+- WhatsApp Agent: https://metallm.tech/agent
+- Model Compare Tool: https://metallm.tech/compare
+- Competitor Comparisons: https://metallm.tech/compare-competitors
+- MetaLLM vs Poe: https://metallm.tech/compare/poe
+- MetaLLM vs TypingMind: https://metallm.tech/compare/typingmind
+- MetaLLM vs ChatHub: https://metallm.tech/compare/chathub
+- MetaLLM vs Perplexity: https://metallm.tech/compare/perplexity
+- MetaLLM vs OpenRouter: https://metallm.tech/compare/openrouter
+- MetaLLM vs HuggingChat: https://metallm.tech/compare/huggingchat
+- MetaLLM vs Merlin AI: https://metallm.tech/compare/merlin
+- Blog: https://metallm.tech/blogs
+- Terms: https://metallm.tech/terms
+- Privacy: https://metallm.tech/privacy
+- Refund Policy: https://metallm.tech/refund
