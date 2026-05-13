@@ -1,0 +1,9 @@
+node_modules
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+venv 
+dist
+.env
+.log

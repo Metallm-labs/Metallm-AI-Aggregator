@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How to Use Metallm AI Aggregator - Multi-Model Chat Platform Guide</title>
+  <meta name="description" content="Compare GPT, Claude, Gemini, Grok in one chat — no tab switching, no separate subscriptions. Use Direct, Smart Route, Debate, Multi & Image modes. Free to start.">
+  <meta name="keywords" content="Metallm AI Aggregator, multi-model AI chat, compare AI models, GPT vs Claude, AI debate mode, smart routing, image generation AI, ChatGPT alternative, Claude alternative">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://metallm.tech/tutorials/metallm-ai-aggregator-guide.html">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="How to Use Metallm AI Aggregator — All AI Models in One Chat">
+  <meta property="og:description" content="Compare GPT, Claude, Gemini, Grok in one chat — no tab switching, no separate subscriptions. Direct, Smart Route, Debate, Multi & Image modes. Free to start.">
+  <meta property="og:url" content="https://metallm.tech/tutorials/metallm-ai-aggregator-guide.html">
+  <meta property="og:image" content="https://metallm.tech/metallm_ai_aggregator_screenshots/1(mode_selector).png">
+  <meta property="og:site_name" content="Metallm">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="How to Use Metallm AI Aggregator — All AI Models in One Chat">
+  <meta name="twitter:description" content="Compare GPT, Claude, Gemini, Grok in one chat — no tab switching, no separate subscriptions. Free to start.">
+  <meta name="twitter:image" content="https://metallm.tech/metallm_ai_aggregator_screenshots/1(mode_selector).png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- HowTo Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "How to Use Metallm AI Aggregator",
+    "description": "Compare GPT, Claude, Gemini, Grok in one chat. Learn Direct Mode, Smart Route, Debate Mode, Multi Mode, and Image Generation.",
+    "totalTime": "PT8M",
+    "tool": [
+      { "@type": "HowToTool", "name": "Web browser" },
+      { "@type": "HowToTool", "name": "Metallm account (free)" }
+    ],
+    "step": [
+      {
+        "@type": "HowToStep",
+        "position": 1,
+        "name": "Sign Up and Open the Chat",
+        "text": "Go to metallm.tech/chat and create a free account. You will see the main chat interface with a mode selector at the bottom set to Direct mode by default.",
+        "url": "https://metallm.tech/tutorials/metallm-ai-aggregator-guide.html#getting-started",
+        "image": "https://metallm.tech/metallm_ai_aggregator_screenshots/1(mode_selector).png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 2,
+        "name": "Select a Model and Start Chatting (Direct Mode)",
+        "text": "In Direct Mode, click the model name to open the model selector. Pick any model like GPT-5.4, Claude Sonnet 4.6, Gemini 3.1, or Grok 4.20 and start typing. Switch models mid-conversation without losing context.",
+        "url": "https://metallm.tech/tutorials/metallm-ai-aggregator-guide.html#direct-mode",
+        "image": "https://metallm.tech/metallm_ai_aggregator_screenshots/2(direct_mode_model_selector).png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 3,
+        "name": "Use Smart Route for Automatic Model Selection",
+        "text": "Switch to Smart Route mode. The system analyzes your prompt, selects the best model, and enhances your prompt for better results. You can approve, edit, or send the original.",
+        "url": "https://metallm.tech/tutorials/metallm-ai-aggregator-guide.html#smart-route",
+        "image": "https://metallm.tech/metallm_ai_aggregator_screenshots/4(smart_route_prompt_enhance).png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 4,
+        "name": "Set Up Debate Mode",
+        "text": "Switch to Debate mode and configure two AI models with different roles (e.g., Angel vs Devil). Set 3-5 rounds. Models argue your question from opposite perspectives, then a judge provides a verdict.",
+        "url": "https://metallm.tech/tutorials/metallm-ai-aggregator-guide.html#debate-mode",
+        "image": "https://metallm.tech/metallm_ai_aggregator_screenshots/5(debate_mode_cnfig).png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 5,
+        "name": "Use Multi Mode to Compare Models",
+        "text": "Switch to Multi mode, select multiple models, and send your question. Each model answers independently with tailored prompts. A unified summary combines the best insights from all responses.",
+        "url": "https://metallm.tech/tutorials/metallm-ai-aggregator-guide.html#multi-mode",
+        "image": "https://metallm.tech/metallm_ai_aggregator_screenshots/8(multi_mode_models_selection).png"
+      },
+      {
+        "@type": "HowToStep",
+        "position": 6,
+        "name": "Generate Images with Image Mode",
+        "text": "Switch to Image mode, select an image model (GPT 5.4 Image 2, Grok Aurora, Flux 2 Pro), choose aspect ratio and resolution, then describe the image you want to generate.",
+        "url": "https://metallm.tech/tutorials/metallm-ai-aggregator-guide.html#image-mode",
+        "image": "https://metallm.tech/metallm_ai_aggregator_screenshots/11(image_mode_model_selector).png"
+      }
+    ]
+  }
+  </script>
+
+  <!-- FAQPage Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is Metallm AI Aggregator?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Metallm AI Aggregator is a multi-model AI chat platform that lets you use GPT, Claude, Gemini, Grok, and other AI models in one shared conversation. You can switch models mid-chat without losing context, compare responses side by side, have models debate each other, and generate images — all from one interface with one subscription."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Metallm free to use?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, Metallm offers a free tier to get started. You can sign up and start chatting with AI models immediately. Premium models and advanced features like Debate Mode and Multi Mode are available with a subscription plan."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is Debate Mode in Metallm?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Debate Mode lets you assign two AI models different roles (e.g., Angel vs Devil) and have them argue your question from opposing perspectives over 3-5 rounds. After the final round, a neutral judge model provides a verdict summarizing both sides. It helps you get richer, more nuanced insights on any topic."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is Smart Route and how does it work?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Smart Route automatically analyzes your question and routes it to the best-suited AI model. It also enhances your prompt for better results. For example, coding questions go to coding-optimized models and creative tasks go to creative models. You can preview and edit the enhanced prompt before sending."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I switch AI models mid-conversation?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, Metallm maintains shared conversation memory across all models. You can switch from GPT to Claude to Gemini at any point in the conversation and the new model will see the entire chat history — no context is lost."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What AI models are available on Metallm?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Metallm includes GPT-5.4, GPT-5.5, Claude Sonnet 4.6, Claude Opus 4.7, Gemini 3.1 Pro Preview, Grok 4.20 309 Reasoning, Grok 4.3, Claude Haiku 4.5, GPT-5.4 mini, and more. Image models include GPT 5.4 Image 2, Gemini 3 Pro Image, Flux 2 Pro, Grok Aurora, and Grok Aurora Pro."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <!-- Mobile Sidebar Toggle -->
+  <button class="sidebar-toggle" aria-label="Toggle menu">&#9776;</button>
+
+  <div class="tutorials-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/tutorials/" style="text-decoration:none;">
+          <div class="sidebar-logo">Metallm <span>Tutorials</span></div>
+        </a>
+        <p class="sidebar-subtitle">Step-by-step guides</p>
+      </div>
+
+      <!-- WhatsApp Agent Guide - Collapsible -->
+      <div class="sidebar-section">
+        <button class="sidebar-section-toggle collapsed">
+          WhatsApp Agent Guide <span class="chevron">&#9660;</span>
+        </button>
+        <div class="sidebar-section-content collapsed">
+          <ul class="sidebar-nav">
+            <li><a href="whatsapp-agent-setup.html#overview">Overview</a></li>
+            <li><a href="whatsapp-agent-setup.html#step1">Setup Steps</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AI Aggregator Guide - Open -->
+      <div class="sidebar-section">
+        <button class="sidebar-section-toggle">
+          AI Aggregator Guide <span class="chevron">&#9660;</span>
+        </button>
+        <div class="sidebar-section-content">
+          <ul class="sidebar-nav">
+            <li><a href="#overview"><span class="toc-number">1</span>Overview</a></li>
+            <li><a href="#problem"><span class="toc-number">2</span>The Problem</a></li>
+            <li><a href="#solution"><span class="toc-number">3</span>Solution</a></li>
+            <li><a href="#benefits"><span class="toc-number">4</span>Benefits</a></li>
+            <li><a href="#getting-started"><span class="toc-number">5</span>Getting Started</a></li>
+            <li><a href="#direct-mode"><span class="toc-number">6</span>Direct Mode</a></li>
+            <li><a href="#smart-route"><span class="toc-number">7</span>Smart Route</a></li>
+            <li><a href="#debate-mode"><span class="toc-number">8</span>Debate Mode</a></li>
+            <li><a href="#multi-mode"><span class="toc-number">9</span>Multi Mode</a></li>
+            <li><a href="#image-mode"><span class="toc-number">10</span>Image Mode</a></li>
+            <li><a href="#faq"><span class="toc-number">11</span>FAQ</a></li>
+            <li><a href="#start-now"><span class="toc-number">12</span>Start Now</a></li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+      <!-- Hero -->
+      <section class="tutorial-hero" data-section="overview">
+        <h1>How to Use Metallm AI Aggregator</h1>
+        <p>Metallm is a multi-model AI chat platform that lets you use different AI models inside one shared conversation. Switch between GPT, Claude, Gemini, Grok, and more without losing context. Compare responses, debate ideas, and generate images — all from one interface.</p>
+        <div class="tutorial-meta">
+          <span>&#128214; 8 min read</span>
+          <span>&#9989; Free to start</span>
+          <span>5 chat modes available</span>
+        </div>
+      </section>
+
+      <!-- Problem Section -->
+      <section class="problem-section" data-section="problem">
+        <h2>The Problem</h2>
+        <ul>
+          <li>You have to open separate tabs for ChatGPT, Claude, Gemini, and Grok just to compare answers</li>
+          <li>Switching between AI tools means copy-pasting your question everywhere and losing conversation context</li>
+          <li>You pay separate subscriptions for each AI tool — GPT Plus, Claude Pro, Gemini Advanced</li>
+          <li>No easy way to know which AI model is best for your specific question</li>
+          <li>When you switch models mid-conversation, the new model has no idea what was discussed before</li>
+          <li>Getting a second opinion from another AI means starting a completely new conversation</li>
+          <li>Image generation requires separate tools like DALL-E, Midjourney, or Stable Diffusion</li>
+        </ul>
+      </section>
+
+      <!-- Solution Section -->
+      <section class="solution-section" data-section="solution">
+        <h2>Metallm Solution</h2>
+        <ul>
+          <li>One platform, all top AI models — GPT-5.4, Claude Sonnet 4.6, Gemini 3.1, Grok 4.20, and more</li>
+          <li>Shared conversation memory — switch models anytime without losing context</li>
+          <li>Smart Route automatically picks the best model for your question</li>
+          <li>Debate Mode lets two AI models argue different perspectives on your question</li>
+          <li>Multi Mode sends your question to multiple models at once and gives a unified summary</li>
+          <li>Image Mode generates images using models like GPT 5.4 Image 2, Grok Aurora, and Flux 2 Pro</li>
+          <li>One subscription gives you access to everything — no separate payments</li>
+        </ul>
+      </section>
+
+      <!-- Benefits Section -->
+      <section class="benefits-section" data-section="benefits">
+        <h2>Key Benefits</h2>
+        <ul>
+          <li>Save time — no more switching between 5 different AI tabs</li>
+          <li>Save money — one plan instead of multiple AI subscriptions</li>
+          <li>Better answers — compare models and pick the best response</li>
+          <li>Context preservation — switch models mid-conversation and the new model knows what happened</li>
+          <li>Prompt enhancement — Smart Route improves your prompt before sending to the best model</li>
+          <li>Multiple perspectives — Debate Mode gives you opposing viewpoints on the same question</li>
+          <li>Full transparency — you always see which model is responding and can change it</li>
+        </ul>
+      </section>
+
+      <!-- Getting Started -->
+      <section class="steps-section">
+        <h2>Getting Started</h2>
+
+        <div class="step-card" data-section="getting-started">
+          <div class="step-number">1</div>
+          <h3>Sign Up and Open the Chat</h3>
+          <p>Go to <a href="https://metallm.tech/chat" target="_blank" rel="noopener">metallm.tech/chat</a> and create a free account. Once signed in, you will see the main chat interface with a sidebar on the left showing your chat history, and a message input at the bottom.</p>
+          <p>At the bottom of the screen, you will notice the mode selector. By default it is set to <strong>Direct</strong> mode. Next to it is the model selector showing which AI model you are currently chatting with (for example, GPT-5.4).</p>
+          <p>The available modes are:</p>
+          <div class="mode-card">
+            <h4>Direct</h4>
+            <p>Chat with one specific model of your choice. Full control over which AI you are speaking with.</p>
+          </div>
+          <div class="mode-card">
+            <h4>Smart Route</h4>
+            <p>AI picks the best model for your question. Also enhances your prompt before sending.</p>
+          </div>
+          <div class="mode-card">
+            <h4>Debate</h4>
+            <p>Two models argue your question from different perspectives for richer insights.</p>
+          </div>
+          <div class="mode-card">
+            <h4>Multi</h4>
+            <p>Multiple models answer the same question. Compare side by side and get a unified summary.</p>
+          </div>
+          <div class="mode-card">
+            <h4>Image</h4>
+            <p>Generate images using AI image models. Describe what you want and get the image.</p>
+          </div>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/1(mode_selector).png" alt="Metallm chat interface showing mode selector with Direct, Smart Route, Debate, Multi, and Image options" loading="lazy">
+          </div>
+        </div>
+
+        <!-- Direct Mode -->
+        <h2>Direct Mode</h2>
+
+        <div class="step-card" data-section="direct-mode">
+          <div class="step-number">2</div>
+          <h3>Select a Model and Start Chatting</h3>
+          <p>In Direct Mode, click the model name at the bottom (for example "GPT-5.4") to open the model selector. You will see a list of all available models organized by tier:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li><strong>Claude Sonnet 4.6</strong> — Advanced Reasoning and Technical Writing</li>
+            <li><strong>Gemini 3.1 Pro Preview</strong> — Long Context Reasoning, Research and Multimodal</li>
+            <li><strong>Grok 4.20 309 Reasoning</strong> — Social Signals and Reasoning</li>
+            <li><strong>Claude Opus 4.7</strong> — Top Tier Agents, Coding and Deep Analysis</li>
+            <li><strong>GPT-5.5</strong> — Reasoning and Professional Workflows</li>
+            <li><strong>Grok 4.3</strong> — Real-Time Search, Social Signals and Reasoning</li>
+          </ul>
+          <p>Pick any model and start typing. The selected model will respond to your message. You can switch models at any time during the conversation, and the new model will be aware of the entire previous conversation — no context is lost.</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/2(direct_mode_model_selector).png" alt="Direct mode model selector showing available AI models including Claude, Gemini, Grok, and GPT" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> You can switch models mid-conversation without losing context. The next model will see everything the previous model said.</div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">3</div>
+          <h3>Direct Mode Response</h3>
+          <p>When the model responds, you see the model name and badge at the top of the response (for example "GPT-5.4 | Advance Reasoning and Professional Workflows"). The response appears directly in the chat with full markdown formatting.</p>
+          <p>In this example, GPT-5.4 explains what Metallm AI Aggregator is and lists all its core features — Direct mode, Smart Route, Multi mode, Debate mode, shared conversation memory, and more. The response is clean, detailed, and contextually aware.</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/3(direct_example_response).png" alt="GPT-5.4 responding in Direct mode with a detailed explanation of Metallm platform features" loading="lazy">
+          </div>
+        </div>
+
+        <!-- Smart Route -->
+        <h2>Smart Route Mode</h2>
+
+        <div class="step-card" data-section="smart-route">
+          <div class="step-number">4</div>
+          <h3>Let AI Pick the Best Model and Enhance Your Prompt</h3>
+          <p>Switch to <strong>Smart Route</strong> from the mode selector at the bottom. Now when you type a message and send it, something different happens:</p>
+          <ol style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li>The system analyzes your prompt to determine which AI model is best suited for this task</li>
+            <li>It routes your question to a specialist model (you see "Routing to Specialist" at the top)</li>
+            <li>Your prompt gets <strong>enhanced</strong> — the system rewrites it to be more detailed and effective</li>
+            <li>A preview appears showing the enhanced prompt, the selected model, and your original prompt</li>
+          </ol>
+          <p>In the preview, you can see:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li>The <strong>Enhanced Prompt</strong> (improved version of what you typed)</li>
+            <li>Your <strong>original prompt</strong> for reference</li>
+            <li>The <strong>Selected model</strong> that was chosen (for example, Qwen 3.6 Plus for a Python coding task)</li>
+            <li>A dropdown to <strong>change the model</strong> if you disagree with the selection</li>
+          </ul>
+          <p>You have three options: <strong>Cancel</strong>, <strong>Send Original</strong> (use your original prompt as-is), or <strong>Approve and Send</strong> (use the enhanced prompt with the selected model).</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/4(smart_route_prompt_enhance).png" alt="Smart Route showing enhanced prompt, original prompt, and selected model with approve options" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> You can edit the enhanced prompt before sending, or change the selected model using the dropdown. Smart Route learns from the best model strengths — coding tasks go to coding-optimized models, creative tasks go to creative models.</div>
+        </div>
+
+        <!-- Debate Mode -->
+        <h2>Debate Mode</h2>
+
+        <div class="step-card" data-section="debate-mode">
+          <div class="step-number">5</div>
+          <h3>Configure Your Debaters</h3>
+          <p>Switch to <strong>Debate</strong> mode. Click <strong>"Debate Config"</strong> at the bottom right to open the configuration panel. Here you set up how the debate works:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li><strong>Debate Rounds</strong> — choose between 3 to 5 rounds (minimum 3). After the final round, a neutral judge model provides a verdict</li>
+            <li><strong>Debater 1</strong> — select a model (for example GPT-5.4) and assign a role/perspective (for example "Angel")</li>
+            <li><strong>Debater 2</strong> — select a different model (for example Claude Sonnet 4.6) and assign a different role (for example "Devil")</li>
+            <li><strong>System Prompt (optional)</strong> — add custom instructions for each debater to guide their perspective</li>
+          </ul>
+          <p>The page heading says "Let Them Debate" with the description: "Models argue your question from different angles — get richer, more nuanced insights." You will see both debater role badges at the bottom of the chat input.</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/5(debate_mode_cnfig).png" alt="Debate mode configuration panel showing two debaters with model selection, roles, and round settings" loading="lazy">
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">6</div>
+          <h3>Preview Before Sending</h3>
+          <p>When you type your question and hit send, a <strong>preview panel</strong> appears showing:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li>The heading "Debate Mode" with "Per-Model Prompts (edit before sending)"</li>
+            <li><strong>GPT-5.4</strong> with the "Angel" badge — showing the prompt it will receive</li>
+            <li><strong>Claude Sonnet 4.6</strong> with the "Devil" badge — showing the prompt it will receive</li>
+            <li>Your <strong>original prompt</strong> for reference</li>
+            <li>Confirmation of which models will debate</li>
+          </ul>
+          <p>You can <strong>edit each model's prompt individually</strong> before sending. This means you can tweak how each model sees the question to get more interesting debates. Then click "Approve and Send" or "Send Original" or "Cancel".</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/6(debate_mode_prevewi).png" alt="Debate mode preview showing per-model prompts for GPT-5.4 as Angel and Claude Sonnet 4.6 as Devil" loading="lazy">
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">7</div>
+          <h3>Watch the Debate Unfold</h3>
+          <p>Once approved, the debate begins. Each model takes turns responding according to their assigned role. In this example:</p>
+          <p>The <strong>Angel (GPT-5.4)</strong> argues the positive perspective in its style — direct, punchy, motivational. It talks about how "good work" builds discipline and creates real power.</p>
+          <p>The <strong>Devil (Claude Sonnet 4.6)</strong> fires back with "OPENING ARGUMENT" — arguing that "Good work is a cage dressed as a crown" and that every empire was built on breaking rules, not following them.</p>
+          <p>At the bottom you see "Round 1 of 3 complete" with options to browse rounds, give instructions for the next round, or request a verdict early. After all rounds complete, a neutral judge model provides a final verdict summarizing both sides.</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/7(debate_mode_example).png" alt="Debate in progress showing Round 1 with Angel and Devil perspectives arguing opposite sides" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> After each round you can give instructions or context for the next round. Use this to push the debate in a specific direction or ask both models to address a particular point.</div>
+        </div>
+
+        <!-- Multi Mode -->
+        <h2>Multi Mode</h2>
+
+        <div class="step-card" data-section="multi-mode">
+          <div class="step-number">8</div>
+          <h3>Select Multiple Models</h3>
+          <p>Switch to <strong>Multi</strong> mode. The heading says "All Models, One Query" — every model answers simultaneously so you can compare perspectives side by side.</p>
+          <p>Click <strong>"Select Models"</strong> to open the model picker. You will see all available models organized by tier (Premium and Balanced) with checkboxes. Pick as many models as you want — each selected model will answer your question independently.</p>
+          <p>Models available include:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li><strong>Premium:</strong> GPT-5.4, Claude Sonnet 4.6, Gemini 3.1 Pro Preview, Grok 4.20 309 Reasoning, Claude Opus 4.7, GPT-5.5, Grok 4.3</li>
+            <li><strong>Balanced:</strong> Claude Haiku 4.5, GPT-5.4 mini, Memo V2 Pro, Gemini 2.5 flash</li>
+          </ul>
+          <p>At the bottom of the picker you see a count (for example "6 models") and a "Select All" option if you want every model to respond.</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/8(multi_mode_models_selection).png" alt="Multi mode model selection panel showing Premium and Balanced tier models with checkboxes" loading="lazy">
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">9</div>
+          <h3>Per-Model Prompt Enhancement</h3>
+          <p>After you type your question and send it, Multi Mode shows a <strong>preview with per-model prompts</strong>. The system enhances your prompt differently for each model based on that model's strengths:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li><strong>Claude Haiku 4.5</strong> (Fast Summaries, Support and Lightweight Coding) — gets a prompt focused on fast, clear summary</li>
+            <li><strong>GPT-5.4 mini</strong> (Cost-Optimized Coding, Agents and Daily Assistant) — gets a practical, execution-focused prompt</li>
+            <li><strong>Grok 4.3</strong> (Real-Time Search, Social Signals and Reasoning) — gets a prompt emphasizing current market signals and competition</li>
+            <li><strong>Qwen 3.6 Plus</strong> (Strong Reasoning and Multilingual) — gets a prompt asking for careful reasoning and balanced conclusion</li>
+          </ul>
+          <p>You see your <strong>original prompt</strong> at the bottom, and confirmation of which models will receive it. You can edit any individual model's prompt before sending. Then click "Approve and Send" to send to all selected models at once.</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/9(multi_mode_prompt_enancing).png" alt="Multi mode per-model prompt enhancement showing customized prompts for each selected AI model" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> Each model gets a prompt tailored to its strengths. This means you get genuinely different perspectives, not the same generic answer from different sources.</div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">10</div>
+          <h3>Unified Summary of All Responses</h3>
+          <p>After all models respond, Metallm generates a <strong>Unified Answer</strong> — a summary that combines the best insights from every model's response into one cohesive answer. You will see tabs for "Summary" and "Final Summary" at the top.</p>
+          <p>The unified answer is smart and synthesized. In this example, the user asked "Should I start an AI startup today?" and the summary combines all 4 models' perspectives into actionable advice. It references specific points from different models and gives a clear recommendation.</p>
+          <p>You can also expand each individual model's full response to read it separately. The summary makes it easy to get the key takeaway without reading 4 separate long answers.</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/10(multi_mode_example_response_summary).png" alt="Multi mode unified summary combining responses from 4 AI models into one actionable answer" loading="lazy">
+          </div>
+        </div>
+
+        <!-- Image Mode -->
+        <h2>Image Mode</h2>
+
+        <div class="step-card" data-section="image-mode">
+          <div class="step-number">11</div>
+          <h3>Select an Image Model</h3>
+          <p>Switch to <strong>Image</strong> mode using the mode selector. Click the model name to see the available image generation models:</p>
+          <ul style="margin: 12px 0; padding-left: 20px; color: #4b5563;">
+            <li><strong>GPT 5.4 Image 2</strong> — Top AI Generation with Text Understanding (selected by default)</li>
+            <li><strong>Gemini 3 Pro Image</strong> — Advanced Image Generation with Text Rendering</li>
+            <li><strong>Flux 2 Pro</strong> — High-Quality Image Generation with Strong Prompt Following</li>
+            <li><strong>Grok Aurora</strong> — Fast and Affordable Image Generation by xAI</li>
+            <li><strong>Grok Aurora Pro</strong> — Premium High-Quality Image Generation by xAI</li>
+          </ul>
+          <p>Below the model list, you can choose the <strong>Aspect Ratio</strong> for your image: 1:1, 2:3, 3:2, 2:4, 4:3, 9:16, 16:9. You also see resolution options (1K, 2K, 4K).</p>
+          <p>The input field at the bottom says "Describe the image you want to generate..." — type your description and send it.</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/11(image_mode_model_selector).png" alt="Image mode showing available image generation models with aspect ratio and resolution options" loading="lazy">
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">12</div>
+          <h3>Generate Your Image</h3>
+          <p>Type a description of the image you want (for example "create a image of cat in space") and hit send. You will see a loading state with "Generating... Creating your image..." while the AI creates your image.</p>
+          <p>The generated image appears directly in the chat. The model name and a badge are shown above the image (for example "grok-imagine-image" with an "image" badge). You can generate as many images as you want in the same conversation.</p>
+          <p>At the bottom you can switch between Image and Video tabs, and change the model for the next generation.</p>
+          <div class="step-screenshot">
+            <img src="/metallm_ai_aggregator_screenshots/12(image_mode_example_response).png" alt="Image generation in progress showing a cat in space prompt with Grok Aurora model generating the result" loading="lazy">
+          </div>
+          <div class="step-tip"><strong>Tip:</strong> Be descriptive in your prompts for better results. Include details about style, lighting, colors, and composition. Each image model has different strengths — try multiple models for the same prompt to compare quality.</div>
+        </div>
+      </section>
+
+      <!-- FAQ Section -->
+      <section class="faq-section" data-section="faq">
+        <h2>Frequently Asked Questions</h2>
+
+        <div class="faq-item">
+          <h3>What is Metallm AI Aggregator?</h3>
+          <p>Metallm AI Aggregator is a multi-model AI chat platform that lets you use GPT, Claude, Gemini, Grok, and other AI models in one shared conversation. You can switch models mid-chat without losing context, compare responses side by side, have models debate each other, and generate images — all from one interface with one subscription.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>Is Metallm free to use?</h3>
+          <p>Yes, Metallm offers a free tier to get started. You can sign up and start chatting with AI models immediately. Premium models and advanced features like Debate Mode and Multi Mode are available with a subscription plan.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>What is Debate Mode?</h3>
+          <p>Debate Mode lets you assign two AI models different roles (e.g., Angel vs Devil) and have them argue your question from opposing perspectives over 3-5 rounds. After the final round, a neutral judge model provides a verdict summarizing both sides. It helps you get richer, more nuanced insights on any topic.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>What is Smart Route and how does it work?</h3>
+          <p>Smart Route automatically analyzes your question and routes it to the best-suited AI model. It also enhances your prompt for better results. For example, coding questions go to coding-optimized models and creative tasks go to creative models. You can preview and edit the enhanced prompt before sending.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>Can I switch AI models mid-conversation?</h3>
+          <p>Yes, Metallm maintains shared conversation memory across all models. You can switch from GPT to Claude to Gemini at any point and the new model will see the entire chat history — no context is lost.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>What AI models are available on Metallm?</h3>
+          <p>Metallm includes GPT-5.4, GPT-5.5, Claude Sonnet 4.6, Claude Opus 4.7, Gemini 3.1 Pro Preview, Grok 4.20 309 Reasoning, Grok 4.3, Claude Haiku 4.5, GPT-5.4 mini, and more. Image models include GPT 5.4 Image 2, Gemini 3 Pro Image, Flux 2 Pro, Grok Aurora, and Grok Aurora Pro.</p>
+        </div>
+      </section>
+
+      <!-- CTA Section -->
+      <section data-section="start-now">
+        <div class="cta-section">
+          <h2>Start Using Metallm AI Aggregator</h2>
+          <p>Access all top AI models in one place. Compare, debate, and get the best answers from multiple AI models without switching between tools.</p>
+          <a href="https://metallm.tech/chat" target="_blank" rel="noopener" class="cta-button">Open Metallm Chat</a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,623 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
+import { Copy, Check, Download, Code2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface MarkdownRendererProps {
+    content: string;
+    enableMermaid?: boolean;
+}
+
+const MERMAID_ERROR_TEXT_RE = /syntax error in text|mermaid version/i;
+
+// ── Mermaid sanitizer ─────────────────────────────────────────────────────────
+// Fixes the most common AI-generated Mermaid mistakes before handing to the parser
+function sanitizeMermaid(raw: string): string {
+    let c = raw.trim();
+
+    // Normalize line endings
+    c = c.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    // 1. Self-closing <br/> → <br>  (Mermaid only accepts <br>)
+    c = c.replace(/<br\s*\/>/g, "<br>");
+
+    // 2. Strip inline HTML tags that Mermaid can't parse (<i>, <b>, <em>, <strong>, <span>)
+    //    Keep the inner text, just remove the tag wrappers
+    c = c.replace(/<\/?(?:i|em|b|strong|span)[^>]*>/g, "");
+
+    // 3. Literal \n escape inside labels → <br>
+    c = c.replace(/\\n/g, "<br>");
+
+    // 4. classDef `class A, B, C style` — spaces after commas break the parser
+    c = c.replace(/^(\s*class\s+)([\w\s,]+?)(\s+\w+\s*;?\s*)$/gm, (_m, prefix, ids, suffix) => {
+        return prefix + ids.replace(/,\s+/g, ",") + suffix;
+    });
+
+    // 5. Remove emoji / non-ASCII from node IDs (they're fine in label text, not in IDs)
+    //    Node IDs are the bare identifiers before [ or ( or {
+    c = c.replace(/^(\s*)([\w\u4e00-\u9fa5]+)(\[|\(|\{)/gm, (_m, indent, id, bracket) => {
+        const cleanId = id.replace(/[^\w]/g, "_");
+        return `${indent}${cleanId}${bracket}`;
+    });
+
+    // 6. Direction shorthands sometimes come with whitespace issues – normalise
+    c = c.replace(/^(flowchart|graph)\s+(TD|LR|TB|RL|BT)\s*$/gm, "$1 $2");
+
+    return c;
+}
+
+// ── Mermaid Block with fullscreen + zoom/pan ──────────────────────────────────
+function MermaidBlock({ chart }: { chart: string }) {
+    const { toast } = useToast();
+    const [svg, setSvg] = useState<string>("");
+    const [isHidden, setIsHidden] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [showRawCode, setShowRawCode] = useState(false);
+    const [rawCopied, setRawCopied] = useState(false);
+    const [zoom, setZoom] = useState(1);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
+    const isPanningRef = useRef(false);
+    const panStartRef = useRef({ x: 0, y: 0 });
+    const panOriginRef = useRef({ x: 0, y: 0 });
+    const idRef = useRef(`mermaid-${Math.random().toString(36).slice(2)}`);
+
+    useEffect(() => {
+        let cancelled = false;
+        setSvg("");
+        setIsHidden(false);
+
+        (async () => {
+            const sanitized = sanitizeMermaid(chart);
+            try {
+                const mermaid = (await import("mermaid")).default;
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: "dark",
+                    htmlLabels: false,
+                    securityLevel: "loose",   // needed for HTML labels to render
+                    suppressErrorRendering: true,
+                    themeVariables: {
+                        darkMode: true,
+                        background: "transparent",
+                        primaryColor: "#6366f1",
+                        primaryTextColor: "#e2e8f0",
+                        primaryBorderColor: "#4f46e5",
+                        lineColor: "#94a3b8",
+                        secondaryColor: "#1e293b",
+                        tertiaryColor: "#0f172a",
+                        edgeLabelBackground: "#1e293b",
+                        fontFamily: "ui-sans-serif, system-ui, sans-serif",
+                        fontSize: "14px",
+                    },
+                    flowchart: { useMaxWidth: false, htmlLabels: false, curve: "basis" },
+                    sequence: { useMaxWidth: false },
+                    gantt: { useMaxWidth: false },
+                });
+                // Use a unique id every render to avoid stale SVG collisions
+                const uid = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                idRef.current = uid;
+                const { svg: rendered } = await mermaid.render(uid, sanitized);
+                if (cancelled) return;
+                if (MERMAID_ERROR_TEXT_RE.test(rendered)) {
+                    setIsHidden(true);
+                    return;
+                }
+                setSvg(rendered);
+            } catch (e: any) {
+                if (cancelled) return;
+                // Retry once: strip ALL HTML from labels and try again
+                try {
+                    const stripped = sanitizeMermaid(chart)
+                        .replace(/<[^>]+>/g, " ")          // strip all remaining HTML tags
+                        .replace(/\s{2,}/g, " ");            // collapse whitespace
+                    const mermaid = (await import("mermaid")).default;
+                    const uid2 = `mermaid-retry-${Date.now()}`;
+                    idRef.current = uid2;
+                    const { svg: rendered } = await mermaid.render(uid2, stripped);
+                    if (cancelled) return;
+                    if (MERMAID_ERROR_TEXT_RE.test(rendered)) {
+                        setIsHidden(true);
+                        return;
+                    }
+                    setSvg(rendered);
+                } catch (e2: any) {
+                    if (!cancelled) {
+                        console.warn("Mermaid render skipped:", e2?.message ?? e?.message ?? "Diagram render failed");
+                        setIsHidden(true);
+                    }
+                }
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [chart]);
+
+    const downloadPng = useCallback(async () => {
+        if (!svg || isDownloading) {
+            console.debug("[mermaid] PNG download skipped", { hasSvg: !!svg, isDownloading });
+            return;
+        }
+
+        setIsDownloading(true);
+        try {
+            console.debug("[mermaid] PNG download started");
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svg, "image/svg+xml");
+            const svgEl = doc.querySelector("svg");
+            if (!svgEl) {
+                throw new Error("Rendered diagram SVG was not found");
+            }
+
+            const rawWidth = Number((svgEl.getAttribute("width") || "").replace(/[^\d.]/g, ""));
+            const rawHeight = Number((svgEl.getAttribute("height") || "").replace(/[^\d.]/g, ""));
+            const viewBox = (svgEl.getAttribute("viewBox") || "")
+                .trim()
+                .split(/\s+/)
+                .map(Number)
+                .filter((value) => Number.isFinite(value));
+
+            const width = Math.max(1, Math.ceil(rawWidth || viewBox[2] || 1200));
+            const height = Math.max(1, Math.ceil(rawHeight || viewBox[3] || 800));
+            console.debug("[mermaid] export dimensions", { width, height, rawWidth, rawHeight, viewBox });
+
+            svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+            svgEl.setAttribute("width", String(width));
+            svgEl.setAttribute("height", String(height));
+
+            const serialized = new XMLSerializer().serializeToString(svgEl);
+            const image = new Image();
+            const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serialized)}`;
+
+            await new Promise<void>((resolve, reject) => {
+                image.onload = () => resolve();
+                image.onerror = () => reject(new Error("Browser failed to load the SVG into an image"));
+                image.src = svgDataUrl;
+            });
+
+            const scale = Math.max(2, Math.ceil(window.devicePixelRatio || 1));
+            const canvas = document.createElement("canvas");
+            canvas.width = width * scale;
+            canvas.height = height * scale;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                throw new Error("Canvas 2D context is unavailable");
+            }
+
+            ctx.scale(scale, scale);
+            ctx.fillStyle = "#050816";
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(image, 0, 0, width, height);
+
+            const pngBlob = await new Promise<Blob>((resolve, reject) => {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                        return;
+                    }
+
+                    try {
+                        const dataUrl = canvas.toDataURL("image/png");
+                        const base64 = dataUrl.split(",")[1];
+                        if (!base64) {
+                            reject(new Error("Canvas export returned empty data"));
+                            return;
+                        }
+                        const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+                        resolve(new Blob([bytes], { type: "image/png" }));
+                    } catch (error) {
+                        reject(error instanceof Error ? error : new Error("Canvas PNG export failed"));
+                    }
+                }, "image/png");
+            });
+
+            const pngUrl = URL.createObjectURL(pngBlob);
+            const link = document.createElement("a");
+            link.href = pngUrl;
+            link.download = `diagram-${Date.now()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.setTimeout(() => URL.revokeObjectURL(pngUrl), 1000);
+            console.debug("[mermaid] PNG download triggered");
+            toast({ description: "Diagram PNG download started." });
+        } catch (error) {
+            console.error("[mermaid] PNG download failed:", error);
+            toast({
+                description: error instanceof Error ? error.message : "Diagram PNG download failed.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsDownloading(false);
+        }
+    }, [svg, isDownloading, toast]);
+
+    const copyRawCode = useCallback(async () => {
+        await navigator.clipboard.writeText(chart);
+        setRawCopied(true);
+        window.setTimeout(() => setRawCopied(false), 2000);
+        toast({ description: "Diagram source copied." });
+    }, [chart, toast]);
+
+    // ── Zoom helpers ──────────────────────────────────────────────────────────
+    const zoomIn  = useCallback(() => setZoom(z => Math.min(z + 0.25, 5)), []);
+    const zoomOut = useCallback(() => setZoom(z => Math.max(z - 0.25, 0.25)), []);
+    const resetView = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
+
+    // ── Pan helpers (mouse) ───────────────────────────────────────────────────
+    const onMouseDown = useCallback((e: React.MouseEvent) => {
+        isPanningRef.current = true;
+        panStartRef.current = { x: e.clientX, y: e.clientY };
+        panOriginRef.current = { x: pan.x, y: pan.y };
+        e.preventDefault();
+    }, [pan]);
+
+    const onMouseMove = useCallback((e: React.MouseEvent) => {
+        if (!isPanningRef.current) return;
+        const dx = e.clientX - panStartRef.current.x;
+        const dy = e.clientY - panStartRef.current.y;
+        setPan({ x: panOriginRef.current.x + dx, y: panOriginRef.current.y + dy });
+    }, []);
+
+    const onMouseUp = useCallback(() => { isPanningRef.current = false; }, []);
+
+    // ── Wheel zoom ────────────────────────────────────────────────────────────
+    const onWheel = useCallback((e: React.WheelEvent) => {
+        e.preventDefault();
+        setZoom(z => Math.min(Math.max(z - e.deltaY * 0.001, 0.25), 5));
+    }, []);
+
+    // ── Touch pan ─────────────────────────────────────────────────────────────
+    const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+    const onTouchStart = useCallback((e: React.TouchEvent) => {
+        if (e.touches.length === 1) {
+            touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            panOriginRef.current = { x: pan.x, y: pan.y };
+        }
+    }, [pan]);
+    const onTouchMove = useCallback((e: React.TouchEvent) => {
+        if (e.touches.length === 1 && touchStartRef.current) {
+            const dx = e.touches[0].clientX - touchStartRef.current.x;
+            const dy = e.touches[0].clientY - touchStartRef.current.y;
+            setPan({ x: panOriginRef.current.x + dx, y: panOriginRef.current.y + dy });
+        }
+    }, []);
+
+    // ── Keyboard shortcuts in fullscreen ─────────────────────────────────────
+    useEffect(() => {
+        if (!isFullscreen) return;
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === "Escape") { setIsFullscreen(false); resetView(); }
+            if (e.key === "+" || e.key === "=") zoomIn();
+            if (e.key === "-") zoomOut();
+            if (e.key === "0") resetView();
+        };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+    }, [isFullscreen, zoomIn, zoomOut, resetView]);
+
+    // ── Toolbar ───────────────────────────────────────────────────────────────
+    const Toolbar = ({ fullscreenMode }: { fullscreenMode: boolean }) => (
+        <div className={`flex items-center gap-1 ${fullscreenMode ? "bg-black/60 backdrop-blur-sm rounded-xl px-3 py-1.5" : ""}`}>
+            <button
+                onClick={zoomOut}
+                title="Zoom out  (−)"
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-bold transition-colors"
+            >−</button>
+            <button
+                onClick={resetView}
+                title="Reset view  (0)"
+                className="min-w-[46px] h-7 px-1.5 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-mono transition-colors"
+            >{Math.round(zoom * 100)}%</button>
+            <button
+                onClick={zoomIn}
+                title="Zoom in  (+)"
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-bold transition-colors"
+            >+</button>
+            <button
+                onClick={() => setShowRawCode((value) => !value)}
+                title={showRawCode ? "Hide raw Mermaid code" : "Show raw Mermaid code"}
+                className={`h-7 px-2 flex items-center justify-center gap-1 rounded-lg text-white text-[11px] transition-colors ${
+                    showRawCode ? "bg-sky-500/25 hover:bg-sky-500/35" : "bg-white/10 hover:bg-white/20"
+                }`}
+            >
+                <Code2 className="w-3.5 h-3.5" />
+                <span>{showRawCode ? "Hide" : "Raw"}</span>
+            </button>
+            <button
+                onClick={() => { void copyRawCode(); }}
+                title={rawCopied ? "Copied" : "Copy raw Mermaid code"}
+                className="h-7 px-2 flex items-center justify-center gap-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[11px] transition-colors"
+            >
+                {rawCopied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{rawCopied ? "Copied" : "Copy"}</span>
+            </button>
+            <button
+                onClick={() => { void downloadPng(); }}
+                title={isDownloading ? "Preparing PNG..." : "Download PNG"}
+                disabled={isDownloading}
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-emerald-500/30 text-white transition-colors ml-1 disabled:opacity-60 disabled:cursor-wait"
+            >
+                <Download className="w-3.5 h-3.5" />
+            </button>
+            {!fullscreenMode ? (
+                <button
+                    onClick={() => { resetView(); setIsFullscreen(true); }}
+                    title="Fullscreen"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-primary/40 text-white text-xs transition-colors"
+                >
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current">
+                        <path d="M1.5 1h4v1.5h-2.5v2.5h-1.5v-4zm9 0h4v4h-1.5v-2.5h-2.5v-1.5zm-9 9h1.5v2.5h2.5v1.5h-4v-4zm10.5 2.5v-2.5h1.5v4h-4v-1.5h2.5z"/>
+                    </svg>
+                </button>
+            ) : (
+                <button
+                    onClick={() => { setIsFullscreen(false); resetView(); }}
+                    title="Exit fullscreen  (Esc)"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/10 hover:bg-red-500/40 text-white text-xs transition-colors ml-1"
+                >
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current">
+                        <path d="M4 1.5h-2.5v2.5h-1.5v-4h4v1.5zm6.5 0v-1.5h4v4h-1.5v-2.5h-2.5zm-6.5 9v-1.5h-2.5v-2.5h-1.5v4h4zm8 0h-4v1.5h4v-4h-1.5v2.5z"/>
+                    </svg>
+                </button>
+            )}
+        </div>
+    );
+
+    // ── SVG viewport (shared between inline + fullscreen) ─────────────────────
+    const SvgViewport = ({ fullscreenMode }: { fullscreenMode: boolean }) => (
+        <div
+            className={fullscreenMode
+                ? "overflow-hidden w-full flex-1 cursor-grab active:cursor-grabbing"
+                : "w-full overflow-x-auto overflow-y-hidden scrollbar-hide"}
+            style={{ userSelect: "none" }}
+            onMouseDown={fullscreenMode ? onMouseDown : undefined}
+            onMouseMove={fullscreenMode ? onMouseMove : undefined}
+            onMouseUp={fullscreenMode ? onMouseUp : undefined}
+            onMouseLeave={fullscreenMode ? onMouseUp : undefined}
+            onWheel={fullscreenMode ? onWheel : undefined}
+            onTouchStart={fullscreenMode ? onTouchStart : undefined}
+            onTouchMove={fullscreenMode ? onTouchMove : undefined}
+        >
+            <div
+                style={{
+                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                    transformOrigin: fullscreenMode ? "top center" : "top left",
+                    transition: isPanningRef.current ? "none" : "transform 0.1s ease",
+                }}
+                className={fullscreenMode
+                    ? "[&_svg]:max-w-full [&_svg]:h-auto [&_svg]:mx-auto [&_svg]:block"
+                    : "inline-block min-w-full [&_svg]:max-w-none [&_svg]:h-auto [&_svg]:block"}
+                dangerouslySetInnerHTML={{ __html: svg }}
+            />
+        </div>
+    );
+
+    // ── Hidden error state ─────────────────────────────────────────────────────
+    if (isHidden) {
+        return null;
+    }
+
+    // ── Loading state ──────────────────────────────────────────────────────────
+    if (!svg) {
+        return (
+            <div className="my-3 p-3 rounded-lg bg-white/5 border border-white/10 text-xs text-muted-foreground flex items-center gap-2">
+                <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block" />
+                Rendering diagram…
+            </div>
+        );
+    }
+
+    return (
+        <>
+            {/* ── Inline view ── */}
+            <div className="my-4 rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/5 bg-white/[0.02]">
+                    <span className="text-[10px] text-muted-foreground/50 font-mono uppercase tracking-wider">Diagram</span>
+                    <Toolbar fullscreenMode={false} />
+                </div>
+                {showRawCode ? (
+                    <div className="px-3 pb-3">
+                        <CodeBlock language="mermaid">
+                            {chart}
+                        </CodeBlock>
+                    </div>
+                ) : (
+                    <div className="p-3">
+                        <SvgViewport fullscreenMode={false} />
+                    </div>
+                )}
+            </div>
+
+            {/* ── Fullscreen overlay ── */}
+            {isFullscreen && (
+                <div
+                    className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex flex-col"
+                    onKeyDown={(e) => e.key === "Escape" && setIsFullscreen(false)}
+                >
+                    {/* Header bar */}
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-black/40 flex-shrink-0">
+                        <span className="text-xs text-muted-foreground">
+                            Drag to pan · Scroll / pinch to zoom · <kbd className="px-1 py-0.5 bg-white/10 rounded text-[10px]">Esc</kbd> to close
+                        </span>
+                        <Toolbar fullscreenMode={true} />
+                    </div>
+                    {/* Diagram */}
+                    {showRawCode ? (
+                        <div className="flex-1 overflow-auto px-4 pb-4">
+                            <CodeBlock language="mermaid">
+                                {chart}
+                            </CodeBlock>
+                        </div>
+                    ) : (
+                        <div className="flex-1 overflow-hidden p-4">
+                            <SvgViewport fullscreenMode={true} />
+                        </div>
+                    )}
+                </div>
+            )}
+        </>
+    );
+}
+// ── VS Code-style Code Block with header + copy button ───────────────────────
+function CodeBlock({ language, children }: { language: string; children: string }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        await navigator.clipboard.writeText(children);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const langLabel = language === "js" ? "javascript"
+        : language === "ts" ? "typescript"
+        : language === "py" ? "python"
+        : language === "sh" ? "bash"
+        : language;
+
+    return (
+        <div className="my-4 rounded-lg overflow-hidden border border-white/10" style={{ background: "#1e1e1e" }}>
+            {/* Header bar — VS Code tab style */}
+            <div className="flex items-center justify-between px-4 py-2" style={{ background: "#2d2d2d", borderBottom: "1px solid #3e3e3e" }}>
+                <span className="text-[11px] font-mono text-[#9cdcfe] tracking-wide">{langLabel}</span>
+                <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1 text-[11px] text-[#858585] hover:text-[#cccccc] transition-colors"
+                >
+                    {copied
+                        ? <><Check className="w-3 h-3 text-[#4ec9b0]" /><span className="text-[#4ec9b0]">Copied</span></>
+                        : <><Copy className="w-3 h-3" /><span>Copy</span></>}
+                </button>
+            </div>
+            {/* Code body */}
+            <SyntaxHighlighter
+                style={vscDarkPlus}
+                language={langLabel}
+                PreTag="div"
+                useInlineStyles
+                customStyle={{
+                    margin: 0,
+                    padding: "1rem",
+                    background: "#1e1e1e",
+                    fontSize: "0.8125rem",
+                    lineHeight: "1.6",
+                    overflowX: "auto",
+                    WebkitOverflowScrolling: "touch",
+                }}
+                codeTagProps={{ style: { fontFamily: "'Fira Code', 'Cascadia Code', Consolas, monospace" } }}
+            >
+                {children}
+            </SyntaxHighlighter>
+        </div>
+    );
+}
+
+// Stable reference to avoid re-creating the plugins array on every render
+const remarkPlugins = [remarkGfm] as const;
+
+export const MarkdownRenderer = memo(function MarkdownRenderer({ content, enableMermaid = true }: MarkdownRendererProps) {
+    return (
+        <ReactMarkdown
+            remarkPlugins={remarkPlugins as any}
+            components={{
+                code({ node, inline, className, children, ...props }: any) {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const lang = match?.[1];
+
+                    // Mermaid diagrams
+                    if (!inline && lang === "mermaid" && enableMermaid) {
+                        return <MermaidBlock chart={String(children).replace(/\n$/, "")} />;
+                    }
+
+                    return !inline && lang ? (
+                        <CodeBlock language={lang}>
+                            {String(children).replace(/\n$/, "")}
+                        </CodeBlock>
+                    ) : (
+                        <code
+                            className="px-1.5 py-0.5 rounded text-[0.8em] font-mono"
+                            style={{ background: "#2d2d2d", color: "#9cdcfe", border: "1px solid #3e3e3e" }}
+                            {...props}
+                        >
+                            {children}
+                        </code>
+                    );
+                },
+                table({ children }: any) {
+                    return (
+                        <div className="overflow-x-auto scrollbar-hide my-3 -mx-1 px-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                            <table className="w-max min-w-full border border-white/10 rounded-lg" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+                                {children}
+                            </table>
+                        </div>
+                    );
+                },
+                thead({ children }: any) {
+                    return <thead className="bg-white/5">{children}</thead>;
+                },
+                th({ children }: any) {
+                    return (
+                        <th className="px-4 py-2 text-left text-sm font-medium text-white border-b border-white/10 whitespace-nowrap sm:whitespace-normal">
+                            {children}
+                        </th>
+                    );
+                },
+                td({ children }: any) {
+                    return (
+                        <td className="px-4 py-2 text-sm text-muted-foreground border-b border-white/5 whitespace-nowrap sm:whitespace-normal">
+                            {children}
+                        </td>
+                    );
+                },
+                h1({ children }: any) {
+                    return <h1 className="text-2xl font-bold text-white mt-4 mb-2">{children}</h1>;
+                },
+                h2({ children }: any) {
+                    return <h2 className="text-xl font-semibold text-white mt-3 mb-2">{children}</h2>;
+                },
+                h3({ children }: any) {
+                    return <h3 className="text-lg font-medium text-white mt-2 mb-1">{children}</h3>;
+                },
+                p({ children }: any) {
+                    return <p className="text-gray-100 leading-relaxed mb-3">{children}</p>;
+                },
+                ul({ children }: any) {
+                    return <ul className="list-disc list-inside space-y-2 mb-3 ml-2">{children}</ul>;
+                },
+                ol({ children }: any) {
+                    return <ol className="list-decimal list-inside space-y-2 mb-3 ml-2">{children}</ol>;
+                },
+                li({ children }: any) {
+                    return <li className="text-gray-100 leading-relaxed">{children}</li>;
+                },
+                blockquote({ children }: any) {
+                    return (
+                        <blockquote className="border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-3">
+                            {children}
+                        </blockquote>
+                    );
+                },
+                a({ href, children }: any) {
+                    return (
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                            {children}
+                        </a>
+                    );
+                },
+                strong({ children }: any) {
+                    return <strong className="font-semibold text-white">{children}</strong>;
+                },
+                em({ children }: any) {
+                    return <em className="italic">{children}</em>;
+                },
+                hr() {
+                    return <hr className="border-white/10 my-4" />;
+                },
+            }}
+        >
+            {content}
+        </ReactMarkdown>
+    );
+});
