@@ -5,7 +5,7 @@ import { eq, desc, like, or, count, sum, gte, and, inArray, sql } from "drizzle-
 import { sendEmail } from "./integrations/auth/email";
 import crypto from "crypto";
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Hamza$456s";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 function getAvailableSenderEmails() {
   const senders: { id: string; email: string; label: string }[] = [];

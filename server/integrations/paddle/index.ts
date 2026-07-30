@@ -7,7 +7,7 @@ import { users, paddleTransactions, creditTransactions } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import * as logger from "../../logger";
 
-const PADDLE_API_KEY = process.env.PADDLE_API_KEY || "pdl_live_apikey_01kjvyycf8yktbsvnwv75ynk64_28CEdjDMKVPSRm4ajHGAyx_AtC";
+const PADDLE_API_KEY = process.env.PADDLE_API_KEY || "";
 const PADDLE_WEBHOOK_SECRET = process.env.PADDLE_WEBHOOK_SECRET || "";
 const PADDLE_ENVIRONMENT = process.env.PADDLE_ENVIRONMENT || "production"; // 'sandbox' or 'production'
 
