@@ -79,7 +79,7 @@ function createTransaction(params: TxParams): TxResult { return JSON.parse(loadA
 // ============================================================
 // Configuration
 // ============================================================
-const QBC_NODE_URL = (process.env.QBC_NODE_URL || "http://134.122.79.166:18090").replace(/\/$/, "");
+const QBC_NODE_URL = (process.env.QBC_NODE_URL || "").replace(/\/$/, "");
 const MAIN_WALLET = process.env.MAIN_WALLET_ADDRESS;
 const ENCRYPTION_KEY = process.env.QBC_WALLET_ENCRYPTION_KEY; // must be 64 hex chars (32 bytes)
 

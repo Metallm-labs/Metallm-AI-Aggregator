@@ -79,7 +79,7 @@ import {
 
 // PAYMENT_PROVIDER controls which payment gateway handles card/fiat payments.
 // Set to "lemonsqueezy" or "paddle" in your .env file.
-const PAYMENT_PROVIDER = (process.env.PAYMENT_PROVIDER || "lemonsqueezy").toLowerCase();
+const PAYMENT_PROVIDER = (process.env.PAYMENT_PROVIDER || "paddle").toLowerCase();
 import { sendEmail } from "./integrations/auth/email";
 import { callGroq, callGroqStream } from "./providers/groq";
 import { registerAdminRoutes } from "./admin-routes";
