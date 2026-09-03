@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
+import { resolveDbSsl } from "@shared/db-ssl";
 
 const { Pool } = pg;
 
@@ -14,7 +15,7 @@ const isProduction = process.env.NODE_ENV === "production";
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: resolveDbSsl(process.env.DATABASE_URL),
   // --- Scale-ready pool config ---
   min: isProduction ? 5 : 1,            // keep warm connections ready
   max: isProduction ? 30 : 10,           // handle concurrent requests

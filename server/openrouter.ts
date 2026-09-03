@@ -418,14 +418,26 @@ async function fetchWebContext(
     return { context, sources };
 }
 
-// Initialize Gemini client
-const gemini = new GoogleGenAI({
-    apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "",
-    httpOptions: {
-        apiVersion: "v1beta",
-        baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-    },
-});
+// Gemini client — built on first use so a missing key only fails Gemini calls
+// instead of crashing the whole server at import time.
+let geminiClient: GoogleGenAI | null = null;
+function getGemini(): GoogleGenAI {
+    if (geminiClient) return geminiClient;
+
+    const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        throw new Error("Gemini API key not configured — set GEMINI_API_KEY in your environment");
+    }
+
+    geminiClient = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+            apiVersion: "v1beta",
+            baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+        },
+    });
+    return geminiClient;
+}
 
 export type ModelProvider = "gemini" | "openrouter" | "openai" | "anthropic" | "grok" | "groq" | "bedrock";
 
@@ -510,7 +522,7 @@ export async function callGemini(
         { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
     ];
 
-    const result = await gemini.models.generateContent({
+    const result = await getGemini().models.generateContent({
         model: modelId,
         contents,
         config,
@@ -653,7 +665,7 @@ async function callGeminiStream(
         const sysPromptLen = options?.systemPrompt?.length ?? 0;
         console.log(`[Gemini] countTokens: systemPrompt length=${sysPromptLen} chars, contents count=${contents.length}`);
 
-        const countResult = await gemini.models.countTokens({
+        const countResult = await getGemini().models.countTokens({
             model: modelId,
             contents,
             ...(systemInstruction ? { systemInstruction } : {}),
@@ -663,7 +675,7 @@ async function callGeminiStream(
 
         // If countTokens didn't include systemInstruction, count it separately
         if (systemInstruction && countedInputTokens !== null) {
-            const sysCountResult = await gemini.models.countTokens({
+            const sysCountResult = await getGemini().models.countTokens({
                 model: modelId,
                 contents: [{ role: "user", parts: [{ text: options!.systemPrompt! }] }],
             } as any);
@@ -681,7 +693,7 @@ async function callGeminiStream(
         console.warn("[Gemini] countTokens failed, will use stream metadata:", e);
     }
 
-    const result = await gemini.models.generateContentStream({
+    const result = await getGemini().models.generateContentStream({
         model: modelId,
         contents,
         config,

@@ -7,3 +7,5 @@ venv
 dist
 .env
 .log
+AGENTS.md
+CLAUDE.md
